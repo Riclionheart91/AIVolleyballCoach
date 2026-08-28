@@ -46,6 +46,13 @@ export const supabaseClient = createClient<Database>(cfg.url, cfg.anonKey, {
     storage: ssrSafeStorage,
     autoRefreshToken: !isServer,
     persistSession: true,
-    detectSessionInUrl: false,
+    // Deve essere true nel browser reale: è così che il client legge il
+    // token di sessione dall'URL di ritorno dopo il redirect di Google
+    // (#access_token=... o ?code=...). A false, il login su Google va a
+    // buon fine ma la sessione non viene mai creata lato client — è la
+    // causa esatta del loop "accedo, torno al login, riprovo".
+    // `!isServer` lo mantiene false solo durante il prerender statico
+    // (dove `window` non esiste ancora), true appena gira nel browser.
+    detectSessionInUrl: !isServer,
   },
 });
