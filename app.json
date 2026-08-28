@@ -1,0 +1,33 @@
+{
+  "expo": {
+    "name": "AI Volleyball Coach",
+    "slug": "ai-volleyball-coach",
+    "version": "0.1.0",
+    "orientation": "default",
+    "scheme": "aivolleyballcoach",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.aivolleyballcoach.app",
+      "buildNumber": "1"
+    },
+    "android": {
+      "package": "com.aivolleyballcoach.app",
+      "versionCode": 1,
+      "edgeToEdgeEnabled": true
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "static"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-font"
+    ],
+    "experiments": {
+      "typedRoutes": true,
+      "baseUrl": "/AIVolleyballCoach"
+    }
+  }
+}

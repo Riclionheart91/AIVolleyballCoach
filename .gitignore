@@ -1,0 +1,10 @@
+node_modules/
+.expo/
+.metro-cache/
+dist/
+web-build/
+*.log
+.env
+.DS_Store
+ios/
+android/
