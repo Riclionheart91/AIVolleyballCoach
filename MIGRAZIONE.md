@@ -9,8 +9,10 @@
 | F1 (addendum) | Inviti multi-coach: un allenatore invita un'email, chi riceve l'invito entra automaticamente nel team al primo login | ✅ (`0001b_inviti_team.sql`, sezione "Invita allenatore/vice-allenatore" nella tab Atlete) |
 | F2 | Stagioni, attivazione, baseline | ✅ (screen: Stagioni) |
 | F5 | Layer AI manual-first: proposte di valutazione, Provider Router (Gemini→Groq→OpenRouter), rate limit, badge di stato | ✅ (integrato nello screen Valutazioni, nessuno screen separato — per design, vedi patch V7.1) |
+| F1 (revisione 28/08) | Ruoli estesi (presidente sola lettura, atleta con login proprio), privacy dati personali (valutazioni/presenze/RPE viste solo da staff+proprietaria), andamento squadra aggregato per tutti, tab Esercizi, schermata Profilo, stagione-first dopo il login, ruolo in campo a tendina | ✅ (`0001c_ruoli_estesi.sql` + screen aggiornati) |
+| F3 | Scouting live: un solo motore dati (`match_events`) al posto di 3 moduli GAS separati, interfaccia a tap (max 2 tocchi), punteggio automatico via trigger, "annulla ultima azione", modalità essenziale, scrittura ottimistica (zero attesa di rete percepita) | ✅ (`0003_f3_scouting.sql`, tab Partite + schermata live `app/partita/[id].tsx`) |
 
-**Non incluso ora, come da priorità concordate:** F3 (scouting live), F4 (match analysis), F6 (infortuni, piani individuali, integrazioni esterne), F7 (QA, migrazione dati storici, CI/CD schema). Restano nella roadmap originale, da riprendere quando deciderai di procedere.
+**Non incluso ora:** F4 (match analysis approfondita — per ora c'è solo l'andamento aggregato base in Partite), F6 (infortuni, piani individuali, integrazioni esterne), F7 (QA, migrazione dati storici, CI/CD schema).
 
 ## Mappa moduli GAS → Supabase/Expo
 
@@ -29,8 +31,8 @@
 | `AI.gs` + `RateLimiter.gs` + foglio `AiProviders` | Edge Function `ai-router` + tabelle `ai_providers_config`/`ai_call_log` |
 | `Config.gs` (chiavi AI) | Secret dell'Edge Function (`supabase secrets set`), mai in una tabella |
 | `ReleaseManager.gs` / `Steps.gs` / `upgrade()` | `supabase/migrations/*.sql` + `supabase db push` (versionamento nativo di Supabase) |
-| `Scouting.gs`, `ScoutingAtleta.gs`, `ScoutingAdvanced.gs` | **F3, non ancora migrati** — motivo: richiedono il nuovo modello unificato `match_events` discusso nel piano di migrazione, non una tabella-per-modulo |
-| `MatchAnalysis.gs` | **F4, non ancora migrato** (dipende da `match_events`) |
+| `Scouting.gs`, `ScoutingAtleta.gs`, `ScoutingAdvanced.gs` | `matches` + `match_sets` + `match_events` (un solo motore, F3 fatto — vedi sopra) |
+| `MatchAnalysis.gs` | **F4, non ancora migrato** — oggi c'è solo l'andamento base tra partite (tab Partite); un'analisi più ricca (efficienza per rotazione, distribuzione attacco, ecc.) resta da fare
 | `Convocations.gs`, `IndividualPlans.gs`, `Periodization.gs`, `Injuries.gs` | **F6, non ancora migrati** |
 | `GoogleAutomations.gs`, `SportEasySync.gs` | **F6, non ancora migrati** (da accorpare in un unico modulo "Integrazioni") |
 | `Setup.gs`, `install.gs` | `app/crea-squadra.tsx` + RPC `crea_team_e_diventa_allenatore` |
@@ -50,6 +52,27 @@ Questo pacchetto è codice pronto, ma nessun comando è stato lanciato contro se
 3. Deployare `ai-router` e impostare i secret delle chiavi AI.
 4. `npm install` e test in locale.
 5. Push su GitHub + primo deploy su Pages.
+
+## Ruoli e permessi (dopo la revisione del 28/08/2026)
+
+| Ruolo | Scrittura | Lettura dati personali (valutazioni/presenze/RPE) | Andamento squadra aggregato |
+|---|---|---|---|
+| Allenatore | Tutto | Di tutte le atlete | Sì |
+| Vice-allenatore | Tutto, alla pari dell'allenatore | Di tutte le atlete | Sì |
+| Presidente | Nessuna (sola lettura ovunque) | Di tutte le atlete | Sì |
+| Atleta | Solo i propri contatti (telefono/email/note) | Solo le proprie | Sì |
+
+Applicato sia lato database (RLS — anche un bug nella UI non potrebbe far trapelare dati di una compagna) sia lato interfaccia (i controlli di scrittura non vengono nemmeno mostrati a chi non può usarli).
+
+**Cosa NON è ancora previsto per il ruolo atleta**: non può registrare da sé presenze/RPE/valutazioni (restano compiti dell'allenatore, come nella versione GAS originale) — vede e basta i propri dati storici. Se in futuro vorrete che le atlete si auto-registrino la presenza o l'RPE post-allenamento, è un'estensione naturale della stessa RLS già in campo, da fare quando serve.
+
+**Report per il presidente**: per ora è la stessa vista aggregata "andamento squadra" visibile a tutti (Valutazioni → riquadro in alto, e ora anche Partite), non ancora un vero generatore di report esportabile (PDF/Excel) — quello lo colloco in F6/F7 insieme al resto degli strumenti di reportistica, se vorrete.
+
+## Scouting live (F3) — cosa sapere
+
+- Il vecchio scouting "avanzato" (zone campo, rotazioni complete) non è ancora incluso: qui l'unica assegnazione per evento è l'atleta selezionata nella striscia in alto, che resta impostata finché non la cambi — non c'è ancora una gestione formale delle rotazioni/formazioni. È un ampliamento naturale della stessa tabella `match_events` (basta aggiungere colonne), da fare quando serve davvero.
+- La scrittura è "ottimistica" (il tocco si vede subito, la chiamata di rete parte in background) ma non è un vero buffer offline persistente: se il tablet perde la connessione a lungo e viene chiuso/ricaricato prima che la sincronizzazione vada a buon fine, quell'evento si perde. Per uno scouting realmente offline-first (persistenza locale con coda che sopravvive a un riavvio) serve un ulteriore giro di lavoro — dimmi se è prioritario.
+- Il punteggio del set è calcolato interamente dal database (trigger), mai da editare a mano: è così che "annulla ultima azione" può essere una semplice cancellazione senza logica di compensazione lato app.
 
 ## Prossimi passi consigliati (quando deciderai di procedere)
 

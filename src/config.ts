@@ -25,6 +25,30 @@ export const supabase = {
 
 export const fondamentali = ["Battuta", "Ricezione", "Attacco", "Muro", "Difesa"] as const;
 
+export const ruoliCampo = ["Palleggiatore", "Schiacciatore", "Opposto", "Centrale", "Libero"] as const;
+
+export const skillsScouting: { skill: "Servizio" | "Ricezione" | "Attacco" | "Muro" | "Difesa"; etichetta: string }[] = [
+  { skill: "Servizio", etichetta: "Servizio" },
+  { skill: "Ricezione", etichetta: "Ricezione" },
+  { skill: "Attacco", etichetta: "Attacco" },
+  { skill: "Muro", etichetta: "Muro" },
+  { skill: "Difesa", etichetta: "Difesa" },
+];
+
+/** Modalità essenziale (senza un secondo scout dedicato): solo i 3 fondamentali più diagnostici. */
+export const skillsScoutingEssenziali: typeof skillsScouting = [
+  { skill: "Servizio", etichetta: "Servizio" },
+  { skill: "Attacco", etichetta: "Attacco" },
+  { skill: "Ricezione", etichetta: "Ricezione" },
+];
+
+export const etichetteRuolo: Record<string, string> = {
+  allenatore: "Allenatore",
+  vice_allenatore: "Vice-allenatore",
+  presidente: "Presidente",
+  atleta: "Atleta",
+};
+
 export const uiStrings = {
   common: { save: "Salva", cancel: "Annulla", close: "Chiudi", loading: "Caricamento…" },
   auth: {

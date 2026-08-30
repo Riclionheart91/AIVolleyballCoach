@@ -137,7 +137,11 @@ Il workflow è già incluso in `.github/workflows/deploy.yml`: ad ogni push su `
 
 Per lo schema DB, l'equivalente CI del vecchio `clasp push` è un secondo job che lancia `supabase db push` (richiede `SUPABASE_ACCESS_TOKEN` e `SUPABASE_PROJECT_REF` come secrets) — lasciato manuale per ora finché la squadra non ha familiarità col flusso a migrazioni; si aggiunge in un secondo momento senza toccare nient'altro.
 
-## 11. Risoluzione problemi comuni
+## 11. Aggiornamento schema
+
+Se avevi già eseguito una versione precedente di `setup_supabase.sql`, va rieseguito ad ogni avanzamento — l'ultima aggiunge **F3 (scouting live)**: tabelle `matches`/`match_sets`/`match_events`, punteggio automatico via trigger, tab Partite e schermata di scouting live. È idempotente — nessun dato esistente viene perso, solo lo schema viene esteso.
+
+## 12. Risoluzione problemi comuni
 
 | Problema | Causa | Soluzione |
 |---|---|---|

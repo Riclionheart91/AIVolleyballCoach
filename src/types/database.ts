@@ -1,8 +1,12 @@
 export type Fondamentale = "Battuta" | "Ricezione" | "Attacco" | "Muro" | "Difesa";
-export type Ruolo = "allenatore" | "vice_allenatore";
+export type Ruolo = "allenatore" | "vice_allenatore" | "presidente" | "atleta";
+export type RuoloCampo = "Palleggiatore" | "Schiacciatore" | "Opposto" | "Centrale" | "Libero";
 export type OrigineValutazione = "manuale" | "ai_approvata" | "ai_modificata";
 export type StatoProposta = "proposta" | "approvata" | "modificata" | "rigettata";
 export type StatoStagione = "pianificata" | "attiva" | "conclusa";
+export type Skill = "Servizio" | "Ricezione" | "Attacco" | "Muro" | "Difesa" | "Punto_avversario";
+export type Esito = "punto" | "neutro" | "errore";
+export type StatoMatch = "programmata" | "in_corso" | "conclusa";
 
 export interface Team {
   id: string;
@@ -25,10 +29,13 @@ export interface Athlete {
   team_id: string;
   nome: string;
   cognome: string;
-  ruolo_campo: string | null;
+  ruolo_campo: RuoloCampo | null;
   numero_maglia: number | null;
   data_nascita: string | null;
   status: "attiva" | "archiviata";
+  telefono: string | null;
+  email_contatto: string | null;
+  note_personali: string | null;
   creato_il: string;
 }
 
@@ -127,6 +134,39 @@ export interface SeasonBaseline {
   valutazione_id_riferimento: string | null;
   creata_il: string;
   creata_da: string | null;
+}
+
+export interface Match {
+  id: string;
+  team_id: string;
+  avversario: string;
+  data: string;
+  luogo: "casa" | "trasferta";
+  stato: StatoMatch;
+  set_vinti_noi: number;
+  set_vinti_avversario: number;
+  creato_il: string;
+  creato_da: string | null;
+}
+
+export interface MatchSet {
+  id: string;
+  match_id: string;
+  numero_set: number;
+  punti_noi: number;
+  punti_avversario: number;
+  concluso: boolean;
+}
+
+export interface MatchEvent {
+  id: string;
+  match_id: string;
+  set_id: string;
+  skill: Skill;
+  esito: Esito | null;
+  athlete_id: string | null;
+  creato_il: string;
+  creato_da: string | null;
 }
 
 // Placeholder minimale: non generiamo il tipo Database completo via CLI

@@ -3,22 +3,31 @@ import type { Session } from "@supabase/supabase-js";
 import { supabaseClient } from "@/src/lib/supabase";
 import { supabase as cfg } from "@/src/config";
 import { accettaInvitiPendenti } from "@/src/services/teamInvites";
-import type { Ruolo, Team } from "@/src/types/database";
+import type { Ruolo, Season, Team } from "@/src/types/database";
 
 interface AuthState {
   session: Session | null;
   caricamento: boolean;
   team: Team | null;
   ruolo: Ruolo | null;
+  /** Popolato solo se ruolo === "atleta": l'id della SUA scheda anagrafica. */
+  atletaId: string | null;
+  /** true per allenatore/vice_allenatore — unico gruppo con permessi di scrittura. */
+  puoScrivere: boolean;
+  /** true per presidente — accesso a tutto, ma in sola lettura ovunque. */
+  soloLettura: boolean;
   // true finché non sappiamo ancora se l'utente ha un team — evita di
   // mostrare per un istante "nessuna squadra" mentre la query è in corso
   // (lo stesso tipo di falso allarme di "non riesco a caricare la
   // stagione" che nasceva, in GAS, da un errore di auth mascherato).
   caricamentoTeam: boolean;
+  stagioneAttiva: Season | null;
+  caricamentoStagione: boolean;
   accediConGoogle: () => Promise<void>;
   esci: () => Promise<void>;
   creaPrimaSquadra: (nome: string) => Promise<void>;
   ricaricaTeam: () => Promise<void>;
+  ricaricaStagione: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthState | null>(null);
@@ -28,7 +37,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [caricamento, setCaricamento] = useState(true);
   const [team, setTeam] = useState<Team | null>(null);
   const [ruolo, setRuolo] = useState<Ruolo | null>(null);
+  const [atletaId, setAtletaId] = useState<string | null>(null);
   const [caricamentoTeam, setCaricamentoTeam] = useState(true);
+  const [stagioneAttiva, setStagioneAttiva] = useState<Season | null>(null);
+  const [caricamentoStagione, setCaricamentoStagione] = useState(true);
 
   useEffect(() => {
     supabaseClient.auth.getSession().then(({ data }) => {
@@ -45,6 +57,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!session) {
       setTeam(null);
       setRuolo(null);
+      setAtletaId(null);
       setCaricamentoTeam(false);
       return;
     }
@@ -61,7 +74,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // l'ipotesi "uno spreadsheet = una squadra" della versione GAS.
     const { data, error } = await supabaseClient
       .from("team_members")
-      .select("ruolo, teams(*)")
+      .select("ruolo, atleta_id, teams(*)")
       .eq("user_id", session.user.id)
       .limit(1)
       .maybeSingle();
@@ -70,20 +83,41 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.warn("Errore nel caricamento del team:", error.message);
       setTeam(null);
       setRuolo(null);
+      setAtletaId(null);
     } else if (data) {
       setTeam((data.teams as unknown as Team) ?? null);
       setRuolo(data.ruolo as Ruolo);
+      setAtletaId((data.atleta_id as string | null) ?? null);
     } else {
       setTeam(null);
       setRuolo(null);
+      setAtletaId(null);
     }
     setCaricamentoTeam(false);
+  }
+
+  async function ricaricaStagione() {
+    if (!team) {
+      setStagioneAttiva(null);
+      setCaricamentoStagione(false);
+      return;
+    }
+    setCaricamentoStagione(true);
+    const { data, error } = await supabaseClient.from("seasons").select("*").eq("team_id", team.id).eq("stato", "attiva").maybeSingle();
+    if (error) console.warn("Errore nel caricamento della stagione attiva:", error.message);
+    setStagioneAttiva(data ?? null);
+    setCaricamentoStagione(false);
   }
 
   useEffect(() => {
     ricaricaTeam();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.user.id]);
+
+  useEffect(() => {
+    ricaricaStagione();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [team?.id]);
 
   async function accediConGoogle() {
     await supabaseClient.auth.signInWithOAuth({
@@ -102,9 +136,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await ricaricaTeam();
   }
 
+  const puoScrivere = ruolo === "allenatore" || ruolo === "vice_allenatore";
+  const soloLettura = ruolo === "presidente";
+
   const value = useMemo<AuthState>(
-    () => ({ session, caricamento, team, ruolo, caricamentoTeam, accediConGoogle, esci, creaPrimaSquadra, ricaricaTeam }),
-    [session, caricamento, team, ruolo, caricamentoTeam],
+    () => ({
+      session, caricamento, team, ruolo, atletaId, puoScrivere, soloLettura, caricamentoTeam,
+      stagioneAttiva, caricamentoStagione,
+      accediConGoogle, esci, creaPrimaSquadra, ricaricaTeam, ricaricaStagione,
+    }),
+    [session, caricamento, team, ruolo, atletaId, caricamentoTeam, stagioneAttiva, caricamentoStagione],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -7,7 +7,7 @@ import { brand } from "@/src/config";
 import type { Season } from "@/src/types/database";
 
 export default function Stagioni() {
-  const { team } = useAuth();
+  const { team, puoScrivere } = useAuth();
   const [stagioni, setStagioni] = useState<Season[]>([]);
   const [caricamento, setCaricamento] = useState(true);
   const [nome, setNome] = useState("");
@@ -26,9 +26,13 @@ export default function Stagioni() {
 
   async function crea() {
     if (!team || !nome.trim()) return;
-    await creaStagione(team.id, { nome: nome.trim(), data_apertura: new Date().toISOString().slice(0, 10) });
-    setNome("");
-    carica();
+    try {
+      await creaStagione(team.id, { nome: nome.trim(), data_apertura: new Date().toISOString().slice(0, 10) });
+      setNome("");
+      carica();
+    } catch (e) {
+      Alert.alert("Errore nella creazione della stagione", (e as Error).message);
+    }
   }
 
   async function attiva(id: string) {
@@ -51,12 +55,14 @@ export default function Stagioni() {
 
   return (
     <View style={styles.container}>
-      <View style={styles.form}>
-        <TextInput style={styles.input} placeholder="Nome stagione (es. 2026/2027)" placeholderTextColor={brand.colors.muted} value={nome} onChangeText={setNome} />
-        <Pressable style={styles.bottone} onPress={crea}>
-          <Text style={styles.bottoneTesto}>Crea stagione</Text>
-        </Pressable>
-      </View>
+      {puoScrivere && (
+        <View style={styles.form}>
+          <TextInput style={styles.input} placeholder="Nome stagione (es. 2026/2027)" placeholderTextColor={brand.colors.muted} value={nome} onChangeText={setNome} />
+          <Pressable style={styles.bottone} onPress={crea}>
+            <Text style={styles.bottoneTesto}>Crea stagione</Text>
+          </Pressable>
+        </View>
+      )}
 
       <FlatList
         data={stagioni}
@@ -70,16 +76,18 @@ export default function Stagioni() {
               <Text style={[styles.badge, item.stato === "attiva" && styles.badgeAttiva]}>{item.stato}</Text>
             </View>
             <Text style={styles.cardSotto}>Apertura: {item.data_apertura}</Text>
-            <View style={styles.azioni}>
-              {item.stato !== "attiva" && (
-                <Pressable style={styles.bottoneSecondario} onPress={() => attiva(item.id)}>
-                  <Text style={styles.bottoneSecondarioTesto}>Attiva</Text>
+            {puoScrivere && (
+              <View style={styles.azioni}>
+                {item.stato !== "attiva" && (
+                  <Pressable style={styles.bottoneSecondario} onPress={() => attiva(item.id)}>
+                    <Text style={styles.bottoneSecondarioTesto}>Attiva</Text>
+                  </Pressable>
+                )}
+                <Pressable style={styles.bottoneSecondario} onPress={() => generaBaseline(item.id)}>
+                  <Text style={styles.bottoneSecondarioTesto}>Genera baseline</Text>
                 </Pressable>
-              )}
-              <Pressable style={styles.bottoneSecondario} onPress={() => generaBaseline(item.id)}>
-                <Text style={styles.bottoneSecondarioTesto}>Genera baseline</Text>
-              </Pressable>
-            </View>
+              </View>
+            )}
           </View>
         )}
       />

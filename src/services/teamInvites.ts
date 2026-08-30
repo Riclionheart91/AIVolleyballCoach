@@ -6,12 +6,13 @@ export interface TeamInvite {
   team_id: string;
   email: string;
   ruolo: Ruolo;
+  atleta_id: string | null;
   creato_il: string;
   usato_il: string | null;
 }
 
-export async function invitaMembro(teamId: string, email: string, ruolo: Ruolo): Promise<void> {
-  const { error } = await supabaseClient.rpc("invita_membro", { p_team_id: teamId, p_email: email, p_ruolo: ruolo });
+export async function invitaMembro(teamId: string, email: string, ruolo: Ruolo, atletaId: string | null = null): Promise<void> {
+  const { error } = await supabaseClient.rpc("invita_membro", { p_team_id: teamId, p_email: email, p_ruolo: ruolo, p_atleta_id: atletaId });
   if (error) throw error;
 }
 

@@ -39,7 +39,19 @@ export async function elencaPropostePendenti(teamId: string): Promise<Evaluation
   return data ?? [];
 }
 
-export interface RisultatoSuggerimentoAI {
+export interface AndamentoSquadraVoce {
+  fondamentale: Fondamentale;
+  mese: string;
+  media: number;
+  numero_valutazioni: number;
+}
+
+/** Aggregato di squadra per fondamentale/mese — MAI scomposto per singola atleta. Visibile a qualunque ruolo del team, incluse le atlete (RPC lo garantisce lato server). */
+export async function andamentoSquadra(teamId: string): Promise<AndamentoSquadraVoce[]> {
+  const { data, error } = await supabaseClient.rpc("andamento_squadra_valutazioni", { p_team_id: teamId });
+  if (error) throw error;
+  return data ?? [];
+}
   errore: boolean;
   messaggio?: string;
   proposta?: EvaluationProposal;
