@@ -61,6 +61,7 @@ create table if not exists athletes (
   creato_il timestamptz not null default now()
 );
 
+alter table team_members drop constraint if exists team_members_atleta_id_fkey;
 alter table team_members
   add constraint team_members_atleta_id_fkey
   foreign key (atleta_id) references athletes on delete set null;

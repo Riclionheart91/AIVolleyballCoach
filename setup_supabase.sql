@@ -65,6 +65,7 @@ create table if not exists athletes (
   creato_il timestamptz not null default now()
 );
 
+alter table team_members drop constraint if exists team_members_atleta_id_fkey;
 alter table team_members
   add constraint team_members_atleta_id_fkey
   foreign key (atleta_id) references athletes on delete set null;
@@ -394,6 +395,7 @@ alter table team_invites add constraint team_invites_ruolo_check
   check (ruolo in ('allenatore', 'vice_allenatore', 'presidente', 'atleta'));
 
 alter table team_invites add column if not exists atleta_id uuid references athletes on delete cascade;
+alter table team_invites drop constraint if exists team_invites_atleta_id_obbligatorio;
 alter table team_invites add constraint team_invites_atleta_id_obbligatorio
   check (ruolo <> 'atleta' or atleta_id is not null);
 

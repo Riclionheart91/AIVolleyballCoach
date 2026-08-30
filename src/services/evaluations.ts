@@ -52,6 +52,7 @@ export async function andamentoSquadra(teamId: string): Promise<AndamentoSquadra
   if (error) throw error;
   return data ?? [];
 }
+export interface RisultatoSuggerimentoAI {
   errore: boolean;
   messaggio?: string;
   proposta?: EvaluationProposal;

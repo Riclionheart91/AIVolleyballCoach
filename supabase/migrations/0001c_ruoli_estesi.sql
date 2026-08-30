@@ -34,6 +34,7 @@ alter table team_invites add constraint team_invites_ruolo_check
   check (ruolo in ('allenatore', 'vice_allenatore', 'presidente', 'atleta'));
 
 alter table team_invites add column if not exists atleta_id uuid references athletes on delete cascade;
+alter table team_invites drop constraint if exists team_invites_atleta_id_obbligatorio;
 alter table team_invites add constraint team_invites_atleta_id_obbligatorio
   check (ruolo <> 'atleta' or atleta_id is not null);
 
