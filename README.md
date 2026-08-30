@@ -88,13 +88,14 @@ npm install
    supabase gen types typescript --linked > src/types/database.ts
    ```
 
-## 5. Deploy dell'Edge Function AI (Provider Router)
+## 5. Deploy delle Edge Function
 
 ```bash
 supabase functions deploy ai-router
+supabase functions deploy sync-sporteasy
 supabase secrets set GEMINI_API_KEY=xxx GROQ_API_KEY=xxx OPENROUTER_API_KEY=xxx
 ```
-Le chiavi non compaiono mai in nessuna tabella né nel bundle client — stessa garanzia di `leggiSegreto_()` in `Config.gs`, qui impossibile da violare per costruzione (il client non può leggere i secret della function).
+`sync-sporteasy` non ha bisogno di secret propri (il link del calendario non è segreto, è configurabile dall'app nella tab Partite). Le chiavi AI non compaiono mai in nessuna tabella né nel bundle client — stessa garanzia di `leggiSegreto_()` in `Config.gs`, qui impossibile da violare per costruzione (il client non può leggere i secret della function).
 
 ## 6. Configura Google OAuth
 

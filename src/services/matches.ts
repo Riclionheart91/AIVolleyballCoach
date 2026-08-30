@@ -14,6 +14,12 @@ export async function creaMatch(teamId: string, avversario: string, data: string
   return matchId as string;
 }
 
+/** Per una partita "programmata" (es. arrivata da SportEasy): crea il set 1 e la porta "in_corso". Per una partita già in corso non fa nulla di distruttivo (idempotente). */
+export async function avviaMatch(matchId: string): Promise<void> {
+  const { error } = await supabaseClient.rpc("avvia_match", { p_match_id: matchId });
+  if (error) throw error;
+}
+
 export async function elencaSet(matchId: string): Promise<MatchSet[]> {
   const { data, error } = await supabaseClient.from("match_sets").select("*").eq("match_id", matchId).order("numero_set");
   if (error) throw error;

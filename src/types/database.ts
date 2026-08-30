@@ -54,6 +54,7 @@ export interface Training {
   data: string;
   titolo: string;
   note: string;
+  sporteasy_uid: string | null;
   creato_il: string;
 }
 
@@ -145,8 +146,16 @@ export interface Match {
   stato: StatoMatch;
   set_vinti_noi: number;
   set_vinti_avversario: number;
+  sporteasy_uid: string | null;
   creato_il: string;
   creato_da: string | null;
+}
+
+export interface TeamIntegration {
+  team_id: string;
+  sporteasy_ical_url: string | null;
+  ultima_sincronizzazione: string | null;
+  ultimo_esito: string | null;
 }
 
 export interface MatchSet {

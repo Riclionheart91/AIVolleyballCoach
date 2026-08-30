@@ -11,6 +11,8 @@
 | F5 | Layer AI manual-first: proposte di valutazione, Provider Router (Gemini→Groq→OpenRouter), rate limit, badge di stato | ✅ (integrato nello screen Valutazioni, nessuno screen separato — per design, vedi patch V7.1) |
 | F1 (revisione 28/08) | Ruoli estesi (presidente sola lettura, atleta con login proprio), privacy dati personali (valutazioni/presenze/RPE viste solo da staff+proprietaria), andamento squadra aggregato per tutti, tab Esercizi, schermata Profilo, stagione-first dopo il login, ruolo in campo a tendina | ✅ (`0001c_ruoli_estesi.sql` + screen aggiornati) |
 | F3 | Scouting live: un solo motore dati (`match_events`) al posto di 3 moduli GAS separati, interfaccia a tap (max 2 tocchi), punteggio automatico via trigger, "annulla ultima azione", modalità essenziale, scrittura ottimistica (zero attesa di rete percepita) | ✅ (`0003_f3_scouting.sql`, tab Partite + schermata live `app/partita/[id].tsx`) |
+| Import massivo atlete | Incolla CSV (Nome,Cognome,RuoloCampo,NumeroMaglia) nella tab Atlete, righe processate una per una con riepilogo errori | ✅ (`importaAtleteCsv`, sezione "Importa più atlete insieme" nella tab Atlete) |
+| Integrazione SportEasy | Sync SOLO eventi (allenamenti/partite) dal calendario iCal — mai anagrafica atlete, come richiesto. Dedup su UID, non tocca mai lo stato di una partita già iniziata/conclusa | ✅ (`0004_sporteasy.sql` + Edge Function `sync-sporteasy`, sezione nella tab Partite) |
 
 **Non incluso ora:** F4 (match analysis approfondita — per ora c'è solo l'andamento aggregato base in Partite), F6 (infortuni, piani individuali, integrazioni esterne), F7 (QA, migrazione dati storici, CI/CD schema).
 

@@ -21,6 +21,7 @@ export const supabase = {
   anonKey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? "",
   authRedirectUrl: process.env.EXPO_PUBLIC_AUTH_REDIRECT_URL ?? "https://your-user.github.io/AIVolleyballCoach/",
   aiRouterFunction: "ai-router",
+  sporteasySyncFunction: "sync-sporteasy",
 };
 
 export const fondamentali = ["Battuta", "Ricezione", "Attacco", "Muro", "Difesa"] as const;

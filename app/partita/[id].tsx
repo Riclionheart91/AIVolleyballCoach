@@ -5,6 +5,7 @@ import { useAuth } from "@/src/context/AuthContext";
 import { elencaAtlete } from "@/src/services/athletes";
 import {
   annullaUltimoEvento,
+  avviaMatch,
   chiudiMatch,
   elencaEventiPartita,
   elencaSet,
@@ -121,8 +122,28 @@ export default function PartitaLive() {
     ]);
   }
 
-  if (!match || !setCorrente) {
+  if (!match) {
     return <View style={styles.container}><Text style={styles.vuoto}>Caricamento…</Text></View>;
+  }
+
+  if (!setCorrente) {
+    // Partita "programmata" (tipicamente arrivata da SportEasy) non ancora
+    // avviata: capita se si arriva qui senza passare da apriPartita() in
+    // Partite.tsx (es. link diretto, refresh). Meglio un'azione esplicita
+    // che uno spinner che gira per sempre.
+    return (
+      <View style={[styles.container, { alignItems: "center", justifyContent: "center", gap: 16 }]}>
+        <Text style={styles.vuoto}>Partita non ancora iniziata.</Text>
+        {puoScrivere && (
+          <Pressable
+            style={styles.tastoSecondario}
+            onPress={async () => { try { await avviaMatch(match.id); carica(); } catch (e) { Alert.alert("Errore", (e as Error).message); } }}
+          >
+            <Text style={styles.tastoSecondarioTesto}>Inizia scouting</Text>
+          </Pressable>
+        )}
+      </View>
+    );
   }
 
   const skillsDaMostrare = modalitaEssenziale ? skillsScoutingEssenziali : skillsScouting;
