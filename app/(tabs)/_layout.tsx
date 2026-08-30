@@ -47,6 +47,12 @@ export default function TabsLayout() {
         options={{
           title: "Stagioni",
           tabBarIcon: ({ color, size }) => <Ionicons name="trophy" color={color} size={size} />,
+          // Tolta dalla tab bar in basso su richiesta: resta comunque
+          // raggiungibile dal banner stagione in alto (BannerStagione
+          // sopra fa router.push su questa stessa rotta). href: null è
+          // il modo corretto in Expo Router per nascondere una voce
+          // dalla tab bar senza disabilitare la rotta.
+          href: null,
         }}
       />
     </Tabs>

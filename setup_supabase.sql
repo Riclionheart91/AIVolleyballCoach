@@ -1,8 +1,5 @@
 -- ============================================================
--- SETUP COMPLETO — AI Volleyball Coach
--- Concatenazione di 0001+0001b+0001c+0002+0003+0005 nell'ordine
--- corretto, pronta da incollare in un colpo solo in Supabase SQL
--- Editor > New query. Idempotente.
+-- SETUP COMPLETO — AI Volleyball Coach (idempotente)
 -- ============================================================
 
 -- ============================================================

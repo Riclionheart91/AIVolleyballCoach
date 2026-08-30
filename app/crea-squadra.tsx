@@ -14,7 +14,11 @@ export default function CreaSquadra() {
     setInCorso(true);
     try {
       await creaPrimaSquadra(nome.trim());
-      router.replace("/(tabs)");
+      // Reindirizza a "/" e non direttamente a "/(tabs)": è app/index.tsx
+      // a decidere il prossimo passo in base a stagioneAttiva. Andare
+      // dritti alle tabs qui saltava del tutto il gate "apri una
+      // stagione prima di entrare" — la causa esatta del bug segnalato.
+      router.replace("/");
     } catch (e) {
       Alert.alert("Errore", (e as Error).message);
     } finally {
