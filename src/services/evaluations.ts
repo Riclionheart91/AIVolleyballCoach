@@ -59,12 +59,6 @@ export interface RisultatoSuggerimentoAI {
   chiamateResidue?: number;
   limite?: number;
 }
-  errore: boolean;
-  messaggio?: string;
-  proposta?: EvaluationProposal;
-  chiamateResidue?: number;
-  limite?: number;
-}
 
 /**
  * Chiede all'AI un suggerimento di punteggio per atleta/fondamentale,
