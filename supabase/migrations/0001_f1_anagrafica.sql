@@ -179,7 +179,7 @@ do $$
 declare
   t text;
 begin
-  foreach t in array array['athletes', 'exercises', 'trainings', 'attendance', 'rpe', 'evaluations']
+  foreach t in array array['athletes', 'exercises', 'trainings', 'training_exercises', 'attendance', 'rpe', 'evaluations']
   loop
     execute format('drop policy if exists "%1$s_select_member" on %1$s', t);
     execute format('drop policy if exists "%1$s_write_coach" on %1$s', t);

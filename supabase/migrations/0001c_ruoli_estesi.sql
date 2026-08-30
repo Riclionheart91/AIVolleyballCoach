@@ -67,23 +67,27 @@ $$;
 -- proprio athlete_id" per chi è loggata come atleta.
 
 drop policy if exists "evaluations_select_member" on evaluations;
+drop policy if exists "evaluations_select_ristretta" on evaluations;
 create policy "evaluations_select_ristretta" on evaluations for select using (
   is_team_staff_visione_piena(team_id) or athlete_id = mio_atleta_id(team_id)
 );
 
 drop policy if exists "season_baselines_select_member" on season_baselines;
+drop policy if exists "season_baselines_select_ristretta" on season_baselines;
 create policy "season_baselines_select_ristretta" on season_baselines for select using (
   is_team_staff_visione_piena((select team_id from seasons where id = season_id))
   or athlete_id = mio_atleta_id((select team_id from seasons where id = season_id))
 );
 
 drop policy if exists "attendance_select_member" on attendance;
+drop policy if exists "attendance_select_ristretta" on attendance;
 create policy "attendance_select_ristretta" on attendance for select using (
   is_team_staff_visione_piena((select team_id from trainings where id = training_id))
   or athlete_id = mio_atleta_id((select team_id from trainings where id = training_id))
 );
 
 drop policy if exists "rpe_select_member" on rpe;
+drop policy if exists "rpe_select_ristretta" on rpe;
 create policy "rpe_select_ristretta" on rpe for select using (
   is_team_staff_visione_piena((select team_id from trainings where id = training_id))
   or athlete_id = mio_atleta_id((select team_id from trainings where id = training_id))

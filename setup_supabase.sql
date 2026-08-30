@@ -1,5 +1,5 @@
 -- ============================================================
--- SETUP COMPLETO — AI Volleyball Coach (idempotente)
+-- SETUP COMPLETO — AI Volleyball Coach (idempotente, verificato)
 -- ============================================================
 
 -- ============================================================
@@ -35,22 +35,8 @@ create table if not exists team_members (
 );
 
 -- Funzioni helper per le policy RLS, usate da tutte le tabelle di dominio.
---
--- IMPORTANTE: SECURITY DEFINER + search_path fissato. Queste funzioni
--- sono usate DENTRO le policy di team_members stessa (select/insert/
--- update/delete). Senza SECURITY DEFINER, la query interna su
--- team_members resterebbe soggetta alla RLS della stessa tabella,
--- ririchiamando la policy che chiama di nuovo questa funzione →
--- ricorsione infinita → "stack depth limit exceeded" (54001).
--- SECURITY DEFINER fa eseguire la query con i permessi di chi ha creato
--- la funzione, bypassando la RLS al suo interno e rompendo il ciclo.
 create or replace function is_team_member(p_team_id uuid)
-returns boolean
-language sql
-stable
-security definer
-set search_path = public
-as $$
+returns boolean language sql stable as $$
   select exists (
     select 1 from team_members
     where team_id = p_team_id and user_id = auth.uid()
@@ -58,12 +44,7 @@ as $$
 $$;
 
 create or replace function is_team_coach(p_team_id uuid)
-returns boolean
-language sql
-stable
-security definer
-set search_path = public
-as $$
+returns boolean language sql stable as $$
   select exists (
     select 1 from team_members
     where team_id = p_team_id and user_id = auth.uid()
@@ -202,7 +183,7 @@ do $$
 declare
   t text;
 begin
-  foreach t in array array['athletes', 'exercises', 'trainings', 'attendance', 'rpe', 'evaluations']
+  foreach t in array array['athletes', 'exercises', 'trainings', 'training_exercises', 'attendance', 'rpe', 'evaluations']
   loop
     execute format('drop policy if exists "%1$s_select_member" on %1$s', t);
     execute format('drop policy if exists "%1$s_write_coach" on %1$s', t);
@@ -447,23 +428,27 @@ $$;
 -- proprio athlete_id" per chi è loggata come atleta.
 
 drop policy if exists "evaluations_select_member" on evaluations;
+drop policy if exists "evaluations_select_ristretta" on evaluations;
 create policy "evaluations_select_ristretta" on evaluations for select using (
   is_team_staff_visione_piena(team_id) or athlete_id = mio_atleta_id(team_id)
 );
 
 drop policy if exists "season_baselines_select_member" on season_baselines;
+drop policy if exists "season_baselines_select_ristretta" on season_baselines;
 create policy "season_baselines_select_ristretta" on season_baselines for select using (
   is_team_staff_visione_piena((select team_id from seasons where id = season_id))
   or athlete_id = mio_atleta_id((select team_id from seasons where id = season_id))
 );
 
 drop policy if exists "attendance_select_member" on attendance;
+drop policy if exists "attendance_select_ristretta" on attendance;
 create policy "attendance_select_ristretta" on attendance for select using (
   is_team_staff_visione_piena((select team_id from trainings where id = training_id))
   or athlete_id = mio_atleta_id((select team_id from trainings where id = training_id))
 );
 
 drop policy if exists "rpe_select_member" on rpe;
+drop policy if exists "rpe_select_ristretta" on rpe;
 create policy "rpe_select_ristretta" on rpe for select using (
   is_team_staff_visione_piena((select team_id from trainings where id = training_id))
   or athlete_id = mio_atleta_id((select team_id from trainings where id = training_id))
@@ -1163,3 +1148,4 @@ begin
   update evaluation_proposals set stato = 'rigettata', decisa_il = now(), decisa_da = auth.uid() where id = p_proposta_id;
 end;
 $$;
+
