@@ -21,6 +21,7 @@ interface AuthState {
   // (lo stesso tipo di falso allarme di "non riesco a caricare la
   // stagione" che nasceva, in GAS, da un errore di auth mascherato).
   caricamentoTeam: boolean;
+  erroreTeam: string | null;
   stagioneAttiva: Season | null;
   caricamentoStagione: boolean;
   accediConGoogle: () => Promise<void>;
@@ -39,6 +40,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [ruolo, setRuolo] = useState<Ruolo | null>(null);
   const [atletaId, setAtletaId] = useState<string | null>(null);
   const [caricamentoTeam, setCaricamentoTeam] = useState(true);
+  const [erroreTeam, setErroreTeam] = useState<string | null>(null);
   const [stagioneAttiva, setStagioneAttiva] = useState<Season | null>(null);
   const [caricamentoStagione, setCaricamentoStagione] = useState(true);
 
@@ -81,14 +83,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     if (error) {
       console.warn("Errore nel caricamento del team:", error.message);
+      setErroreTeam(error.message);
       setTeam(null);
       setRuolo(null);
       setAtletaId(null);
     } else if (data) {
+      setErroreTeam(null);
       setTeam((data.teams as unknown as Team) ?? null);
       setRuolo(data.ruolo as Ruolo);
       setAtletaId((data.atleta_id as string | null) ?? null);
     } else {
+      setErroreTeam(null);
       setTeam(null);
       setRuolo(null);
       setAtletaId(null);
@@ -141,11 +146,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const value = useMemo<AuthState>(
     () => ({
-      session, caricamento, team, ruolo, atletaId, puoScrivere, soloLettura, caricamentoTeam,
+      session, caricamento, team, ruolo, atletaId, puoScrivere, soloLettura, caricamentoTeam, erroreTeam,
       stagioneAttiva, caricamentoStagione,
       accediConGoogle, esci, creaPrimaSquadra, ricaricaTeam, ricaricaStagione,
     }),
-    [session, caricamento, team, ruolo, atletaId, caricamentoTeam, stagioneAttiva, caricamentoStagione],
+    [session, caricamento, team, ruolo, atletaId, caricamentoTeam, erroreTeam, stagioneAttiva, caricamentoStagione],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -1,5 +1,6 @@
+import { useEffect } from "react";
 import { Tabs, router } from "expo-router";
-import { Pressable, Text, StyleSheet } from "react-native";
+import { Pressable, Text, View, ActivityIndicator, StyleSheet } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "@/src/context/AuthContext";
 import { brand } from "@/src/config";
@@ -25,6 +26,39 @@ function BottoneProfilo() {
 }
 
 export default function TabsLayout() {
+  const { session, caricamento, team, caricamentoTeam, erroreTeam, stagioneAttiva, caricamentoStagione } = useAuth();
+
+  // GUARDIA DIFENSIVA: prima questo controllo viveva solo in app/index.tsx,
+  // eseguito una volta sola all'avvio dell'app. Su un sito statico (export
+  // web), un refresh della pagina — o l'apertura diretta di un link che
+  // punta già dentro (tabs) — non fa mai ripassare da index.tsx: il
+  // controllo veniva saltato del tutto, ed era possibile ritrovarsi qui
+  // dentro con team/stagione nulli, con le schermate che restavano vuote
+  // in silenzio (il bug esatto segnalato: "non mi fa vedere nulla").
+  // Rifacendo lo stesso controllo qui, gira SEMPRE che si entri in questa
+  // sezione, qualunque sia stato il punto di ingresso.
+  useEffect(() => {
+    if (caricamento || caricamentoTeam) return;
+    if (!session) { router.replace("/login"); return; }
+    if (!team) { router.replace("/crea-squadra"); return; }
+    if (caricamentoStagione) return;
+    if (!stagioneAttiva) { router.replace("/apri-stagione"); return; }
+  }, [session, caricamento, team, caricamentoTeam, stagioneAttiva, caricamentoStagione]);
+
+  if (caricamento || caricamentoTeam || !team || caricamentoStagione) {
+    return (
+      <View style={styles.caricamentoContainer}>
+        <ActivityIndicator color={brand.colors.brand} />
+        {erroreTeam && (
+          <Text style={styles.erroreTesto}>
+            Errore nel caricamento della squadra: {erroreTeam}{"\n"}
+            Se il problema persiste, verifica che il progetto Supabase collegato sia quello giusto (Project Settings → API → Project URL, da confrontare con EXPO_PUBLIC_SUPABASE_URL).
+          </Text>
+        )}
+      </View>
+    );
+  }
+
   return (
     <Tabs
       screenOptions={{
@@ -62,4 +96,6 @@ export default function TabsLayout() {
 const styles = StyleSheet.create({
   banner: { flexDirection: "row", alignItems: "center", gap: 6, maxWidth: 220 },
   bannerTesto: { color: brand.colors.onSurface, fontWeight: "700", fontSize: 15 },
+  caricamentoContainer: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: brand.colors.surface, padding: 24, gap: 16 },
+  erroreTesto: { color: brand.colors.error, fontSize: 13, textAlign: "center" },
 });
