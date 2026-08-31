@@ -582,6 +582,89 @@ end;
 $$;
 
 -- ============================================================
+-- 0001d — Fix ricorsione RLS sulle funzioni helper
+--
+-- is_team_member/is_team_coach/is_team_presidente/mio_atleta_id
+-- interrogano "team_members" per decidere la visibilità di righe che
+-- possono trovarsi proprio dentro "team_members" (o, tramite
+-- l'embedding automatico di PostgREST, dentro "teams" quando lo si
+-- legge "annidato" da una query su team_members, come fa
+-- AuthContext.ricaricaTeam()). Senza SECURITY DEFINER, Postgres valuta
+-- questa autoreferenza sotto le stesse policy RLS che sta cercando di
+-- decidere — un pattern che Supabase stesso segnala come causa di
+-- risultati incoerenti (righe che esistono ma non vengono restituite).
+-- Rendendole SECURITY DEFINER, queste funzioni leggono team_members
+-- "ai margini" della RLS (bypassandola solo per il proprio controllo di
+-- appartenenza, che è tutto ciò che devono fare), eliminando
+-- l'autoriferimento alla radice. `set search_path = public` è
+-- l'accorgimento di sicurezza standard per ogni funzione
+-- SECURITY DEFINER, per evitare che qualcuno le "dirotti" verso
+-- tabelle omonime in altri schema.
+-- ============================================================
+
+create or replace function is_team_member(p_team_id uuid)
+returns boolean
+language sql stable security definer set search_path = public
+as $$
+  select exists (
+    select 1 from team_members
+    where team_id = p_team_id and user_id = auth.uid()
+  );
+$$;
+
+create or replace function is_team_coach(p_team_id uuid)
+returns boolean
+language sql stable security definer set search_path = public
+as $$
+  select exists (
+    select 1 from team_members
+    where team_id = p_team_id and user_id = auth.uid()
+      and ruolo in ('allenatore', 'vice_allenatore')
+  );
+$$;
+
+create or replace function is_team_presidente(p_team_id uuid)
+returns boolean
+language sql stable security definer set search_path = public
+as $$
+  select exists (
+    select 1 from team_members where team_id = p_team_id and user_id = auth.uid() and ruolo = 'presidente'
+  );
+$$;
+
+create or replace function is_team_staff_visione_piena(p_team_id uuid)
+returns boolean
+language sql stable security definer set search_path = public
+as $$
+  select is_team_coach(p_team_id) or is_team_presidente(p_team_id);
+$$;
+
+create or replace function mio_atleta_id(p_team_id uuid)
+returns uuid
+language sql stable security definer set search_path = public
+as $$
+  select atleta_id from team_members
+  where team_id = p_team_id and user_id = auth.uid() and ruolo = 'atleta';
+$$;
+
+-- ============================================================
+-- 0001e — Codice fiscale atlete (per deduplica import Excel)
+--
+-- Chiave di dedup nel wizard di import: se presente, il codice fiscale
+-- (univoco per persona) evita di duplicare un'atleta già censita anche
+-- se nome/cognome sono scritti in modo leggermente diverso nel file
+-- caricato; il fallback (nome+cognome normalizzati) resta gestito lato
+-- client, non richiede struttura dati aggiuntiva qui.
+-- ============================================================
+
+alter table athletes add column if not exists codice_fiscale text;
+
+-- Case-insensitive: "RSSMRA80A01H501U" e "rssmra80a01h501u" devono
+-- essere riconosciuti come la stessa persona.
+create unique index if not exists idx_athletes_codice_fiscale
+  on athletes (team_id, upper(codice_fiscale)) where codice_fiscale is not null;
+
+-- ============================================================
 -- F2 — Stagioni + baseline (equivalente di V2.5 in AIVolleyballCoach GAS)
 -- Nessuna colonna toccata su evaluations: l'appartenenza di una
 -- valutazione a una stagione resta calcolata per intervallo di date,
@@ -663,6 +746,26 @@ begin
 
   update seasons set stato = 'pianificata' where team_id = v_team_id and stato = 'attiva' and id <> p_season_id;
   update seasons set stato = 'attiva' where id = p_season_id;
+end;
+$$;
+
+-- Conclude una stagione (la si può concludere anche se non era quella
+-- "attiva", per correggere una stagione dimenticata aperta per errore).
+-- CREATE OR REPLACE su una funzione è già idempotente di per sé, non
+-- serve un DROP prima come per policy/vincoli.
+create or replace function concludi_stagione(p_season_id uuid)
+returns void
+language plpgsql
+security definer
+as $$
+declare
+  v_team_id uuid;
+begin
+  select team_id into v_team_id from seasons where id = p_season_id;
+  if v_team_id is null then raise exception 'Stagione non trovata: %', p_season_id; end if;
+  if not is_team_coach(v_team_id) then raise exception 'Permesso negato'; end if;
+
+  update seasons set stato = 'conclusa', data_chiusura = coalesce(data_chiusura, current_date) where id = p_season_id;
 end;
 $$;
 
@@ -1229,4 +1332,136 @@ begin
   update evaluation_proposals set stato = 'rigettata', decisa_il = now(), decisa_da = auth.uid() where id = p_proposta_id;
 end;
 $$;
+
+-- ============================================================
+-- 0005b — Fix unicità ai_providers_config per righe globali
+--
+-- Il vincolo "unique (team_id, provider_code)" di 0005_f5_ai_layer.sql
+-- non impedisce duplicati quando team_id è NULL (i default globali):
+-- in SQL, due valori NULL non sono mai considerati uguali ai fini di un
+-- vincolo UNIQUE. Effetto pratico: ogni riesecuzione di
+-- setup_supabase.sql duplicava le 3 righe globali seminate all'inizio.
+-- Sostituito con due indici parziali, uno per team specifici e uno per
+-- i default globali, che coprono correttamente entrambi i casi.
+-- ============================================================
+
+alter table ai_providers_config drop constraint if exists ai_providers_config_team_id_provider_code_key;
+
+create unique index if not exists idx_ai_providers_config_team
+  on ai_providers_config (team_id, provider_code) where team_id is not null;
+
+create unique index if not exists idx_ai_providers_config_globale
+  on ai_providers_config (provider_code) where team_id is null;
+
+-- Rimuove eventuali duplicati globali già creati da riesecuzioni
+-- precedenti (tiene solo la riga più vecchia per provider_code).
+delete from ai_providers_config a
+where a.team_id is null
+  and a.id not in (
+    select min(b.id) from ai_providers_config b where b.team_id is null group by b.provider_code
+  );
+
+-- Riscritto con WHERE NOT EXISTS invece di ON CONFLICT: quest'ultimo
+-- non si attiva sulle righe con team_id nullo per lo stesso motivo di
+-- cui sopra, quindi il seed originale in 0005 duplicava ad ogni run.
+insert into ai_providers_config (team_id, provider_code, enabled, priority, modello)
+select null, x.provider_code, true, x.priority, x.modello
+from (values
+  ('GEMINI', 1, 'gemini-2.0-flash'),
+  ('GROQ', 2, 'llama-3.3-70b-versatile'),
+  ('OPENROUTER', 3, 'openrouter/free')
+) as x(provider_code, priority, modello)
+where not exists (
+  select 1 from ai_providers_config existenti
+  where existenti.team_id is null and existenti.provider_code = x.provider_code
+);
+
+-- ============================================================
+-- 0006 — Super-amministratore globale
+--
+-- Un superuser non appartiene a un team: è registrato in app_admins e
+-- vede/gestisce trasversalmente tutte le squadre. Pensato per un ruolo
+-- di gestione tecnica della piattaforma (es. te), non per il normale
+-- staff di una squadra — un allenatore/presidente restano scoperti
+-- entro il proprio team con le regole già in vigore.
+--
+-- Applicato qui alle tabelle principali (teams, team_members, athletes,
+-- evaluations, seasons, matches, match_events, ai_providers_config
+-- globale). Le tabelle rimaste fuori da questa prima passata (exercises,
+-- trainings, training_exercises, attendance, rpe, evaluation_proposals,
+-- season_baselines, team_invites, team_integrations, ai_call_log)
+-- seguono lo stesso identico pattern — un "or is_superuser()" aggiunto
+-- alla USING della policy di select — da estendere quando serve
+-- davvero vedere anche quei dati da superuser, non è stato fatto qui
+-- solo per contenere la dimensione di questa migrazione.
+-- ============================================================
+
+create table if not exists app_admins (
+  user_id uuid primary key references auth.users on delete cascade,
+  aggiunto_il timestamptz not null default now()
+);
+
+alter table app_admins enable row level security;
+-- Nessuna policy di select/insert per il client: solo un altro
+-- superuser può leggerla, e comunque solo tramite is_superuser() che è
+-- security definer (bypassa la RLS). L'unico modo per aggiungere un
+-- nuovo superuser è dal SQL Editor di Supabase direttamente:
+--   insert into app_admins (user_id) values ('uuid-utente');
+-- Scelta intenzionale: promuovere qualcuno a superuser non deve essere
+-- possibile dall'app stessa, nemmeno da un altro superuser via RPC.
+
+create or replace function is_superuser()
+returns boolean
+language sql stable security definer set search_path = public
+as $$
+  select exists (select 1 from app_admins where user_id = auth.uid());
+$$;
+
+-- RPC usata dal client solo per sapere se mostrare le voci di menu da
+-- superuser — non concede nulla di per sé, la vera protezione è nelle
+-- policy RLS qui sotto.
+create or replace function sono_superuser()
+returns boolean
+language sql stable
+as $$
+  select is_superuser();
+$$;
+
+-- Estende (mai sostituisce) le policy di select già esistenti.
+drop policy if exists "teams_select_member" on teams;
+create policy "teams_select_member" on teams for select using (is_team_member(id) or is_superuser());
+
+drop policy if exists "team_members_select_same_team" on team_members;
+create policy "team_members_select_same_team" on team_members for select using (is_team_member(team_id) or is_superuser());
+
+drop policy if exists "athletes_select_member" on athletes;
+create policy "athletes_select_member" on athletes for select using (is_team_member(team_id) or is_superuser());
+
+drop policy if exists "evaluations_select_ristretta" on evaluations;
+create policy "evaluations_select_ristretta" on evaluations for select using (
+  is_team_staff_visione_piena(team_id) or athlete_id = mio_atleta_id(team_id) or is_superuser()
+);
+
+drop policy if exists "seasons_select_member" on seasons;
+create policy "seasons_select_member" on seasons for select using (is_team_member(team_id) or is_superuser());
+
+drop policy if exists "matches_select_member" on matches;
+create policy "matches_select_member" on matches for select using (is_team_member(team_id) or is_superuser());
+
+drop policy if exists "match_events_select_ristretta" on match_events;
+create policy "match_events_select_ristretta" on match_events for select using (
+  is_team_staff_visione_piena((select team_id from matches where id = match_id))
+  or athlete_id = mio_atleta_id((select team_id from matches where id = match_id))
+  or is_superuser()
+);
+
+-- ai_providers_config: il superuser può gestire i default GLOBALI
+-- (team_id is null) — le righe specifiche di un singolo team restano
+-- decisione di quel team, il superuser non le tocca da qui.
+drop policy if exists "ai_providers_config_write_coach" on ai_providers_config;
+create policy "ai_providers_config_write_coach" on ai_providers_config for all using (
+  (team_id is not null and is_team_coach(team_id)) or (team_id is null and is_superuser())
+) with check (
+  (team_id is not null and is_team_coach(team_id)) or (team_id is null and is_superuser())
+);
 

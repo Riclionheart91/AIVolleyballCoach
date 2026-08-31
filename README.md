@@ -140,7 +140,9 @@ Per lo schema DB, l'equivalente CI del vecchio `clasp push` è un secondo job ch
 
 ## 11. Aggiornamento schema
 
-Se avevi già eseguito una versione precedente di `setup_supabase.sql`, va rieseguito ad ogni avanzamento — l'ultima aggiunge **F3 (scouting live)**: tabelle `matches`/`match_sets`/`match_events`, punteggio automatico via trigger, tab Partite e schermata di scouting live. È idempotente — nessun dato esistente viene perso, solo lo schema viene esteso.
+Se avevi già eseguito una versione precedente di `setup_supabase.sql`, va rieseguito ad ogni avanzamento — l'ultima aggiunge **F3 (scouting live)**, **SportEasy**, **ruoli estesi/superuser**, e due fix di idempotenza (RLS ricorsiva, provider AI duplicati). È idempotente — nessun dato esistente viene perso, solo lo schema viene esteso.
+
+**Dopo questo aggiornamento serve anche un `npm install`**: tre nuove dipendenze per il wizard di import Excel (`xlsx`, `expo-document-picker`, `expo-file-system`).
 
 ## 12. Risoluzione problemi comuni
 

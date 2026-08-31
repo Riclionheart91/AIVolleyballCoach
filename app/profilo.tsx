@@ -7,7 +7,7 @@ import { brand, etichetteRuolo } from "@/src/config";
 import type { Athlete } from "@/src/types/database";
 
 export default function Profilo() {
-  const { session, team, ruolo, atletaId, esci } = useAuth();
+  const { session, team, ruolo, atletaId, puoScrivere, isSuperuser, esci } = useAuth();
   const [mieDati, setMieDati] = useState<Athlete | null>(null);
   const [telefono, setTelefono] = useState("");
   const [emailContatto, setEmailContatto] = useState("");
@@ -81,6 +81,12 @@ export default function Profilo() {
         </View>
       )}
 
+      {(puoScrivere || isSuperuser) && (
+        <Pressable style={styles.bottoneSecondario} onPress={() => router.push("/impostazioni")}>
+          <Text style={styles.bottoneSecondarioTesto}>Impostazioni</Text>
+        </Pressable>
+      )}
+
       <Pressable style={styles.bottoneEsci} onPress={onEsci}>
         <Text style={styles.bottoneEsciTesto}>Esci</Text>
       </Pressable>
@@ -97,6 +103,8 @@ const styles = StyleSheet.create({
   input: { backgroundColor: brand.colors.surfaceTertiary, color: brand.colors.onSurface, borderRadius: 8, padding: 10, marginTop: 8 },
   bottone: { backgroundColor: brand.colors.brand, padding: 10, borderRadius: 8, alignItems: "center", marginTop: 8 },
   bottoneTesto: { color: "#000", fontWeight: "700" },
+  bottoneSecondario: { borderColor: brand.colors.brand, borderWidth: 1, padding: 12, borderRadius: 10, alignItems: "center" },
+  bottoneSecondarioTesto: { color: brand.colors.brand, fontWeight: "700" },
   bottoneEsci: { borderColor: brand.colors.error, borderWidth: 1, padding: 12, borderRadius: 10, alignItems: "center" },
   bottoneEsciTesto: { color: brand.colors.error, fontWeight: "700" },
 });

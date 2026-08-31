@@ -32,6 +32,7 @@ export interface Athlete {
   ruolo_campo: RuoloCampo | null;
   numero_maglia: number | null;
   data_nascita: string | null;
+  codice_fiscale: string | null;
   status: "attiva" | "archiviata";
   telefono: string | null;
   email_contatto: string | null;

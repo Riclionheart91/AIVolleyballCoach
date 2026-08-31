@@ -76,11 +76,52 @@ Applicato sia lato database (RLS — anche un bug nella UI non potrebbe far trap
 - La scrittura è "ottimistica" (il tocco si vede subito, la chiamata di rete parte in background) ma non è un vero buffer offline persistente: se il tablet perde la connessione a lungo e viene chiuso/ricaricato prima che la sincronizzazione vada a buon fine, quell'evento si perde. Per uno scouting realmente offline-first (persistenza locale con coda che sopravvive a un riavvio) serve un ulteriore giro di lavoro — dimmi se è prioritario.
 - Il punteggio del set è calcolato interamente dal database (trigger), mai da editare a mano: è così che "annulla ultima azione" può essere una semplice cancellazione senza logica di compensazione lato app.
 
+## Aggiornamento 28/08 (sera) — mobile/PWA, multi-squadra, superuser, wizard import
+
+### Bug corretti
+- **Reload che chiedeva di ricreare la squadra**: causa reale, un problema di ricorsione nelle regole RLS (le funzioni helper come `is_team_member` interrogavano la stessa tabella su cui decidevano la visibilità, senza `SECURITY DEFINER` — pattern esplicitamente segnalato da Supabase come causa di righe "invisibili" in modo incoerente). Corretto in `0001d_fix_rls_ricorsione.sql`. Ho anche reso la query di caricamento squadra in due passaggi separati invece di un embedding annidato, più robusta e facile da diagnosticare.
+- **`ai_providers_config` duplicava le righe globali** ad ogni riesecuzione di `setup_supabase.sql` (i vincoli UNIQUE non considerano mai due `NULL` uguali, e `team_id` è nullo per i default globali). Corretto in `0005b_fix_ai_providers_unique.sql`.
+
+### Mobile / PWA
+- Aggiunto `app/+html.tsx`: senza questo file mancavano i meta tag `apple-mobile-web-app-*` — su iOS, "Aggiungi a Home" senza questi meta tag apre sempre dentro Safari con le barre visibili, mai a schermo intero. Ora dovrebbe aprirsi realmente come app standalone.
+- `app.json`: aggiunta la sezione manifest PWA (`display: standalone`, colori, orientamento) per Android/Chrome.
+- Tab bar ridotta (etichette più piccole, meno padding) per stare comoda con 6 voci su schermi stretti; aggiunto un reset CSS che impedisce lo scroll orizzontale involontario.
+- **Da verificare sul tuo dispositivo dopo il deploy**: rimuovi l'icona già salvata sulla home e ri-salvala da capo — iOS spesso mantiene la vecchia configurazione anche dopo un aggiornamento del sito.
+
+### Multi-squadra
+Un allenatore può ora seguire più squadre con lo stesso account (il modello dati lo permetteva già, mancava solo la UI). Se hai più squadre: pulsante ⇄ accanto al banner stagione in alto per cambiare; l'app ricorda l'ultima squadra usata (anche dopo reload/riavvio). Per aggiungere un allenatore a una seconda squadra, usa l'invito (tab Atlete) dalla squadra di destinazione con la stessa email.
+
+### Super-amministratore
+Nuovo ruolo trasversale (non legato a un singolo team), pensato per la gestione tecnica della piattaforma. **Non esiste un modo per auto-promuoversi dall'app** (scelta di sicurezza intenzionale): va fatto una volta a mano dal SQL Editor di Supabase:
+```sql
+insert into app_admins (user_id) values ('IL-TUO-USER-ID');
+```
+L'user_id lo trovi in Authentication → Users. Un superuser vede tutte le squadre in sola lettura sulle tabelle principali (teams, athletes, evaluations, matches, ecc. — non ancora su tutte, vedi commento in `0006_superuser.sql` per estendere) e gestisce i default globali dei provider AI da **Profilo → Impostazioni**.
+
+### Schermata Impostazioni (Profilo → Impostazioni)
+- Link calendario SportEasy (spostato qui da Partite, che mantiene solo il pulsante "Sincronizza ora").
+- Provider AI della propria squadra (coach): abilita/disabilita, priorità, modello.
+- Provider AI globali (solo superuser): stessi controlli, si applicano a chi non ha un proprio override.
+- **Altri parametri che potrebbero starci in futuro**, se ti servono: nome/logo squadra, soglie della quota giornaliera AI (oggi fissa a 20, in `ai_chiamate_residue_oggi`), preferenze di notifica (non ancora costruite), gestione membri/ruoli (oggi vive nella tab Atlete, potrebbe spostarsi qui per coerenza). Dimmi se vuoi che ne aggiunga qualcuno.
+
+### Come terminare una stagione
+Mancava proprio l'azione: tab Stagioni → pulsante rosso "Termina" su qualunque stagione non ancora conclusa (con conferma). Resta consultabile in sola lettura dopo la chiusura.
+
+### Wizard import atlete da Excel/CSV
+Sostituisce completamente il vecchio pannello "incolla CSV". Tab Atlete → "📄 Importa da Excel/CSV (wizard)":
+1. Scegli il file (.xlsx o .csv).
+2. Abbinamento colonne automatico (con sinonimi comuni), correggibile a mano.
+3. Revisione: nuove atlete da creare, atlete già censite con **campi diversi evidenziati** (vecchio → nuovo) e checkbox per scegliere quali aggiornare, righe identiche saltate in automatico.
+4. Deduplica sul **codice fiscale** se presente nel file; altrimenti fallback su nome+cognome normalizzati (senza distinguere maiuscole/accenti/spazi).
+
+Richiede `npm install` (tre nuove dipendenze: `xlsx`, `expo-document-picker`, `expo-file-system`).
+
 ## Prossimi passi consigliati (quando deciderai di procedere)
 
-- **F3 — Scouting live**: nuova migrazione `0003_f3_scouting.sql` con la tabella `match_events` unica (vedi piano di migrazione originale) + schermata a tap, scrittura locale-first con coda di sync.
-- **F4 — Match analysis**: query aggregate su `match_events`, nessuna tabella nuova.
-- **F6 — Resto moduli + integrazioni**: `0004_f6_resto.sql`.
-- **F7 — Migrazione dati storici**: script una tantum di export da Google Sheets (via API) + import nelle tabelle Supabase, da scrivere quando le squadre reali saranno pronte a passare.
+- **Import completo anagrafica da SportEasy**: caricare da un export Excel di SportEasy (anagrafiche + informazioni atlete) tutti i campi disponibili nel file, non solo quelli già mappati oggi. **Prima di iniziare questo lavoro, chiedimi il file Excel esportato da SportEasy** — mi serve per vedere le colonne reali disponibili e non lavorare a indovinare la struttura.
+- **F4 — Match analysis più ricca**: oggi c'è solo l'andamento aggregato base (punti/errori per fondamentale tra partite); efficienza per rotazione, distribuzione attacco per zona, ecc. restano da fare.
+- **F6 — resto**: infortuni, piani individuali, periodizzazione.
+- **Estendere il bypass superuser** alle tabelle rimaste fuori dalla prima passata (exercises, trainings, attendance, rpe, evaluation_proposals, season_baselines, team_invites, team_integrations, ai_call_log) — stesso pattern già applicato altrove, un `or is_superuser()` per policy.
+- **F7 — Migrazione dati storici da Google Sheets**: da scrivere quando le squadre reali saranno pronte a passare.
 
-Nessuna di queste fasi richiede di toccare F1/F2/F5: lo schema è additivo esattamente come il vecchio `RELEASE_STEPS_`.
+Nessuna di queste fasi richiede di toccare quanto già fatto: lo schema resta additivo, esattamente come il vecchio `RELEASE_STEPS_`.

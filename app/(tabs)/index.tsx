@@ -1,8 +1,8 @@
 import { useCallback, useState } from "react";
-import { View, Text, FlatList, TextInput, Pressable, StyleSheet, RefreshControl, Alert, ActivityIndicator } from "react-native";
-import { useFocusEffect } from "expo-router";
+import { View, Text, FlatList, TextInput, Pressable, StyleSheet, RefreshControl, Alert } from "react-native";
+import { router, useFocusEffect } from "expo-router";
 import { useAuth } from "@/src/context/AuthContext";
-import { aggiornaAtleta, creaAtleta, elencaAtlete, importaAtleteCsv, type RigaImportAtleta } from "@/src/services/athletes";
+import { aggiornaAtleta, creaAtleta, elencaAtlete } from "@/src/services/athletes";
 import { annullaInvito, elencaInvitiPendenti, invitaMembro, type TeamInvite } from "@/src/services/teamInvites";
 import { brand, etichetteRuolo, ruoliCampo } from "@/src/config";
 import type { Athlete, Ruolo, RuoloCampo } from "@/src/types/database";
@@ -22,10 +22,6 @@ export default function Atlete() {
   const [atletaInModifica, setAtletaInModifica] = useState<string | null>(null);
   const [modificaRuoloCampo, setModificaRuoloCampo] = useState<RuoloCampo | null>(null);
   const [modificaNumero, setModificaNumero] = useState("");
-  const [mostraImport, setMostraImport] = useState(false);
-  const [testoImport, setTestoImport] = useState("");
-  const [risultatoImport, setRisultatoImport] = useState<RigaImportAtleta[] | null>(null);
-  const [importando, setImportando] = useState(false);
 
   const carica = useCallback(async () => {
     if (!team) return;
@@ -61,22 +57,6 @@ export default function Atlete() {
       carica();
     } catch (e) {
       Alert.alert("Errore", (e as Error).message);
-    }
-  }
-
-  async function eseguiImport() {
-    if (!team || !testoImport.trim()) return;
-    setImportando(true);
-    setRisultatoImport(null);
-    try {
-      const risultati = await importaAtleteCsv(team.id, testoImport);
-      setRisultatoImport(risultati);
-      if (risultati.every((r) => r.ok)) setTestoImport("");
-      carica();
-    } catch (e) {
-      Alert.alert("Errore", (e as Error).message);
-    } finally {
-      setImportando(false);
     }
   }
 
@@ -122,41 +102,9 @@ export default function Atlete() {
       )}
 
       {puoScrivere && (
-        <>
-          <Pressable style={styles.rigaEspandi} onPress={() => setMostraImport(!mostraImport)}>
-            <Text style={styles.rigaEspandiTesto}>{mostraImport ? "▾" : "▸"} Importa più atlete insieme (da CSV)</Text>
-          </Pressable>
-
-          {mostraImport && (
-            <View style={styles.form}>
-              <Text style={styles.etichettaCampo}>
-                Una atleta per riga: Nome,Cognome,RuoloCampo,NumeroMaglia — gli ultimi due sono opzionali (si può lasciare vuoto). Incolla qui sotto direttamente da un foglio Excel/Sheets esportato come CSV.
-              </Text>
-              <TextInput
-                style={[styles.input, { minHeight: 100, textAlignVertical: "top" }]}
-                placeholder={"Giulia,Rossi,Schiacciatore,7\nMartina,Bianchi,Libero,"}
-                placeholderTextColor={brand.colors.muted}
-                multiline
-                value={testoImport}
-                onChangeText={setTestoImport}
-              />
-              <Pressable style={styles.bottone} onPress={eseguiImport} disabled={importando || !testoImport.trim()}>
-                {importando ? <ActivityIndicator color="#000" /> : <Text style={styles.bottoneTesto}>Importa</Text>}
-              </Pressable>
-
-              {risultatoImport && (
-                <View style={{ gap: 4, marginTop: 4 }}>
-                  <Text style={styles.etichettaCampo}>
-                    {risultatoImport.filter((r) => r.ok).length}/{risultatoImport.length} righe importate correttamente
-                  </Text>
-                  {risultatoImport.filter((r) => !r.ok).map((r) => (
-                    <Text key={r.numeroRiga} style={styles.rigaInvitoAnnulla}>Riga {r.numeroRiga} ({r.nome} {r.cognome}): {r.errore}</Text>
-                  ))}
-                </View>
-              )}
-            </View>
-          )}
-        </>
+        <Pressable style={styles.bottoneSecondarioLargo} onPress={() => router.push("/importa-atlete")}>
+          <Text style={styles.bottoneSecondarioLargoTesto}>📄 Importa da Excel/CSV (wizard)</Text>
+        </Pressable>
       )}
 
       {puoScrivere && (
@@ -244,6 +192,8 @@ const styles = StyleSheet.create({
   etichettaCampo: { color: brand.colors.muted, fontSize: 12, marginTop: 2 },
   bottone: { backgroundColor: brand.colors.brand, padding: 10, borderRadius: 8, alignItems: "center" },
   bottoneTesto: { color: "#000", fontWeight: "700" },
+  bottoneSecondarioLargo: { borderColor: brand.colors.brandSecondary, borderWidth: 1, padding: 12, borderRadius: 10, alignItems: "center" },
+  bottoneSecondarioLargoTesto: { color: brand.colors.brandSecondary, fontWeight: "700" },
   riga: { paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: brand.colors.border },
   rigaNome: { color: brand.colors.onSurface, fontSize: 16, fontWeight: "600" },
   rigaSotto: { color: brand.colors.muted, fontSize: 13 },

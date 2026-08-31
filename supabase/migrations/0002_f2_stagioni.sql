@@ -83,6 +83,26 @@ begin
 end;
 $$;
 
+-- Conclude una stagione (la si può concludere anche se non era quella
+-- "attiva", per correggere una stagione dimenticata aperta per errore).
+-- CREATE OR REPLACE su una funzione è già idempotente di per sé, non
+-- serve un DROP prima come per policy/vincoli.
+create or replace function concludi_stagione(p_season_id uuid)
+returns void
+language plpgsql
+security definer
+as $$
+declare
+  v_team_id uuid;
+begin
+  select team_id into v_team_id from seasons where id = p_season_id;
+  if v_team_id is null then raise exception 'Stagione non trovata: %', p_season_id; end if;
+  if not is_team_coach(v_team_id) then raise exception 'Permesso negato'; end if;
+
+  update seasons set stato = 'conclusa', data_chiusura = coalesce(data_chiusura, current_date) where id = p_season_id;
+end;
+$$;
+
 -- Genera la baseline di inizio stagione per tutte le atlete attive
 -- (equivalente di generaBaselineStagione() in Seasons.gs). Idempotente:
 -- salta atleta/fondamentale già presenti per quella stagione.

@@ -25,6 +25,17 @@ function BottoneProfilo() {
   );
 }
 
+/** Visibile solo se l'utente segue più di una squadra — la stragrande maggioranza degli allenatori ne segue una sola e non lo vede mai. */
+function BottoneCambiaSquadra() {
+  const { squadreDisponibili } = useAuth();
+  if (squadreDisponibili.length <= 1) return null;
+  return (
+    <Pressable onPress={() => router.push("/seleziona-squadra")} style={{ marginLeft: 12 }}>
+      <Ionicons name="swap-horizontal" size={22} color={brand.colors.onSurface} />
+    </Pressable>
+  );
+}
+
 export default function TabsLayout() {
   const { session, caricamento, team, caricamentoTeam, erroreTeam, stagioneAttiva, caricamentoStagione } = useAuth();
 
@@ -65,10 +76,18 @@ export default function TabsLayout() {
         headerStyle: { backgroundColor: brand.colors.surface },
         headerTintColor: brand.colors.onSurface,
         headerTitle: () => <BannerStagione />,
+        headerLeft: () => <BottoneCambiaSquadra />,
         headerRight: () => <BottoneProfilo />,
         tabBarStyle: { backgroundColor: brand.colors.surfaceSecondary, borderTopColor: brand.colors.border },
         tabBarActiveTintColor: brand.colors.brand,
         tabBarInactiveTintColor: brand.colors.muted,
+        // 6 voci sono tante per uno schermo stretto: etichette/icone più
+        // piccole e meno padding evitano che la tab bar spinga la
+        // pagina oltre il viewport (una delle cause dello scroll
+        // laterale segnalato).
+        tabBarLabelStyle: { fontSize: 10 },
+        tabBarIconStyle: { marginBottom: -2 },
+        tabBarItemStyle: { paddingHorizontal: 0 },
       }}
     >
       <Tabs.Screen name="index" options={{ title: "Atlete", tabBarIcon: ({ color, size }) => <Ionicons name="people" color={color} size={size} /> }} />

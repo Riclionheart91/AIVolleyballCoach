@@ -2,7 +2,7 @@ import { useCallback, useState } from "react";
 import { View, Text, FlatList, TextInput, Pressable, StyleSheet, Alert, RefreshControl } from "react-native";
 import { useFocusEffect } from "expo-router";
 import { useAuth } from "@/src/context/AuthContext";
-import { attivaStagione, creaStagione, elencaStagioni, generaBaselineStagione } from "@/src/services/seasons";
+import { attivaStagione, concludiStagione, creaStagione, elencaStagioni, generaBaselineStagione } from "@/src/services/seasons";
 import { brand } from "@/src/config";
 import type { Season } from "@/src/types/database";
 
@@ -53,6 +53,19 @@ export default function Stagioni() {
     }
   }
 
+  function conferimaConclusione(id: string, nomeStagione: string) {
+    Alert.alert(
+      "Terminare la stagione?",
+      `"${nomeStagione}" verrà segnata come conclusa. Resta consultabile in sola lettura, ma per registrare nuovi allenamenti/valutazioni dovrai aprirne un'altra.`,
+      [
+        { text: "Annulla", style: "cancel" },
+        { text: "Termina", style: "destructive", onPress: async () => {
+          try { await concludiStagione(id); carica(); } catch (e) { Alert.alert("Errore", (e as Error).message); }
+        } },
+      ],
+    );
+  }
+
   return (
     <View style={styles.container}>
       {puoScrivere && (
@@ -78,7 +91,7 @@ export default function Stagioni() {
             <Text style={styles.cardSotto}>Apertura: {item.data_apertura}</Text>
             {puoScrivere && (
               <View style={styles.azioni}>
-                {item.stato !== "attiva" && (
+                {item.stato !== "attiva" && item.stato !== "conclusa" && (
                   <Pressable style={styles.bottoneSecondario} onPress={() => attiva(item.id)}>
                     <Text style={styles.bottoneSecondarioTesto}>Attiva</Text>
                   </Pressable>
@@ -86,6 +99,11 @@ export default function Stagioni() {
                 <Pressable style={styles.bottoneSecondario} onPress={() => generaBaseline(item.id)}>
                   <Text style={styles.bottoneSecondarioTesto}>Genera baseline</Text>
                 </Pressable>
+                {item.stato !== "conclusa" && (
+                  <Pressable style={styles.bottoneSecondarioDistruttivo} onPress={() => conferimaConclusione(item.id, item.nome)}>
+                    <Text style={styles.bottoneSecondarioDistruttivoTesto}>Termina</Text>
+                  </Pressable>
+                )}
               </View>
             )}
           </View>
@@ -109,5 +127,7 @@ const styles = StyleSheet.create({
   azioni: { flexDirection: "row", gap: 8, marginTop: 8 },
   bottoneSecondario: { borderColor: brand.colors.brand, borderWidth: 1, paddingVertical: 6, paddingHorizontal: 10, borderRadius: 8 },
   bottoneSecondarioTesto: { color: brand.colors.brand, fontWeight: "600", fontSize: 13 },
+  bottoneSecondarioDistruttivo: { borderColor: brand.colors.error, borderWidth: 1, paddingVertical: 6, paddingHorizontal: 10, borderRadius: 8 },
+  bottoneSecondarioDistruttivoTesto: { color: brand.colors.error, fontWeight: "600", fontSize: 13 },
   vuoto: { color: brand.colors.muted, textAlign: "center", marginTop: 32 },
 });
