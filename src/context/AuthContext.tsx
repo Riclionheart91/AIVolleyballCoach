@@ -110,7 +110,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const { data: teamsTrovati, error: erroreTeams } = await supabaseClient
       .from("teams")
       .select("*")
-      .in("id", appartenenze.map((a) => a.team_id));
+      .in("id", appartenenze.map((a) => a.team_id))
+      .order("creato_il", { ascending: true });
 
     if (erroreTeams || !teamsTrovati) {
       console.warn("Errore nel caricamento dei dati squadra:", erroreTeams?.message);
@@ -125,7 +126,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const t = teamsTrovati.find((tt) => tt.id === a.team_id);
         return t ? { team: t, ruolo: a.ruolo as Ruolo, atletaId: (a.atleta_id as string | null) ?? null } : null;
       })
-      .filter((x): x is { team: Team; ruolo: Ruolo; atletaId: string | null } => x !== null);
+      .filter((x): x is { team: Team; ruolo: Ruolo; atletaId: string | null } => x !== null)
+      // L'ordinamento della query su "teams" si perde qui, perché il
+      // giro sopra itera su "appartenenze" (mai ordinata) e fa un
+      // .find() per ciascuna: bisogna riordinare esplicitamente,
+      // altrimenti opzioni[0] — il default se non c'è una preferenza
+      // salvata — dipende dall'ordine (non garantito) restituito dal
+      // database, e con più squadre puoi ritrovarti su una diversa ad
+      // ogni ricarica.
+      .sort((a, b) => new Date(a.team.creato_il).getTime() - new Date(b.team.creato_il).getTime());
 
     setSquadreDisponibili(opzioni);
     setErroreTeam(null);

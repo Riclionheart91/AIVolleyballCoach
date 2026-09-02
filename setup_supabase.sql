@@ -1226,11 +1226,13 @@ create table if not exists ai_providers_config (
   unique (team_id, provider_code)
 );
 
-insert into ai_providers_config (team_id, provider_code, enabled, priority, modello) values
-  (null, 'GEMINI', true, 1, 'gemini-2.0-flash'),
-  (null, 'GROQ', true, 2, 'llama-3.3-70b-versatile'),
-  (null, 'OPENROUTER', true, 3, 'openrouter/free')
-on conflict (team_id, provider_code) do nothing;
+-- Il seed dei 3 provider di default vive in 0005b_fix_ai_providers_unique.sql
+-- (con WHERE NOT EXISTS invece di ON CONFLICT): un ON CONFLICT qui
+-- punterebbe al vincolo "ai_providers_config_team_id_provider_code_key",
+-- che 0005b elimina subito dopo per sostituirlo con due indici parziali
+-- — alla riesecuzione dello script, quel vincolo non esiste più e
+-- l'ON CONFLICT fallisce con "no unique or exclusion constraint
+-- matching the ON CONFLICT specification".
 
 alter table ai_providers_config enable row level security;
 drop policy if exists "ai_providers_config_select_member" on ai_providers_config;
