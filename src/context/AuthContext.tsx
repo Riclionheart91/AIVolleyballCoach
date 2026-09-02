@@ -182,8 +182,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   async function creaPrimaSquadra(nome: string) {
-    const { error } = await supabaseClient.rpc("crea_team_e_diventa_allenatore", { p_nome: nome });
+    const { data, error } = await supabaseClient.rpc("crea_team_e_diventa_allenatore", { p_nome: nome });
     if (error) throw error;
+    // Scrive subito la preferenza in AsyncStorage, PRIMA di ricaricaTeam():
+    // se chiamassimo invece cambiaSquadra() dopo, leggerebbe
+    // squadreDisponibili dalla chiusura di questa funzione, che è ancora
+    // quella di PRIMA della creazione (gli aggiornamenti di stato React
+    // non sono sincroni) — non troverebbe la squadra appena creata e non
+    // farebbe nulla. Così invece ricaricaTeam() la trova da sé, perché
+    // legge AsyncStorage e ricalcola le opzioni da zero dal database.
+    if (data) await AsyncStorage.setItem(CHIAVE_ULTIMO_TEAM, data as string);
     await ricaricaTeam();
   }
 

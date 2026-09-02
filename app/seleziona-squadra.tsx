@@ -13,7 +13,12 @@ export default function SelezionaSquadra() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Le tue squadre</Text>
+      <View style={styles.intestazione}>
+        <Text style={styles.title}>Le tue squadre</Text>
+        <Pressable onPress={() => router.push("/crea-squadra")} style={styles.bottoneAggiungi}>
+          <Text style={styles.bottoneAggiungiTesto}>+ Aggiungi squadra</Text>
+        </Pressable>
+      </View>
       <FlatList
         data={squadreDisponibili}
         keyExtractor={(o) => o.team.id}
@@ -30,7 +35,10 @@ export default function SelezionaSquadra() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: brand.colors.surface, padding: 20, gap: 16 },
+  intestazione: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   title: { color: brand.colors.onSurface, fontSize: 20, fontWeight: "700" },
+  bottoneAggiungi: { borderColor: brand.colors.brand, borderWidth: 1, paddingVertical: 6, paddingHorizontal: 10, borderRadius: 8 },
+  bottoneAggiungiTesto: { color: brand.colors.brand, fontWeight: "600", fontSize: 13 },
   card: { backgroundColor: brand.colors.surfaceSecondary, borderRadius: 12, padding: 16, marginBottom: 10, borderWidth: 1, borderColor: "transparent" },
   cardAttiva: { borderColor: brand.colors.brand },
   cardNome: { color: brand.colors.onSurface, fontSize: 16, fontWeight: "700" },

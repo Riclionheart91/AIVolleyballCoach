@@ -12,3 +12,20 @@ export async function creaEsercizio(teamId: string, input: Pick<Exercise, "nome"
   if (error) throw error;
   return data;
 }
+
+export async function leggiEsercizio(id: string): Promise<Exercise> {
+  const { data, error } = await supabaseClient.from("exercises").select("*").eq("id", id).single();
+  if (error) throw error;
+  return data;
+}
+
+export async function aggiornaEsercizio(id: string, input: Partial<Pick<Exercise, "nome" | "categoria" | "descrizione">>): Promise<Exercise> {
+  const { data, error } = await supabaseClient.from("exercises").update(input).eq("id", id).select().single();
+  if (error) throw error;
+  return data;
+}
+
+export async function eliminaEsercizio(id: string): Promise<void> {
+  const { error } = await supabaseClient.from("exercises").delete().eq("id", id);
+  if (error) throw error;
+}

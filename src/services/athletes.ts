@@ -12,6 +12,34 @@ export async function elencaAtlete(teamId: string): Promise<Athlete[]> {
   return data ?? [];
 }
 
+export async function elencaAtleteArchiviate(teamId: string): Promise<Athlete[]> {
+  const { data, error } = await supabaseClient
+    .from("athletes")
+    .select("*")
+    .eq("team_id", teamId)
+    .eq("status", "archiviata")
+    .order("cognome");
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function leggiAtleta(id: string): Promise<Athlete> {
+  const { data, error } = await supabaseClient.from("athletes").select("*").eq("id", id).single();
+  if (error) throw error;
+  return data;
+}
+
+export async function ripristinaAtleta(atletaId: string): Promise<void> {
+  const { error } = await supabaseClient.from("athletes").update({ status: "attiva" }).eq("id", atletaId);
+  if (error) throw error;
+}
+
+/** Elimina definitivamente: cancella anche valutazioni/presenze/RPE storiche collegate (cascade a livello di database) — usare con cautela, l'archiviazione è quasi sempre la scelta giusta. */
+export async function eliminaAtletaDefinitivamente(atletaId: string): Promise<void> {
+  const { error } = await supabaseClient.from("athletes").delete().eq("id", atletaId);
+  if (error) throw error;
+}
+
 export interface InputAtleta {
   nome: string;
   cognome: string;
@@ -19,6 +47,9 @@ export interface InputAtleta {
   data_nascita: string | null;
   ruolo_campo: RuoloCampo | null;
   codice_fiscale?: string | null;
+  telefono?: string | null;
+  email_contatto?: string | null;
+  note_personali?: string | null;
 }
 
 export async function creaAtleta(teamId: string, input: InputAtleta): Promise<Athlete> {

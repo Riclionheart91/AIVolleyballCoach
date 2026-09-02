@@ -1347,19 +1347,30 @@ $$;
 
 alter table ai_providers_config drop constraint if exists ai_providers_config_team_id_provider_code_key;
 
+-- Rimuove PRIMA eventuali duplicati globali già creati da riesecuzioni
+-- precedenti del vecchio seed (tiene solo la riga più vecchia per
+-- provider_code) — deve avvenire prima di creare l'indice univoco qui
+-- sotto, altrimenti la CREATE UNIQUE INDEX fallisce proprio sui
+-- duplicati che sta cercando di prevenire in futuro.
+delete from ai_providers_config a
+where a.team_id is null
+  and a.id::text not in (
+    select min(b.id::text) from ai_providers_config b where b.team_id is null group by b.provider_code
+  );
+
+-- Stessa pulizia preventiva anche per eventuali duplicati non globali
+-- (per team specifico), per lo stesso motivo.
+delete from ai_providers_config a
+where a.team_id is not null
+  and a.id::text not in (
+    select min(b.id::text) from ai_providers_config b where b.team_id = a.team_id group by b.provider_code
+  );
+
 create unique index if not exists idx_ai_providers_config_team
   on ai_providers_config (team_id, provider_code) where team_id is not null;
 
 create unique index if not exists idx_ai_providers_config_globale
   on ai_providers_config (provider_code) where team_id is null;
-
--- Rimuove eventuali duplicati globali già creati da riesecuzioni
--- precedenti (tiene solo la riga più vecchia per provider_code).
-delete from ai_providers_config a
-where a.team_id is null
-  and a.id not in (
-    select min(b.id) from ai_providers_config b where b.team_id is null group by b.provider_code
-  );
 
 -- Riscritto con WHERE NOT EXISTS invece di ON CONFLICT: quest'ultimo
 -- non si attiva sulle righe con team_id nullo per lo stesso motivo di

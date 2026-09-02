@@ -13,6 +13,17 @@ export async function creaAllenamento(teamId: string, input: Pick<Training, "dat
   return data;
 }
 
+export async function aggiornaAllenamento(id: string, input: Partial<Pick<Training, "data" | "titolo" | "note">>): Promise<Training> {
+  const { data, error } = await supabaseClient.from("trainings").update(input).eq("id", id).select().single();
+  if (error) throw error;
+  return data;
+}
+
+export async function eliminaAllenamento(id: string): Promise<void> {
+  const { error } = await supabaseClient.from("trainings").delete().eq("id", id);
+  if (error) throw error;
+}
+
 export async function elencaEserciziAllenamento(trainingId: string): Promise<TrainingExercise[]> {
   const { data, error } = await supabaseClient
     .from("training_exercises")

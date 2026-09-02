@@ -3,6 +3,9 @@ import { View, Text, FlatList, TextInput, Pressable, StyleSheet, Alert, RefreshC
 import { useFocusEffect } from "expo-router";
 import { useAuth } from "@/src/context/AuthContext";
 import { attivaStagione, concludiStagione, creaStagione, elencaStagioni, generaBaselineStagione } from "@/src/services/seasons";
+import { confermaAzione } from "@/src/lib/confermaAzione";
+import { FabAggiungi } from "@/src/components/Fab";
+import { PopupForm } from "@/src/components/PopupForm";
 import { brand } from "@/src/config";
 import type { Season } from "@/src/types/database";
 
@@ -10,6 +13,7 @@ export default function Stagioni() {
   const { team, puoScrivere } = useAuth();
   const [stagioni, setStagioni] = useState<Season[]>([]);
   const [caricamento, setCaricamento] = useState(true);
+  const [popupAperto, setPopupAperto] = useState(false);
   const [nome, setNome] = useState("");
 
   const carica = useCallback(async () => {
@@ -29,6 +33,7 @@ export default function Stagioni() {
     try {
       await creaStagione(team.id, { nome: nome.trim(), data_apertura: new Date().toISOString().slice(0, 10) });
       setNome("");
+      setPopupAperto(false);
       carica();
     } catch (e) {
       Alert.alert("Errore nella creazione della stagione", (e as Error).message);
@@ -47,41 +52,37 @@ export default function Stagioni() {
   async function generaBaseline(id: string) {
     try {
       const n = await generaBaselineStagione(id);
-      Alert.alert("Baseline generata", `${n} valori di baseline creati a partire dall'ultima valutazione disponibile per ogni atleta/fondamentale.`);
+      if (n === 0) {
+        Alert.alert(
+          "Nessuna valutazione da usare come punto di partenza",
+          "\"Genera baseline\" prende l'ultima valutazione già registrata per ogni atleta/fondamentale (fino alla data di apertura di questa stagione) e la fissa come punto di riferimento iniziale della stagione, per poter poi misurare i progressi nel tempo. Non ha trovato nessuna valutazione precedente da usare: è normale se è la prima stagione della squadra o se non hai ancora registrato valutazioni. Puoi rilanciarla più avanti, appena avrai le prime valutazioni.",
+        );
+      } else {
+        Alert.alert("Baseline generata", `${n} valori di riferimento creati (uno per atleta/fondamentale), presi dall'ultima valutazione disponibile prima dell'apertura della stagione.`);
+      }
     } catch (e) {
       Alert.alert("Errore", (e as Error).message);
     }
   }
 
   function conferimaConclusione(id: string, nomeStagione: string) {
-    Alert.alert(
+    confermaAzione(
       "Terminare la stagione?",
       `"${nomeStagione}" verrà segnata come conclusa. Resta consultabile in sola lettura, ma per registrare nuovi allenamenti/valutazioni dovrai aprirne un'altra.`,
-      [
-        { text: "Annulla", style: "cancel" },
-        { text: "Termina", style: "destructive", onPress: async () => {
-          try { await concludiStagione(id); carica(); } catch (e) { Alert.alert("Errore", (e as Error).message); }
-        } },
-      ],
+      "Termina",
+      async () => { try { await concludiStagione(id); carica(); } catch (e) { Alert.alert("Errore", (e as Error).message); } },
+      true,
     );
   }
 
   return (
     <View style={styles.container}>
-      {puoScrivere && (
-        <View style={styles.form}>
-          <TextInput style={styles.input} placeholder="Nome stagione (es. 2026/2027)" placeholderTextColor={brand.colors.muted} value={nome} onChangeText={setNome} />
-          <Pressable style={styles.bottone} onPress={crea}>
-            <Text style={styles.bottoneTesto}>Crea stagione</Text>
-          </Pressable>
-        </View>
-      )}
-
       <FlatList
         data={stagioni}
         keyExtractor={(s) => s.id}
+        contentContainerStyle={{ padding: 16, paddingBottom: 90 }}
         refreshControl={<RefreshControl refreshing={caricamento} onRefresh={carica} tintColor={brand.colors.brand} />}
-        ListEmptyComponent={!caricamento ? <Text style={styles.vuoto}>Nessuna stagione ancora.</Text> : null}
+        ListEmptyComponent={!caricamento ? <Text style={styles.vuoto}>Nessuna stagione ancora. Usa il pulsante + qui sotto.</Text> : null}
         renderItem={({ item }) => (
           <View style={styles.card}>
             <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
@@ -109,15 +110,23 @@ export default function Stagioni() {
           </View>
         )}
       />
+
+      {puoScrivere && <FabAggiungi onPress={() => setPopupAperto(true)} />}
+
+      <PopupForm visibile={popupAperto} titolo="Nuova stagione" haModifiche={nome.trim().length > 0} onChiudi={() => { setPopupAperto(false); setNome(""); }}>
+        <TextInput style={styles.input} placeholder="Nome stagione (es. 2026/2027)" placeholderTextColor={brand.colors.muted} value={nome} onChangeText={setNome} autoFocus />
+        <Pressable style={styles.bottone} onPress={crea} disabled={!nome.trim()}>
+          <Text style={styles.bottoneTesto}>Crea stagione</Text>
+        </Pressable>
+      </PopupForm>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: brand.colors.surface, padding: 16, gap: 16 },
-  form: { gap: 8, backgroundColor: brand.colors.surfaceSecondary, padding: 12, borderRadius: 12 },
-  input: { backgroundColor: brand.colors.surfaceTertiary, color: brand.colors.onSurface, borderRadius: 8, padding: 10 },
-  bottone: { backgroundColor: brand.colors.brand, padding: 10, borderRadius: 8, alignItems: "center" },
+  container: { flex: 1, backgroundColor: brand.colors.surface },
+  input: { backgroundColor: brand.colors.surfaceTertiary, color: brand.colors.onSurface, borderRadius: 8, padding: 12 },
+  bottone: { backgroundColor: brand.colors.brand, padding: 12, borderRadius: 8, alignItems: "center" },
   bottoneTesto: { color: "#000", fontWeight: "700" },
   card: { backgroundColor: brand.colors.surfaceSecondary, borderRadius: 12, padding: 14, marginBottom: 10, gap: 4 },
   cardTitolo: { color: brand.colors.onSurface, fontSize: 16, fontWeight: "700" },

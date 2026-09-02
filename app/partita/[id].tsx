@@ -15,6 +15,7 @@ import {
 import { brand, skillsScouting, skillsScoutingEssenziali } from "@/src/config";
 import type { Athlete, Esito, Match, MatchEvent, MatchSet, Skill } from "@/src/types/database";
 import { supabaseClient } from "@/src/lib/supabase";
+import { confermaAzione } from "@/src/lib/confermaAzione";
 
 /**
  * Interfaccia ispirata ai pattern standard del settore (DataVolley,
@@ -46,7 +47,11 @@ export default function PartitaLive() {
     const attivo = set.find((s) => !s.concluso) ?? set[set.length - 1] ?? null;
     setSetCorrente(attivo);
     setEventi(await elencaEventiPartita(id));
-    if (m) setAtlete(await elencaAtlete(m.team_id));
+    if (m) {
+      const lista = await elencaAtlete(m.team_id);
+      lista.sort((a, b) => (a.numero_maglia ?? 999) - (b.numero_maglia ?? 999));
+      setAtlete(lista);
+    }
   }, [id]);
 
   useFocusEffect(useCallback(() => { carica(); }, [carica]));
@@ -114,12 +119,9 @@ export default function PartitaLive() {
 
   async function onChiudiPartita() {
     if (!match) return;
-    Alert.alert("Chiudere la partita?", "Non potrai più registrare eventi dopo la chiusura.", [
-      { text: "Annulla", style: "cancel" },
-      { text: "Chiudi", style: "destructive", onPress: async () => {
-        try { await chiudiMatch(match.id); router.back(); } catch (e) { Alert.alert("Errore", (e as Error).message); }
-      } },
-    ]);
+    confermaAzione("Chiudere la partita?", "Non potrai più registrare eventi dopo la chiusura.", "Chiudi", async () => {
+      try { await chiudiMatch(match.id); router.back(); } catch (e) { Alert.alert("Errore", (e as Error).message); }
+    }, true);
   }
 
   if (!match) {
@@ -168,6 +170,9 @@ export default function PartitaLive() {
               showsHorizontalScrollIndicator={false}
               renderItem={({ item }) => (
                 <Pressable onPress={() => setAtletaSelId(atletaSelId === item.id ? null : item.id)} style={[styles.chipAtleta, atletaSelId === item.id && styles.chipAtletaAttiva]}>
+                  <Text style={[styles.chipAtletaNumero, atletaSelId === item.id && styles.chipAtletaTestoAttiva]}>
+                    {item.numero_maglia ?? "–"}
+                  </Text>
                   <Text style={[styles.chipAtletaTesto, atletaSelId === item.id && styles.chipAtletaTestoAttiva]}>{item.cognome}</Text>
                 </Pressable>
               )}
@@ -252,9 +257,10 @@ const styles = StyleSheet.create({
   scoreboardSet: { color: brand.colors.muted, fontSize: 12 },
   scoreboardPunti: { color: brand.colors.brand, fontWeight: "800", fontSize: 28 },
   rigaStrisciaAtlete: { flexDirection: "row" },
-  chipAtleta: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 16, backgroundColor: brand.colors.surfaceSecondary, marginRight: 6 },
+  chipAtleta: { alignItems: "center", paddingVertical: 6, paddingHorizontal: 14, borderRadius: 12, backgroundColor: brand.colors.surfaceSecondary, marginRight: 8, minWidth: 52 },
   chipAtletaAttiva: { backgroundColor: brand.colors.brandSecondary },
-  chipAtletaTesto: { color: brand.colors.onSurfaceSecondary, fontSize: 13 },
+  chipAtletaNumero: { color: brand.colors.onSurface, fontSize: 20, fontWeight: "800" },
+  chipAtletaTesto: { color: brand.colors.onSurfaceSecondary, fontSize: 10 },
   chipAtletaTestoAttiva: { color: "#000", fontWeight: "700" },
   grigliaSkill: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   tastoSkill: { flexGrow: 1, minWidth: "30%", backgroundColor: brand.colors.surfaceSecondary, paddingVertical: 20, borderRadius: 10, alignItems: "center" },

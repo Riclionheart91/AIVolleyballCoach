@@ -1,17 +1,41 @@
 import { useCallback, useState } from "react";
-import { View, Text, FlatList, TextInput, Pressable, StyleSheet, RefreshControl } from "react-native";
+import { View, Text, FlatList, TextInput, Pressable, StyleSheet, RefreshControl, Alert } from "react-native";
 import { useFocusEffect } from "expo-router";
 import { useAuth } from "@/src/context/AuthContext";
 import { elencaAtlete } from "@/src/services/athletes";
-import { creaAllenamento, elencaAllenamenti, elencaPresenzeAllenamento, elencaRpeAllenamento, registraPresenza, registraRpe } from "@/src/services/trainings";
+import {
+  aggiornaAllenamento, creaAllenamento, eliminaAllenamento, elencaAllenamenti,
+  elencaPresenzeAllenamento, elencaRpeAllenamento, registraPresenza, registraRpe,
+} from "@/src/services/trainings";
+import { confermaAzione } from "@/src/lib/confermaAzione";
+import { FabAggiungi } from "@/src/components/Fab";
+import { PopupForm } from "@/src/components/PopupForm";
 import { brand } from "@/src/config";
 import type { Athlete, Attendance, Rpe, Training } from "@/src/types/database";
+
+/** "2026-09-15 18:30" -> ISO. Formato semplice da digitare a mano, valido anche per date future. */
+function testoADataIso(testo: string): string | null {
+  const m = testo.trim().match(/^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2}))?$/);
+  if (!m) return null;
+  const [, anno, mese, giorno, ora = "09", min = "00"] = m;
+  const d = new Date(Number(anno), Number(mese) - 1, Number(giorno), Number(ora), Number(min));
+  return isNaN(d.getTime()) ? null : d.toISOString();
+}
+
+function dataIsoATesto(iso: string): string {
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
 
 export default function Allenamenti() {
   const { team, puoScrivere } = useAuth();
   const [allenamenti, setAllenamenti] = useState<Training[]>([]);
   const [aperto, setAperto] = useState<string | null>(null);
+  const [popupAperto, setPopupAperto] = useState(false);
+  const [allenamentoInModifica, setAllenamentoInModifica] = useState<Training | null>(null);
   const [titolo, setTitolo] = useState("Allenamento");
+  const [dataTesto, setDataTesto] = useState(dataIsoATesto(new Date().toISOString()));
 
   const carica = useCallback(async () => {
     if (!team) return;
@@ -20,34 +44,72 @@ export default function Allenamenti() {
 
   useFocusEffect(useCallback(() => { carica(); }, [carica]));
 
-  async function crea() {
-    if (!team) return;
-    await creaAllenamento(team.id, { data: new Date().toISOString(), titolo: titolo.trim() || "Allenamento", note: "" });
-    carica();
+  function apriNuovo() {
+    setAllenamentoInModifica(null);
+    setTitolo("Allenamento");
+    setDataTesto(dataIsoATesto(new Date().toISOString()));
+    setPopupAperto(true);
   }
+
+  function apriModifica(t: Training) {
+    setAllenamentoInModifica(t);
+    setTitolo(t.titolo);
+    setDataTesto(dataIsoATesto(t.data));
+    setPopupAperto(true);
+  }
+
+  async function salva() {
+    if (!team) return;
+    const dataIso = testoADataIso(dataTesto);
+    if (!dataIso) { Alert.alert("Data non valida", "Usa il formato AAAA-MM-GG oppure AAAA-MM-GG OO:MM (es. 2026-09-15 18:30). Puoi anche indicare una data futura."); return; }
+    try {
+      if (allenamentoInModifica) {
+        await aggiornaAllenamento(allenamentoInModifica.id, { titolo: titolo.trim() || "Allenamento", data: dataIso });
+      } else {
+        await creaAllenamento(team.id, { data: dataIso, titolo: titolo.trim() || "Allenamento", note: "" });
+      }
+      setPopupAperto(false);
+      carica();
+    } catch (e) {
+      Alert.alert("Errore", (e as Error).message);
+    }
+  }
+
+  function chiediEliminazione(t: Training) {
+    confermaAzione("Eliminare l'allenamento?", `"${t.titolo}" e le presenze/RPE già registrate per questa sessione verranno eliminati.`, "Elimina", async () => {
+      try { await eliminaAllenamento(t.id); carica(); } catch (e) { Alert.alert("Errore", (e as Error).message); }
+    }, true);
+  }
+
+  const haModifiche = allenamentoInModifica
+    ? titolo !== allenamentoInModifica.titolo || dataTesto !== dataIsoATesto(allenamentoInModifica.data)
+    : titolo !== "Allenamento" || true;
 
   return (
     <View style={styles.container}>
-      {puoScrivere && (
-        <View style={styles.form}>
-          <TextInput style={styles.input} placeholder="Titolo allenamento" placeholderTextColor={brand.colors.muted} value={titolo} onChangeText={setTitolo} />
-          <Pressable style={styles.bottone} onPress={crea}>
-            <Text style={styles.bottoneTesto}>Nuovo allenamento (oggi)</Text>
-          </Pressable>
-        </View>
-      )}
-
       <FlatList
         data={allenamenti}
         keyExtractor={(t) => t.id}
+        contentContainerStyle={{ padding: 16, paddingBottom: 90 }}
         refreshControl={<RefreshControl refreshing={false} onRefresh={carica} tintColor={brand.colors.brand} />}
-        ListEmptyComponent={<Text style={styles.vuoto}>Nessun allenamento ancora.</Text>}
+        ListEmptyComponent={<Text style={styles.vuoto}>Nessun allenamento ancora. Usa il pulsante + qui sotto.</Text>}
         renderItem={({ item }) => (
           <View style={styles.card}>
             <Pressable onPress={() => setAperto(aperto === item.id ? null : item.id)}>
-              <Text style={styles.cardTitolo}>{item.titolo}</Text>
-              <Text style={styles.cardSotto}>{new Date(item.data).toLocaleDateString("it-IT")}</Text>
+              <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+                <Text style={styles.cardTitolo}>{item.titolo}</Text>
+                {new Date(item.data) > new Date() && <Text style={styles.badgeFuturo}>programmato</Text>}
+              </View>
+              <Text style={styles.cardSotto}>{new Date(item.data).toLocaleString("it-IT", { dateStyle: "medium", timeStyle: "short" })}</Text>
             </Pressable>
+
+            {puoScrivere && (
+              <View style={styles.rigaAzioniCard}>
+                <Pressable onPress={() => apriModifica(item)}><Text style={styles.azioneCard}>Modifica</Text></Pressable>
+                <Pressable onPress={() => chiediEliminazione(item)}><Text style={styles.azioneCardDistruttiva}>Elimina</Text></Pressable>
+              </View>
+            )}
+
             {aperto === item.id && team && (
               puoScrivere
                 ? <PresenzeRpeModificabili trainingId={item.id} teamId={team.id} />
@@ -56,11 +118,22 @@ export default function Allenamenti() {
           </View>
         )}
       />
+
+      {puoScrivere && <FabAggiungi onPress={apriNuovo} />}
+
+      <PopupForm visibile={popupAperto} titolo={allenamentoInModifica ? "Modifica allenamento" : "Nuovo allenamento"} haModifiche={haModifiche} onChiudi={() => setPopupAperto(false)}>
+        <TextInput style={styles.input} placeholder="Titolo" placeholderTextColor={brand.colors.muted} value={titolo} onChangeText={setTitolo} autoFocus />
+        <TextInput style={styles.input} placeholder="AAAA-MM-GG OO:MM" placeholderTextColor={brand.colors.muted} value={dataTesto} onChangeText={setDataTesto} />
+        <Text style={styles.nota}>Puoi indicare anche una data futura, per programmare un allenamento in anticipo.</Text>
+        <Pressable style={styles.bottone} onPress={salva}>
+          <Text style={styles.bottoneTesto}>{allenamentoInModifica ? "Salva modifiche" : "Crea allenamento"}</Text>
+        </Pressable>
+      </PopupForm>
     </View>
   );
 }
 
-/** Allenatore/vice: un tap per atleta, niente form separati (stesso principio "poche interazioni per azione" dello scouting live pianificato in F3). */
+/** Allenatore/vice: un tap per atleta, niente form separati (stesso principio "poche interazioni per azione" dello scouting live). */
 function PresenzeRpeModificabili({ trainingId, teamId }: { trainingId: string; teamId: string }) {
   const [atlete, setAtlete] = useState<Athlete[]>([]);
   const [presenze, setPresenze] = useState<Record<string, boolean>>({});
@@ -123,8 +196,7 @@ function PresenzeRpeModificabili({ trainingId, teamId }: { trainingId: string; t
  * Atleta/presidente: nessun controllo di scrittura. La RLS filtra già i
  * dati (un'atleta riceve solo la propria riga di presenza/RPE, mai
  * quelle delle compagne — il presidente le riceve tutte perché ha
- * visione piena) — qui ci limitiamo a mostrare quello che arriva, senza
- * dover replicare la logica di permesso lato client.
+ * visione piena) — qui ci limitiamo a mostrare quello che arriva.
  */
 function PresenzeRpeSolaLettura({ trainingId, teamId }: { trainingId: string; teamId: string }) {
   const [righe, setRighe] = useState<{ nome: string; presente: boolean | null; rpe: number | null }[]>([]);
@@ -140,8 +212,6 @@ function PresenzeRpeSolaLettura({ trainingId, teamId }: { trainingId: string; te
         const mappaAtlete = Object.fromEntries(listaAtlete.map((a) => [a.id, `${a.nome} ${a.cognome}`]));
         const mappaPresenze = Object.fromEntries((listaPresenze as Attendance[]).map((p) => [p.athlete_id, p.presente]));
         const mappaRpe = Object.fromEntries((listaRpe as Rpe[]).map((r) => [r.athlete_id, r.valore]));
-        // Uniamo solo gli athlete_id per cui abbiamo effettivamente ricevuto
-        // una riga (per l'atleta sarà solo la propria, per il presidente tutte).
         const idAtleteVisibili = Array.from(new Set([...(listaPresenze as Attendance[]).map((p) => p.athlete_id), ...(listaRpe as Rpe[]).map((r) => r.athlete_id)]));
         setRighe(idAtleteVisibili.map((id) => ({ nome: mappaAtlete[id] ?? "—", presente: mappaPresenze[id] ?? null, rpe: mappaRpe[id] ?? null })));
       })();
@@ -163,14 +233,18 @@ function PresenzeRpeSolaLettura({ trainingId, teamId }: { trainingId: string; te
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: brand.colors.surface, padding: 16, gap: 16 },
-  form: { gap: 8, backgroundColor: brand.colors.surfaceSecondary, padding: 12, borderRadius: 12 },
-  input: { backgroundColor: brand.colors.surfaceTertiary, color: brand.colors.onSurface, borderRadius: 8, padding: 10 },
-  bottone: { backgroundColor: brand.colors.brand, padding: 10, borderRadius: 8, alignItems: "center" },
+  container: { flex: 1, backgroundColor: brand.colors.surface },
+  input: { backgroundColor: brand.colors.surfaceTertiary, color: brand.colors.onSurface, borderRadius: 8, padding: 12 },
+  nota: { color: brand.colors.muted, fontSize: 12 },
+  bottone: { backgroundColor: brand.colors.brand, padding: 12, borderRadius: 8, alignItems: "center" },
   bottoneTesto: { color: "#000", fontWeight: "700" },
   card: { backgroundColor: brand.colors.surfaceSecondary, borderRadius: 12, padding: 14, marginBottom: 10 },
   cardTitolo: { color: brand.colors.onSurface, fontSize: 16, fontWeight: "700" },
   cardSotto: { color: brand.colors.muted, fontSize: 13 },
+  badgeFuturo: { color: brand.colors.brandSecondary, fontSize: 11, fontWeight: "700", textTransform: "uppercase" },
+  rigaAzioniCard: { flexDirection: "row", gap: 16, marginTop: 8 },
+  azioneCard: { color: brand.colors.brand, fontSize: 12, fontWeight: "600" },
+  azioneCardDistruttiva: { color: brand.colors.error, fontSize: 12, fontWeight: "600" },
   vuoto: { color: brand.colors.muted, textAlign: "center", marginTop: 32 },
   presenzeContainer: { marginTop: 12, gap: 8, borderTopWidth: 1, borderTopColor: brand.colors.border, paddingTop: 12 },
   rigaAtleta: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
