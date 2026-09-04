@@ -72,12 +72,13 @@ create policy "evaluations_select_ristretta" on evaluations for select using (
   is_team_staff_visione_piena(team_id) or athlete_id = mio_atleta_id(team_id)
 );
 
-drop policy if exists "season_baselines_select_member" on season_baselines;
-drop policy if exists "season_baselines_select_ristretta" on season_baselines;
-create policy "season_baselines_select_ristretta" on season_baselines for select using (
-  is_team_staff_visione_piena((select team_id from seasons where id = season_id))
-  or athlete_id = mio_atleta_id((select team_id from seasons where id = season_id))
-);
+-- NOTA: la policy su season_baselines NON sta qui — la tabella non
+-- esiste ancora a questo punto dello script (viene creata in
+-- 0002_f2_stagioni.sql, dopo questo file). È in
+-- 0002b_season_baselines_ristretta.sql, eseguita subito dopo. Su un
+-- database vuoto, referenziarla qui avrebbe fatto fallire l'intero
+-- script con "relation season_baselines does not exist" prima ancora
+-- di arrivare alle sezioni successive — bug bloccante reale, corretto.
 
 drop policy if exists "attendance_select_member" on attendance;
 drop policy if exists "attendance_select_ristretta" on attendance;
@@ -153,20 +154,37 @@ begin
 end;
 $$;
 
--- 7. invita_membro esteso per il ruolo "atleta" (deve indicare quale
--- scheda anagrafica collegare) e accetta_inviti_pendenti aggiornato di
--- conseguenza.
+-- 7. invita_membro esteso per il ruolo "atleta" ---------------------------
+-- IMPORTANTE: la versione precedente (0001b) aveva 3 parametri; questa ne
+-- ha 4. In Postgres, CREATE OR REPLACE con una lista di parametri diversa
+-- non sostituisce la funzione: ne crea una SECONDA, sovraccaricata. Senza
+-- il DROP esplicito qui sotto, il database si ritroverebbe con due
+-- funzioni "invita_membro" — la vecchia a 3 argomenti resterebbe
+-- chiamabile e fuori sincrono con questa. Va rimossa a mano.
+drop function if exists invita_membro(uuid, text, text);
+
 create or replace function invita_membro(p_team_id uuid, p_email text, p_ruolo text, p_atleta_id uuid default null)
 returns uuid
 language plpgsql
 security definer
+set search_path = public
 as $$
 declare
   v_invito_id uuid;
+  v_email_normalizzata text;
 begin
+  if auth.uid() is null then
+    raise exception 'Utente non autenticato';
+  end if;
   if not is_team_coach(p_team_id) then
     raise exception 'Permesso negato';
   end if;
+
+  v_email_normalizzata := lower(trim(p_email));
+  if v_email_normalizzata = '' or v_email_normalizzata is null then
+    raise exception 'Email non valida';
+  end if;
+
   if p_ruolo not in ('allenatore', 'vice_allenatore', 'presidente', 'atleta') then
     raise exception 'Ruolo non valido: %', p_ruolo;
   end if;
@@ -176,11 +194,21 @@ begin
   if p_atleta_id is not null and not exists (select 1 from athletes where id = p_atleta_id and team_id = p_team_id) then
     raise exception 'Scheda atleta non trovata in questo team';
   end if;
+  -- Una scheda atleta non può già essere collegata a un membro attivo di
+  -- QUALUNQUE team (un conto è invitare la stessa persona una seconda
+  -- volta prima che accetti — gestito sotto con il DELETE — un altro è
+  -- collegare due account diversi alla stessa atleta).
+  if p_ruolo = 'atleta' and exists (select 1 from team_members where atleta_id = p_atleta_id) then
+    raise exception 'Questa scheda atleta è già collegata a un account esistente';
+  end if;
+  if exists (select 1 from team_members tm where tm.team_id = p_team_id and tm.user_id in (select id from auth.users where lower(email) = v_email_normalizzata)) then
+    raise exception 'Questa email è già membro della squadra';
+  end if;
 
-  delete from team_invites where team_id = p_team_id and lower(email) = lower(p_email) and usato_il is null;
+  delete from team_invites where team_id = p_team_id and lower(email) = v_email_normalizzata and usato_il is null;
 
   insert into team_invites (team_id, email, ruolo, atleta_id, creato_da)
-  values (p_team_id, lower(p_email), p_ruolo, p_atleta_id, auth.uid())
+  values (p_team_id, v_email_normalizzata, p_ruolo, p_atleta_id, auth.uid())
   returning id into v_invito_id;
 
   return v_invito_id;
@@ -191,20 +219,30 @@ create or replace function accetta_inviti_pendenti()
 returns uuid
 language plpgsql
 security definer
+set search_path = public
 as $$
 declare
   v_email text;
   v_invito record;
 begin
+  if auth.uid() is null then
+    return null;
+  end if;
+
   select email into v_email from auth.users where id = auth.uid();
   if v_email is null then
     return null;
   end if;
 
+  -- FOR UPDATE SKIP LOCKED: se due richieste arrivassero nello stesso
+  -- istante (es. doppio tap, o due tab aperte), solo una ottiene il
+  -- lock e procede; l'altra salta la riga già bloccata invece di
+  -- rischiare di leggere uno stato a metà o duplicare l'accettazione.
   select * into v_invito from team_invites
     where lower(email) = lower(v_email) and usato_il is null
     order by creato_il asc
-    limit 1;
+    limit 1
+    for update skip locked;
 
   if v_invito is null then
     return null;
