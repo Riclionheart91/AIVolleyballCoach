@@ -10,7 +10,7 @@ import { brand } from "@/src/config";
 import type { Season } from "@/src/types/database";
 
 export default function Stagioni() {
-  const { team, puoScrivere } = useAuth();
+  const { team, puoScrivere, ricaricaContesto } = useAuth();
   const [stagioni, setStagioni] = useState<Season[]>([]);
   const [caricamento, setCaricamento] = useState(true);
   const [popupAperto, setPopupAperto] = useState(false);
@@ -44,6 +44,7 @@ export default function Stagioni() {
     try {
       await attivaStagione(id);
       carica();
+      await ricaricaContesto();
     } catch (e) {
       Alert.alert("Errore", (e as Error).message);
     }
@@ -70,7 +71,7 @@ export default function Stagioni() {
       "Terminare la stagione?",
       `"${nomeStagione}" verrà segnata come conclusa. Resta consultabile in sola lettura, ma per registrare nuovi allenamenti/valutazioni dovrai aprirne un'altra.`,
       "Termina",
-      async () => { try { await concludiStagione(id); carica(); } catch (e) { Alert.alert("Errore", (e as Error).message); } },
+      async () => { try { await concludiStagione(id); carica(); await ricaricaContesto(); } catch (e) { Alert.alert("Errore", (e as Error).message); } },
       true,
     );
   }

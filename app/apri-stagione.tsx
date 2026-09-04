@@ -15,7 +15,7 @@ import type { Season } from "@/src/types/database";
  * decisione dell'allenatore).
  */
 export default function ApriStagione() {
-  const { team, puoScrivere, ricaricaStagione } = useAuth();
+  const { team, puoScrivere, ricaricaContesto } = useAuth();
   const [stagioni, setStagioni] = useState<Season[]>([]);
   const [nome, setNome] = useState("");
   const [inCorso, setInCorso] = useState(false);
@@ -33,7 +33,7 @@ export default function ApriStagione() {
     try {
       const stagione = await creaStagione(team.id, { nome: nome.trim(), data_apertura: new Date().toISOString().slice(0, 10) });
       await attivaStagione(stagione.id);
-      await ricaricaStagione();
+      await ricaricaContesto();
       router.replace("/(tabs)");
     } catch (e) {
       Alert.alert("Errore", (e as Error).message);

@@ -37,7 +37,7 @@ function BottoneCambiaSquadra() {
 }
 
 export default function TabsLayout() {
-  const { session, caricamento, team, caricamentoTeam, erroreTeam, stagioneAttiva, caricamentoStagione } = useAuth();
+  const { session, caricamento, team, caricamentoContesto, erroreTeam, stagioneAttiva } = useAuth();
 
   // GUARDIA DIFENSIVA: prima questo controllo viveva solo in app/index.tsx,
   // eseguito una volta sola all'avvio dell'app. Su un sito statico (export
@@ -49,14 +49,13 @@ export default function TabsLayout() {
   // Rifacendo lo stesso controllo qui, gira SEMPRE che si entri in questa
   // sezione, qualunque sia stato il punto di ingresso.
   useEffect(() => {
-    if (caricamento || caricamentoTeam) return;
+    if (caricamento || caricamentoContesto) return;
     if (!session) { router.replace("/login"); return; }
     if (!team) { router.replace("/crea-squadra"); return; }
-    if (caricamentoStagione) return;
     if (!stagioneAttiva) { router.replace("/apri-stagione"); return; }
-  }, [session, caricamento, team, caricamentoTeam, stagioneAttiva, caricamentoStagione]);
+  }, [session, caricamento, team, caricamentoContesto, stagioneAttiva]);
 
-  if (caricamento || caricamentoTeam || !team || caricamentoStagione) {
+  if (caricamento || caricamentoContesto || !team) {
     return (
       <View style={styles.caricamentoContainer}>
         <ActivityIndicator color={brand.colors.brand} />

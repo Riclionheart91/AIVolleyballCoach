@@ -5,30 +5,30 @@ import { useAuth } from "@/src/context/AuthContext";
 import { brand } from "@/src/config";
 
 export default function Index() {
-  const { session, caricamento, team, caricamentoTeam, erroreTeam, stagioneAttiva, caricamentoStagione, ricaricaTeam } = useAuth();
+  const { session, caricamento, team, caricamentoContesto, erroreTeam, stagioneAttiva, ricaricaContesto } = useAuth();
 
   useEffect(() => {
-    if (caricamento || caricamentoTeam) return; // mai decidere una rotta mentre lo stato è ancora incerto
+    // caricamentoContesto copre SIA squadra SIA stagione in un colpo
+    // solo: finché è true, lo stato non è ancora affidabile e non si
+    // decide nessuna rotta — elimina la finestra in cui squadra e
+    // stagione potevano essere lette in momenti diversi e risultare
+    // disallineate (causa del bug "nessuna stagione aperta" mostrato
+    // per errore).
+    if (caricamento || caricamentoContesto) return;
     if (!session) { router.replace("/login"); return; }
-    // Un errore vero (RLS, rete) va distinto da "non ha ancora nessuna
-    // squadra": prima venivano trattati allo stesso modo, mandando
-    // sempre a "crea squadra" — che nascondeva l'errore reale invece di
-    // mostrarlo, rendendo impossibile capire se il problema era
-    // "nessuna squadra" o "qualcosa si è rotto nel leggerla".
-    if (erroreTeam) return;
+    if (erroreTeam) return; // errore vero, distinto da "nessuna squadra": si mostra sotto, non si reindirizza alla cieca
     if (!team) { router.replace("/crea-squadra"); return; }
-    if (caricamentoStagione) return;
     if (!stagioneAttiva) { router.replace("/apri-stagione"); return; }
     router.replace("/(tabs)");
-  }, [session, caricamento, team, caricamentoTeam, erroreTeam, stagioneAttiva, caricamentoStagione]);
+  }, [session, caricamento, team, caricamentoContesto, erroreTeam, stagioneAttiva]);
 
-  if (!caricamento && !caricamentoTeam && erroreTeam) {
+  if (!caricamento && !caricamentoContesto && erroreTeam) {
     return (
       <View style={styles.container}>
         <Text style={styles.titolo}>Errore nel caricamento della squadra</Text>
         <Text style={styles.errore}>{erroreTeam}</Text>
         {session?.user.email && <Text style={styles.nota}>Connesso come: {session.user.email}</Text>}
-        <Pressable style={styles.bottone} onPress={() => ricaricaTeam()}>
+        <Pressable style={styles.bottone} onPress={() => ricaricaContesto()}>
           <Text style={styles.bottoneTesto}>Riprova</Text>
         </Pressable>
       </View>

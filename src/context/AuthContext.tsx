@@ -8,6 +8,24 @@ import type { Ruolo, Season, Team } from "@/src/types/database";
 
 const CHIAVE_ULTIMO_TEAM = "aivolleyballcoach:ultimo_team_id";
 
+interface RigaContesto {
+  team_id: string;
+  team_nome: string;
+  team_creato_il: string;
+  ruolo: Ruolo;
+  atleta_id: string | null;
+  stagione_id: string | null;
+  stagione_nome: string | null;
+  stagione_stato: string | null;
+  stagione_aperta: boolean;
+}
+
+interface SquadraDisponibile {
+  team: Team;
+  ruolo: Ruolo;
+  atletaId: string | null;
+}
+
 interface AuthState {
   session: Session | null;
   caricamento: boolean;
@@ -15,28 +33,25 @@ interface AuthState {
   ruolo: Ruolo | null;
   /** Popolato solo se ruolo === "atleta": l'id della SUA scheda anagrafica. */
   atletaId: string | null;
-  /** true per allenatore/vice_allenatore — unico gruppo con permessi di scrittura. */
   puoScrivere: boolean;
-  /** true per presidente — accesso a tutto, ma in sola lettura ovunque. */
   soloLettura: boolean;
-  /** true per il super-amministratore globale (vedi app_admins) — accesso trasversale a tutte le squadre. */
   isSuperuser: boolean;
-  /** Tutte le squadre a cui l'utente appartiene (di solito una sola, ma un allenatore può seguirne più di una). */
-  squadreDisponibili: { team: Team; ruolo: Ruolo; atletaId: string | null }[];
+  squadreDisponibili: SquadraDisponibile[];
   cambiaSquadra: (teamId: string) => Promise<void>;
-  // true finché non sappiamo ancora se l'utente ha un team — evita di
-  // mostrare per un istante "nessuna squadra" mentre la query è in corso
-  // (lo stesso tipo di falso allarme di "non riesco a caricare la
-  // stagione" che nasceva, in GAS, da un errore di auth mascherato).
-  caricamentoTeam: boolean;
+  /**
+   * UNICO flag di caricamento per squadra+stagione insieme (prima erano
+   * due flag separati con due effetti React indipendenti — la causa
+   * della race condition descritta in 0001f_contesto_team.sql). Finché
+   * questo è true, nessuna schermata deve decidere se mostrare "crea
+   * squadra" o "apri stagione": lo stato è ancora incerto.
+   */
+  caricamentoContesto: boolean;
   erroreTeam: string | null;
   stagioneAttiva: Season | null;
-  caricamentoStagione: boolean;
   accediConGoogle: () => Promise<void>;
   esci: () => Promise<void>;
   creaPrimaSquadra: (nome: string) => Promise<void>;
-  ricaricaTeam: () => Promise<void>;
-  ricaricaStagione: () => Promise<void>;
+  ricaricaContesto: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthState | null>(null);
@@ -47,12 +62,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [team, setTeam] = useState<Team | null>(null);
   const [ruolo, setRuolo] = useState<Ruolo | null>(null);
   const [atletaId, setAtletaId] = useState<string | null>(null);
-  const [squadreDisponibili, setSquadreDisponibili] = useState<{ team: Team; ruolo: Ruolo; atletaId: string | null }[]>([]);
+  const [squadreDisponibili, setSquadreDisponibili] = useState<SquadraDisponibile[]>([]);
   const [isSuperuser, setIsSuperuser] = useState(false);
-  const [caricamentoTeam, setCaricamentoTeam] = useState(true);
+  const [caricamentoContesto, setCaricamentoContesto] = useState(true);
   const [erroreTeam, setErroreTeam] = useState<string | null>(null);
   const [stagioneAttiva, setStagioneAttiva] = useState<Season | null>(null);
-  const [caricamentoStagione, setCaricamentoStagione] = useState(true);
 
   useEffect(() => {
     supabaseClient.auth.getSession().then(({ data }) => {
@@ -72,112 +86,71 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
   }, [session?.user.id]);
 
-  async function ricaricaTeam() {
+  /**
+   * Unico punto di caricamento per squadra+stagione. Una sola chiamata
+   * RPC (mio_contesto_team), un solo giro di setState — non ci sono più
+   * due effetti indipendenti che possono disallinearsi a metà strada.
+   */
+  async function ricaricaContesto() {
     if (!session) {
-      setTeam(null);
-      setRuolo(null);
-      setAtletaId(null);
-      setSquadreDisponibili([]);
-      setCaricamentoTeam(false);
+      setTeam(null); setRuolo(null); setAtletaId(null);
+      setSquadreDisponibili([]); setStagioneAttiva(null);
+      setCaricamentoContesto(false);
       return;
     }
-    setCaricamentoTeam(true);
+
+    setCaricamentoContesto(true);
     await accettaInvitiPendenti();
 
-    const { data: appartenenze, error: erroreAppartenenze } = await supabaseClient
-      .from("team_members")
-      .select("team_id, ruolo, atleta_id")
-      .eq("user_id", session.user.id);
+    const { data, error } = await supabaseClient.rpc("mio_contesto_team");
 
-    if (erroreAppartenenze) {
-      console.warn("Errore nel caricamento delle squadre:", erroreAppartenenze.message);
-      setErroreTeam(erroreAppartenenze.message);
-      setTeam(null); setRuolo(null); setAtletaId(null); setSquadreDisponibili([]);
-      setCaricamentoTeam(false);
-      return;
-    }
-    if (!appartenenze || appartenenze.length === 0) {
-      setErroreTeam(null);
-      setTeam(null); setRuolo(null); setAtletaId(null); setSquadreDisponibili([]);
-      setCaricamentoTeam(false);
+    if (error) {
+      console.warn("Errore nel caricamento del contesto squadra:", error.message);
+      setErroreTeam(error.message);
+      setTeam(null); setRuolo(null); setAtletaId(null);
+      setSquadreDisponibili([]); setStagioneAttiva(null);
+      setCaricamentoContesto(false);
       return;
     }
 
-    // Query separata per i team, invece di un embedding annidato
-    // (.select("teams(*)")): più robusta, non dipende dal fatto che
-    // PostgREST riconosca correttamente la relazione al momento della
-    // query, ed è più facile da diagnosticare se qualcosa va storto.
-    const { data: teamsTrovati, error: erroreTeams } = await supabaseClient
-      .from("teams")
-      .select("*")
-      .in("id", appartenenze.map((a) => a.team_id))
-      .order("creato_il", { ascending: true });
-
-    if (erroreTeams || !teamsTrovati) {
-      console.warn("Errore nel caricamento dei dati squadra:", erroreTeams?.message);
-      setErroreTeam(erroreTeams?.message ?? "Squadre non trovate");
-      setTeam(null); setRuolo(null); setAtletaId(null); setSquadreDisponibili([]);
-      setCaricamentoTeam(false);
-      return;
-    }
-
-    const opzioni: { team: Team; ruolo: Ruolo; atletaId: string | null }[] = appartenenze
-      .map((a) => {
-        const t = teamsTrovati.find((tt) => tt.id === a.team_id);
-        return t ? { team: t, ruolo: a.ruolo as Ruolo, atletaId: (a.atleta_id as string | null) ?? null } : null;
-      })
-      .filter((x): x is { team: Team; ruolo: Ruolo; atletaId: string | null } => x !== null)
-      // L'ordinamento della query su "teams" si perde qui, perché il
-      // giro sopra itera su "appartenenze" (mai ordinata) e fa un
-      // .find() per ciascuna: bisogna riordinare esplicitamente,
-      // altrimenti opzioni[0] — il default se non c'è una preferenza
-      // salvata — dipende dall'ordine (non garantito) restituito dal
-      // database, e con più squadre puoi ritrovarti su una diversa ad
-      // ogni ricarica.
-      .sort((a, b) => new Date(a.team.creato_il).getTime() - new Date(b.team.creato_il).getTime());
-
-    setSquadreDisponibili(opzioni);
+    const righe = (data ?? []) as RigaContesto[];
     setErroreTeam(null);
 
-    const ultimoId = await AsyncStorage.getItem(CHIAVE_ULTIMO_TEAM);
-    const scelta = opzioni.find((o) => o.team.id === ultimoId) ?? opzioni[0];
-    setTeam(scelta.team);
-    setRuolo(scelta.ruolo);
-    setAtletaId(scelta.atletaId);
-    setCaricamentoTeam(false);
-  }
-
-  async function cambiaSquadra(teamId: string) {
-    const scelta = squadreDisponibili.find((o) => o.team.id === teamId);
-    if (!scelta) return;
-    setTeam(scelta.team);
-    setRuolo(scelta.ruolo);
-    setAtletaId(scelta.atletaId);
-    await AsyncStorage.setItem(CHIAVE_ULTIMO_TEAM, teamId);
-  }
-
-  async function ricaricaStagione() {
-    if (!team) {
-      setStagioneAttiva(null);
-      setCaricamentoStagione(false);
+    if (righe.length === 0) {
+      setTeam(null); setRuolo(null); setAtletaId(null);
+      setSquadreDisponibili([]); setStagioneAttiva(null);
+      setCaricamentoContesto(false);
       return;
     }
-    setCaricamentoStagione(true);
-    const { data, error } = await supabaseClient.from("seasons").select("*").eq("team_id", team.id).eq("stato", "attiva").maybeSingle();
-    if (error) console.warn("Errore nel caricamento della stagione attiva:", error.message);
-    setStagioneAttiva(data ?? null);
-    setCaricamentoStagione(false);
+
+    // Una riga per squadra (già ordinate per data di creazione dalla
+    // RPC stessa: niente più dipendenza dall'ordine, non garantito, con
+    // cui il database potrebbe restituire i risultati).
+    const opzioni: SquadraDisponibile[] = righe.map((r) => ({
+      team: { id: r.team_id, nome: r.team_nome, creato_il: r.team_creato_il, creato_da: null },
+      ruolo: r.ruolo,
+      atletaId: r.atleta_id,
+    }));
+    setSquadreDisponibili(opzioni);
+
+    const ultimoId = await AsyncStorage.getItem(CHIAVE_ULTIMO_TEAM);
+    const rigaScelta = righe.find((r) => r.team_id === ultimoId) ?? righe[0];
+
+    setTeam(opzioni.find((o) => o.team.id === rigaScelta.team_id)!.team);
+    setRuolo(rigaScelta.ruolo);
+    setAtletaId(rigaScelta.atleta_id);
+    setStagioneAttiva(
+      rigaScelta.stagione_aperta && rigaScelta.stagione_id
+        ? { id: rigaScelta.stagione_id, team_id: rigaScelta.team_id, nome: rigaScelta.stagione_nome!, stato: "attiva", data_apertura: "", data_chiusura: null, creata_il: "", creata_da: null }
+        : null,
+    );
+    setCaricamentoContesto(false);
   }
 
   useEffect(() => {
-    ricaricaTeam();
+    ricaricaContesto();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.user.id]);
-
-  useEffect(() => {
-    ricaricaStagione();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [team?.id]);
 
   async function accediConGoogle() {
     await supabaseClient.auth.signInWithOAuth({
@@ -193,15 +166,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   async function creaPrimaSquadra(nome: string) {
     const { data, error } = await supabaseClient.rpc("crea_team_e_diventa_allenatore", { p_nome: nome });
     if (error) throw error;
-    // Scrive subito la preferenza in AsyncStorage, PRIMA di ricaricaTeam():
-    // se chiamassimo invece cambiaSquadra() dopo, leggerebbe
-    // squadreDisponibili dalla chiusura di questa funzione, che è ancora
-    // quella di PRIMA della creazione (gli aggiornamenti di stato React
-    // non sono sincroni) — non troverebbe la squadra appena creata e non
-    // farebbe nulla. Così invece ricaricaTeam() la trova da sé, perché
-    // legge AsyncStorage e ricalcola le opzioni da zero dal database.
     if (data) await AsyncStorage.setItem(CHIAVE_ULTIMO_TEAM, data as string);
-    await ricaricaTeam();
+    await ricaricaContesto();
+  }
+
+  async function cambiaSquadra(teamId: string) {
+    await AsyncStorage.setItem(CHIAVE_ULTIMO_TEAM, teamId);
+    await ricaricaContesto();
   }
 
   const puoScrivere = ruolo === "allenatore" || ruolo === "vice_allenatore";
@@ -210,11 +181,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const value = useMemo<AuthState>(
     () => ({
       session, caricamento, team, ruolo, atletaId, puoScrivere, soloLettura, isSuperuser,
-      squadreDisponibili, cambiaSquadra, caricamentoTeam, erroreTeam,
-      stagioneAttiva, caricamentoStagione,
-      accediConGoogle, esci, creaPrimaSquadra, ricaricaTeam, ricaricaStagione,
+      squadreDisponibili, cambiaSquadra, caricamentoContesto, erroreTeam, stagioneAttiva,
+      accediConGoogle, esci, creaPrimaSquadra, ricaricaContesto,
     }),
-    [session, caricamento, team, ruolo, atletaId, isSuperuser, squadreDisponibili, caricamentoTeam, erroreTeam, stagioneAttiva, caricamentoStagione],
+    [session, caricamento, team, ruolo, atletaId, isSuperuser, squadreDisponibili, caricamentoContesto, erroreTeam, stagioneAttiva],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
