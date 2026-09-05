@@ -28,7 +28,7 @@
 
 Elencate in ordine di menzione, non di priorità — dimmi tu come ordinarle quando riprendiamo.
 
-1. **Creazione squadra + stagione già aperta**: se un utente che ha già una squadra con una stagione attiva ne crea una nuova, chiedere se procedere comunque o riutilizzare quella esistente, invece di procedere in automatico.
+1. **~~Creazione squadra + stagione già aperta~~** — fatto, con un'interpretazione leggermente diversa dalla richiesta originale (una squadra nuova non può avere una stagione): la schermata "apri stagione" ora propone di **attivare** una stagione già creata ma mai attivata (stato "pianificata"), invece di offrire solo "creane una nuova". Segnalare se non era questo il caso a cui pensavi.
 2. **Import completo anagrafica da SportEasy**: caricare tutti i campi disponibili in un export Excel di SportEasy (non solo quelli già mappati oggi). *Prima di iniziare, va richiesto il file Excel reale per vedere le colonne disponibili.*
 3. **Pianificazione allenamenti**: scelta di argomento/tema, esercizi dal catalogo con durata di ciascuno e durata totale della sessione, pulsante per generare una proposta via AI.
 4. **Valutazioni a cadenza mensile con notifica**: invece del flusso ad-hoc attuale, un ciclo mensile con promemoria per valutare ogni atleta.
