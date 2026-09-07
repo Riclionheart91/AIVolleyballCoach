@@ -55,6 +55,8 @@ export interface Training {
   data: string;
   titolo: string;
   note: string;
+  argomento: string | null;
+  durata_totale_minuti: number | null;
   sporteasy_uid: string | null;
   creato_il: string;
 }
@@ -67,6 +69,7 @@ export interface TrainingExercise {
   ripetizioni: string | null;
   note: string;
   ordine: number;
+  durata_minuti: number | null;
 }
 
 export interface Attendance {
@@ -177,6 +180,14 @@ export interface MatchEvent {
   athlete_id: string | null;
   creato_il: string;
   creato_da: string | null;
+}
+
+export interface MatchSetLineup {
+  id: string;
+  set_id: string;
+  athlete_id: string;
+  in_campo: boolean;
+  aggiornato_il: string;
 }
 
 // Placeholder minimale: non generiamo il tipo Database completo via CLI

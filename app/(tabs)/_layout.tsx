@@ -37,7 +37,7 @@ function BottoneCambiaSquadra() {
 }
 
 export default function TabsLayout() {
-  const { session, caricamento, team, caricamentoContesto, erroreTeam, stagioneAttiva } = useAuth();
+  const { session, caricamento, team, caricamentoContesto, erroreTeam, stagioneAttiva, ruolo } = useAuth();
 
   // GUARDIA DIFENSIVA: prima questo controllo viveva solo in app/index.tsx,
   // eseguito una volta sola all'avvio dell'app. Su un sito statico (export
@@ -89,9 +89,33 @@ export default function TabsLayout() {
         tabBarItemStyle: { paddingHorizontal: 0 },
       }}
     >
-      <Tabs.Screen name="index" options={{ title: "Atlete", tabBarIcon: ({ color, size }) => <Ionicons name="people" color={color} size={size} /> }} />
-      <Tabs.Screen name="esercizi" options={{ title: "Esercizi", tabBarIcon: ({ color, size }) => <Ionicons name="barbell" color={color} size={size} /> }} />
-      <Tabs.Screen name="allenamenti" options={{ title: "Allenamenti", tabBarIcon: ({ color, size }) => <Ionicons name="calendar" color={color} size={size} /> }} />
+      <Tabs.Screen
+        name="index"
+        options={{
+          title: "Atlete",
+          tabBarIcon: ({ color, size }) => <Ionicons name="people" color={color} size={size} />,
+          // Su richiesta: un'atleta non gestisce il roster, l'ha in
+          // sola lettura tramite l'invito già collegato alla propria
+          // scheda — non le serve una tab dedicata.
+          href: ruolo === "atleta" ? null : undefined,
+        }}
+      />
+      <Tabs.Screen
+        name="esercizi"
+        options={{
+          title: "Esercizi",
+          tabBarIcon: ({ color, size }) => <Ionicons name="barbell" color={color} size={size} />,
+          href: ruolo === "atleta" ? null : undefined,
+        }}
+      />
+      <Tabs.Screen
+        name="allenamenti"
+        options={{
+          title: "Allenamenti",
+          tabBarIcon: ({ color, size }) => <Ionicons name="calendar" color={color} size={size} />,
+          href: ruolo === "atleta" ? null : undefined,
+        }}
+      />
       <Tabs.Screen name="partite" options={{ title: "Partite", tabBarIcon: ({ color, size }) => <Ionicons name="tennisball" color={color} size={size} /> }} />
       <Tabs.Screen name="valutazioni" options={{ title: "Valutazioni", tabBarIcon: ({ color, size }) => <Ionicons name="star" color={color} size={size} /> }} />
       <Tabs.Screen

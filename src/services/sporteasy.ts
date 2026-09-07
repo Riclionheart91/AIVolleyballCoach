@@ -21,6 +21,7 @@ export interface RisultatoSincronizzazione {
   partiteCreate?: number;
   partiteAggiornate?: number;
   totaleEventiNelCalendario?: number;
+  dettaglioClassificazione?: { titolo: string; tipo: string }[];
 }
 
 export async function sincronizzaSporteasy(teamId: string): Promise<RisultatoSincronizzazione> {

@@ -2,16 +2,23 @@
 //
 // Equivalente di SportEasySync.gs. Fa SOLO import di eventi
 // (allenamenti/partite) dal calendario iCal della squadra — mai
-// anagrafica atlete, come da richiesta esplicita.
+// anagrafica atlete.
 //
 // Deploy: supabase functions deploy sync-sporteasy
-// (nessun secret da configurare: il link iCal non è segreto, è
-// salvato in team_integrations e leggibile da chiunque abbia il link
-// — esattamente come funzionava il webcal:// originale.)
 //
-// Parser ICS scritto a mano (niente librerie esterne): il formato
-// iCal è abbastanza regolare da non giustificare una dipendenza pesante
-// solo per estrarre UID/SUMMARY/DTSTART da un feed di sola lettura.
+// V2 — corregge due bug reali trovati dopo il primo utilizzo:
+// 1. Il calendario SportEasy usa eventi RICORRENTI (RRULE) per gli
+//    allenamenti settimanali fissi ("ogni martedì e giovedì") — un
+//    parser che legge solo DTSTART importava al massimo UNA sola
+//    occorrenza invece di tutte le sedute. Ora espande FREQ=WEEKLY con
+//    BYDAY/COUNT/UNTIL in una finestra di alcuni mesi.
+// 2. La classifica "allenamento vs partita" richiedeva la parola esatta
+//    "allenamento"/"training" nel titolo. Invertita: un evento è una
+//    PARTITA solo se il titolo somiglia a un incontro (vs/contro/
+//    partita/campionato), altrimenti si assume allenamento — riflette
+//    meglio la realtà di un calendario club (la maggioranza delle
+//    voci sono sedute di allenamento, le partite sono l'eccezione
+//    nominata esplicitamente).
 
 import { createClient } from "npm:@supabase/supabase-js@2";
 
@@ -22,6 +29,9 @@ const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
+
+const GIORNI_ICS: Record<string, number> = { SU: 0, MO: 1, TU: 2, WE: 3, TH: 4, FR: 5, SA: 6 };
+const FINESTRA_ESPANSIONE_GIORNI = 180; // ~6 mesi di occorrenze future/passate generate per gli eventi ricorrenti
 
 interface VEvent {
   uid: string;
@@ -53,8 +63,6 @@ Deno.serve(async (req) => {
       return jsonResponse({ errore: true, messaggio: "Nessun link calendario SportEasy configurato per questa squadra." }, 400);
     }
 
-    // webcal:// è solo un alias di https:// per dire al sistema operativo
-    // "apri col calendario" — per un fetch HTTP va convertito.
     const url = integrazione.sporteasy_ical_url.replace(/^webcal:\/\//i, "https://");
 
     const resp = await fetch(url);
@@ -66,9 +74,11 @@ Deno.serve(async (req) => {
     const eventi = analizzaIcs(testoIcs);
 
     let allenamentiCreati = 0, allenamentiAggiornati = 0, partiteCreate = 0, partiteAggiornate = 0;
+    const dettaglioClassificazione: { titolo: string; tipo: string }[] = [];
 
     for (const ev of eventi) {
-      const eAllenamento = /allenamento|training/i.test(ev.summary);
+      const eAllenamento = !sembraPartita(ev.summary);
+      dettaglioClassificazione.push({ titolo: ev.summary, tipo: eAllenamento ? "allenamento" : "partita" });
 
       if (eAllenamento) {
         const { data: esistente } = await admin.from("trainings").select("id").eq("team_id", team_id).eq("sporteasy_uid", ev.uid).maybeSingle();
@@ -83,9 +93,6 @@ Deno.serve(async (req) => {
         const avversario = estraiAvversario(ev.summary);
         const { data: esistente } = await admin.from("matches").select("id").eq("team_id", team_id).eq("sporteasy_uid", ev.uid).maybeSingle();
         if (esistente) {
-          // Non tocchiamo mai "stato": se l'allenatore ha già iniziato o
-          // chiuso questa partita in app, una risincronizzazione non deve
-          // resettarla a "programmata".
           await admin.from("matches").update({ avversario, data: ev.dataInizio }).eq("id", esistente.id);
           partiteAggiornate++;
         } else {
@@ -101,6 +108,10 @@ Deno.serve(async (req) => {
       errore: false,
       allenamentiCreati, allenamentiAggiornati, partiteCreate, partiteAggiornate,
       totaleEventiNelCalendario: eventi.length,
+      // Diagnostica: il coach può vedere ESATTAMENTE come ogni titolo è
+      // stato classificato, invece di dover indovinare perché un evento
+      // è finito nella categoria sbagliata.
+      dettaglioClassificazione,
     });
   } catch (e) {
     return jsonResponse({ errore: true, messaggio: "Errore interno: " + (e as Error).message }, 500);
@@ -111,15 +122,17 @@ async function registraEsito(admin: ReturnType<typeof createClient>, teamId: str
   await admin.from("team_integrations").update({ ultima_sincronizzazione: new Date().toISOString(), ultimo_esito: esito }).eq("team_id", teamId);
 }
 
-/** "Partita vs Volley Bologna" / "vs Volley Bologna" / "Volley Bologna" -> "Volley Bologna". Euristica semplice, mai bloccante: se non trova un prefisso noto usa il titolo così com'è. */
-function estraiAvversario(summary: string): string {
-  return summary.replace(/^(partita|match)?\s*(vs\.?|contro)\s*/i, "").trim() || summary;
+/** Un evento è una PARTITA solo se il titolo somiglia esplicitamente a un incontro; il default è "allenamento" — riflette meglio un calendario club reale, dove le sedute di allenamento sono la maggioranza e non sempre riportano la parola "allenamento" nel titolo. */
+function sembraPartita(summary: string): boolean {
+  return /\b(vs\.?|contro|partita|campionato|match|gara)\b/i.test(summary);
 }
 
-/** Unfolding + parsing minimale di un feed ICS: estrae UID, SUMMARY, DTSTART per ogni VEVENT. Ignora tutto il resto (RRULE, ALARM, timezone avanzate) perché per lo scopo — sapere data e titolo dell'evento — non serve altro. */
+function estraiAvversario(summary: string): string {
+  return summary.replace(/^(partita|match|gara)?\s*(vs\.?|contro)\s*/i, "").trim() || summary;
+}
+
+/** Unfolding + parsing minimale di un feed ICS, con espansione delle occorrenze ricorrenti (RRULE FREQ=WEEKLY). */
 function analizzaIcs(testo: string): VEvent[] {
-  // RFC 5545: le righe lunghe sono "foldate" con un a-capo seguito da uno
-  // spazio; vanno riunite prima di qualunque altro parsing.
   const righeSenzaFold = testo.replace(/\r\n/g, "\n").replace(/\n[ \t]/g, "");
   const blocchi = righeSenzaFold.split("BEGIN:VEVENT").slice(1);
 
@@ -128,23 +141,78 @@ function analizzaIcs(testo: string): VEvent[] {
     const corpo = blocco.split("END:VEVENT")[0];
     const uid = estraiCampo(corpo, "UID");
     const summary = decodificaTestoIcs(estraiCampo(corpo, "SUMMARY"));
-    const dtstart = estraiCampoConParametri(corpo, "DTSTART");
-    if (!uid || !dtstart) continue;
+    const dtstartTesto = estraiCampoConParametri(corpo, "DTSTART");
+    const rruleTesto = estraiCampo(corpo, "RRULE");
+    if (!uid || !dtstartTesto) continue;
 
-    const dataInizio = parsaDataIcs(dtstart);
+    const dataInizio = parsaDataIcs(dtstartTesto);
     if (!dataInizio) continue;
 
-    eventi.push({ uid, summary: summary || "Evento SportEasy", dataInizio });
+    if (rruleTesto) {
+      eventi.push(...espandiRicorrenza(uid, summary || "Evento SportEasy", dataInizio, rruleTesto));
+    } else {
+      eventi.push({ uid, summary: summary || "Evento SportEasy", dataInizio });
+    }
   }
   return eventi;
 }
+
+/**
+ * Espande una regola di ricorrenza settimanale in occorrenze concrete,
+ * ciascuna con un UID proprio (base + data) per la deduplica — l'UID
+ * del file ICS è condiviso da TUTTE le occorrenze di uno stesso evento
+ * ricorrente, quindi va reso univoco per occorrenza qui, altrimenti il
+ * vincolo di unicità (team_id, sporteasy_uid) ne farebbe sopravvivere
+ * solo una. Solo FREQ=WEEKLY è gestita: è il caso quasi universale per
+ * allenamenti fissi settimanali; altre frequenze vengono lasciate come
+ * singola occorrenza (meglio un'importazione parziale che nessuna).
+ */
+function espandiRicorrenza(uidBase: string, summary: string, primaOccorrenza: string, rrule: string): VEvent[] {
+  const parametri = Object.fromEntries(rrule.split(";").map((p) => { const [k, v] = p.split("="); return [k, v]; }));
+  if (parametri.FREQ !== "WEEKLY") return [{ uid: uidBase, summary, dataInizio: primaOccorrenza }];
+
+  const giorniSettimana = parametri.BYDAY
+    ? parametri.BYDAY.split(",").map((g) => GIORNI_ICS[g]).filter((g) => g !== undefined)
+    : [new Date(primaOccorrenza).getDay()];
+
+  const dataInizio = new Date(primaOccorrenza);
+  const oraOre = dataInizio.getHours(), oraMin = dataInizio.getMinutes();
+
+  let dataFine: Date;
+  if (parametri.UNTIL) {
+    dataFine = parsaDataIcs(parametri.UNTIL) ? new Date(parsaDataIcs(parametri.UNTIL)!) : addGiorni(dataInizio, FINESTRA_ESPANSIONE_GIORNI);
+  } else {
+    dataFine = addGiorni(dataInizio, FINESTRA_ESPANSIONE_GIORNI);
+  }
+  const limiteConteggio = parametri.COUNT ? parseInt(parametri.COUNT, 10) : Infinity;
+
+  const occorrenze: VEvent[] = [];
+  let cursore = new Date(dataInizio);
+  cursore.setHours(0, 0, 0, 0);
+  let generate = 0;
+
+  while (cursore <= dataFine && generate < limiteConteggio && generate < 200) {
+    if (giorniSettimana.includes(cursore.getDay()) && cursore >= startOfDay(dataInizio)) {
+      const occorrenza = new Date(cursore);
+      occorrenza.setHours(oraOre, oraMin, 0, 0);
+      const dataStr = occorrenza.toISOString().slice(0, 10);
+      occorrenze.push({ uid: `${uidBase}-${dataStr}`, summary, dataInizio: occorrenza.toISOString() });
+      generate++;
+    }
+    cursore = addGiorni(cursore, 1);
+  }
+
+  return occorrenze.length > 0 ? occorrenze : [{ uid: uidBase, summary, dataInizio: primaOccorrenza }];
+}
+
+function startOfDay(d: Date): Date { const x = new Date(d); x.setHours(0, 0, 0, 0); return x; }
+function addGiorni(d: Date, n: number): Date { const x = new Date(d); x.setDate(x.getDate() + n); return x; }
 
 function estraiCampo(corpo: string, nome: string): string | null {
   const m = corpo.match(new RegExp(`^${nome}:(.*)$`, "m"));
   return m ? m[1].trim() : null;
 }
 
-/** Come estraiCampo, ma il nome del campo può avere parametri (es. "DTSTART;TZID=Europe/Rome:20260912T180000"). */
 function estraiCampoConParametri(corpo: string, nome: string): string | null {
   const m = corpo.match(new RegExp(`^${nome}[;:]([^\n]*)$`, "m"));
   if (!m) return null;
@@ -158,7 +226,6 @@ function decodificaTestoIcs(testo: string | null): string {
   return testo.replace(/\\n/g, " ").replace(/\\,/g, ",").replace(/\\;/g, ";").replace(/\\\\/g, "\\");
 }
 
-/** Formati tipici DTSTART: "20260912T180000Z" (UTC) o "20260912T180000" (locale, senza Z) o "20260912" (solo data). */
 function parsaDataIcs(valore: string): string | null {
   const m = valore.match(/^(\d{4})(\d{2})(\d{2})(?:T(\d{2})(\d{2})(\d{2})(Z)?)?$/);
   if (!m) return null;

@@ -29,10 +29,10 @@
 Elencate in ordine di menzione, non di priorità — dimmi tu come ordinarle quando riprendiamo.
 
 1. **~~Creazione squadra + stagione già aperta~~** — fatto, con un'interpretazione leggermente diversa dalla richiesta originale (una squadra nuova non può avere una stagione): la schermata "apri stagione" ora propone di **attivare** una stagione già creata ma mai attivata (stato "pianificata"), invece di offrire solo "creane una nuova". Segnalare se non era questo il caso a cui pensavi.
-2. **Import completo anagrafica da SportEasy**: caricare tutti i campi disponibili in un export Excel di SportEasy (non solo quelli già mappati oggi). *Prima di iniziare, va richiesto il file Excel reale per vedere le colonne disponibili.*
-3. **Pianificazione allenamenti**: scelta di argomento/tema, esercizi dal catalogo con durata di ciascuno e durata totale della sessione, pulsante per generare una proposta via AI.
+2. **Import completo anagrafica da SportEasy**: caricare tutti i campi disponibili in un export Excel di SportEasy (non solo quelli già mappati oggi). **In attesa del file Excel** — non ancora iniziato, mandamelo quando vuoi procedere.
+3. **~~Pianificazione allenamenti~~** — fatto: argomento sessione, esercizi dal catalogo con durata ciascuno (totale calcolato in automatico), pulsante "Genera con AI" (usa solo esercizi del catalogo reale, sempre modificabile prima di salvare).
 4. **Valutazioni a cadenza mensile con notifica**: invece del flusso ad-hoc attuale, un ciclo mensile con promemoria per valutare ogni atleta.
-5. **Scouting avanzato**: gestione di formazione/rotazione (chi sta servendo/ricevendo), azioni limitate a chi può davvero eseguirle in quel momento di gioco.
+5. **~~Scouting avanzato~~** — fatto in parte: **formazione in campo** (si sceglie chi è davvero in campo, la striscia di scouting mostra solo quelle 6 invece di tutta la rosa). **Non fatta**: la rotazione automatica per turno di servizio (chi sta servendo/ricevendo secondo le regole ufficiali) — rimandata di proposito, ulteriore livello di complessità.
 6. **F4 — Match analysis più ricca**: oggi solo andamento aggregato base (punti/errori per fondamentale tra partite); mancano efficienza per rotazione, distribuzione attacco, ecc.
 7. **F6 — resto**: infortuni, piani individuali, periodizzazione.
 8. **Estendere il bypass superuser** alle tabelle non ancora coperte (exercises, trainings, attendance, rpe, evaluation_proposals, season_baselines, team_invites, team_integrations, ai_call_log).

@@ -3,6 +3,7 @@ import { View, Text, TextInput, Pressable, StyleSheet, FlatList, ActivityIndicat
 import { useFocusEffect } from "expo-router";
 import { useAuth } from "@/src/context/AuthContext";
 import { elencaAtlete } from "@/src/services/athletes";
+import { elencaMioStoricoPresenze, type StoricoPresenzaRiga } from "@/src/services/trainings";
 import {
   andamentoSquadra,
   decidiProposta,
@@ -199,8 +200,10 @@ function SezioneValutazioneCoach({ teamId }: { teamId: string }) {
 function SezioneValutazionePersonale({ athleteId }: { athleteId: string }) {
   const [fondamentale, setFondamentale] = useState<Fondamentale>("Attacco");
   const [valutazioni, setValutazioni] = useState<Evaluation[]>([]);
+  const [storicoPresenze, setStoricoPresenze] = useState<StoricoPresenzaRiga[]>([]);
 
   useFocusEffect(useCallback(() => { elencaValutazioni(athleteId, fondamentale).then(setValutazioni); }, [athleteId, fondamentale]));
+  useFocusEffect(useCallback(() => { elencaMioStoricoPresenze(athleteId).then(setStoricoPresenze); }, [athleteId]));
 
   return (
     <View style={{ gap: 12 }}>
@@ -219,6 +222,18 @@ function SezioneValutazionePersonale({ athleteId }: { athleteId: string }) {
           <View key={v.id} style={styles.rigaAndamento}>
             <Text style={styles.rigaAndamentoTesto}>{v.data_valutazione.slice(0, 10)}</Text>
             <Text style={styles.rigaAndamentoValore}>{v.punteggio}</Text>
+          </View>
+        ))
+      )}
+
+      <Text style={[styles.sottotitoloSezione, { marginTop: 8 }]}>Le mie presenze agli allenamenti</Text>
+      {storicoPresenze.length === 0 ? (
+        <Text style={styles.vuoto}>Nessun allenamento registrato ancora.</Text>
+      ) : (
+        storicoPresenze.map((r) => (
+          <View key={r.training_id} style={styles.rigaAndamento}>
+            <Text style={styles.rigaAndamentoTesto}>{r.titolo} — {r.data ? new Date(r.data).toLocaleDateString("it-IT") : ""}</Text>
+            <Text style={styles.rigaAndamentoValore}>{r.presente === false ? "Assente" : r.presente === true ? `Presente${r.rpe ? ` (RPE ${r.rpe})` : ""}` : "—"}</Text>
           </View>
         ))
       )}

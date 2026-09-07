@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { View, Text, Pressable, StyleSheet, FlatList, Switch, Alert } from "react-native";
+import { View, Text, Pressable, StyleSheet, FlatList, Switch, Alert, Modal } from "react-native";
 import { useLocalSearchParams, useFocusEffect, router } from "expo-router";
 import { useAuth } from "@/src/context/AuthContext";
 import { elencaAtlete } from "@/src/services/athletes";
@@ -8,7 +8,9 @@ import {
   avviaMatch,
   chiudiMatch,
   elencaEventiPartita,
+  elencaFormazioneSet,
   elencaSet,
+  impostaFormazioneSet,
   nuovoSet,
   registraEvento,
 } from "@/src/services/matches";
@@ -35,6 +37,9 @@ export default function PartitaLive() {
   const [setCorrente, setSetCorrente] = useState<MatchSet | null>(null);
   const [eventi, setEventi] = useState<MatchEvent[]>([]);
   const [atlete, setAtlete] = useState<Athlete[]>([]);
+  const [formazioneIds, setFormazioneIds] = useState<string[] | null>(null); // null = non ancora impostata: mostra tutte (comportamento precedente)
+  const [popupFormazioneAperto, setPopupFormazioneAperto] = useState(false);
+  const [selezioneTemporanea, setSelezioneTemporanea] = useState<Set<string>>(new Set());
   const [atletaSelId, setAtletaSelId] = useState<string | null>(null);
   const [skillSelezionata, setSkillSelezionata] = useState<Skill | null>(null);
   const [modalitaEssenziale, setModalitaEssenziale] = useState(false);
@@ -52,9 +57,40 @@ export default function PartitaLive() {
       lista.sort((a, b) => (a.numero_maglia ?? 999) - (b.numero_maglia ?? 999));
       setAtlete(lista);
     }
+    if (attivo) {
+      const formazione = await elencaFormazioneSet(attivo.id);
+      setFormazioneIds(formazione.length > 0 ? formazione : null);
+    }
   }, [id]);
 
   useFocusEffect(useCallback(() => { carica(); }, [carica]));
+
+  function apriPopupFormazione() {
+    setSelezioneTemporanea(new Set(formazioneIds ?? []));
+    setPopupFormazioneAperto(true);
+  }
+
+  function toggleSelezioneTemporanea(athleteId: string) {
+    setSelezioneTemporanea((prev) => {
+      const nuovo = new Set(prev);
+      if (nuovo.has(athleteId)) nuovo.delete(athleteId);
+      else nuovo.add(athleteId);
+      return nuovo;
+    });
+  }
+
+  async function salvaFormazione() {
+    if (!setCorrente) return;
+    try {
+      await impostaFormazioneSet(setCorrente.id, Array.from(selezioneTemporanea));
+      setFormazioneIds(Array.from(selezioneTemporanea));
+      setPopupFormazioneAperto(false);
+    } catch (e) {
+      Alert.alert("Errore", (e as Error).message);
+    }
+  }
+
+  const atleteInCampo = formazioneIds ? atlete.filter((a) => formazioneIds.includes(a.id)) : atlete;
 
   useEffect(() => { setSkillSelezionata(null); }, [atletaSelId]);
 
@@ -162,10 +198,14 @@ export default function PartitaLive() {
 
       {puoScrivere ? (
         <>
+          <View style={styles.rigaFormazione}>
+            <Text style={styles.nota}>{formazioneIds ? `${atleteInCampo.length} in campo` : "Formazione non impostata — mostro tutta la rosa"}</Text>
+            <Pressable onPress={apriPopupFormazione}><Text style={styles.linkFormazione}>{formazioneIds ? "Cambia formazione" : "Imposta formazione"}</Text></Pressable>
+          </View>
           <View style={styles.rigaStrisciaAtlete}>
             <FlatList
               horizontal
-              data={atlete}
+              data={atleteInCampo}
               keyExtractor={(a) => a.id}
               showsHorizontalScrollIndicator={false}
               renderItem={({ item }) => (
@@ -245,6 +285,32 @@ export default function PartitaLive() {
           );
         }}
       />
+
+      <Modal visible={popupFormazioneAperto} animationType="slide" transparent onRequestClose={() => setPopupFormazioneAperto(false)}>
+        <View style={styles.sfondoPopup}>
+          <View style={styles.cartaPopupFormazione}>
+            <View style={styles.intestazionePopup}>
+              <Text style={styles.titoloPopup}>Chi è in campo ({selezioneTemporanea.size}/6)</Text>
+              <Pressable onPress={() => setPopupFormazioneAperto(false)}><Text style={styles.chiudiPopup}>✕</Text></Pressable>
+            </View>
+            <FlatList
+              data={atlete}
+              keyExtractor={(a) => a.id}
+              renderItem={({ item }) => (
+                <Pressable style={styles.rigaSelezioneFormazione} onPress={() => toggleSelezioneTemporanea(item.id)}>
+                  <View style={[styles.checkboxFormazione, selezioneTemporanea.has(item.id) && styles.checkboxFormazioneAttivo]}>
+                    {selezioneTemporanea.has(item.id) && <Text style={styles.checkboxFormazioneSpunta}>✓</Text>}
+                  </View>
+                  <Text style={styles.rigaSelezioneFormazioneTesto}>{item.numero_maglia ? `#${item.numero_maglia} ` : ""}{item.nome} {item.cognome}</Text>
+                </Pressable>
+              )}
+            />
+            <Pressable style={styles.bottoneSalvaFormazione} onPress={salvaFormazione}>
+              <Text style={styles.bottoneSalvaFormazioneTesto}>Salva formazione</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -288,4 +354,18 @@ const styles = StyleSheet.create({
   etichettaLog: { color: brand.colors.muted, fontSize: 12, textTransform: "uppercase", marginTop: 4 },
   rigaLog: { paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: brand.colors.border },
   rigaLogTesto: { color: brand.colors.onSurfaceSecondary, fontSize: 13 },
+  rigaFormazione: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  linkFormazione: { color: brand.colors.brandSecondary, fontSize: 12, fontWeight: "600" },
+  sfondoPopup: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "flex-end" },
+  cartaPopupFormazione: { backgroundColor: brand.colors.surfaceSecondary, borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, gap: 10, maxHeight: "75%" },
+  intestazionePopup: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  titoloPopup: { color: brand.colors.onSurface, fontSize: 16, fontWeight: "700" },
+  chiudiPopup: { color: brand.colors.muted, fontSize: 18 },
+  rigaSelezioneFormazione: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: brand.colors.border },
+  checkboxFormazione: { width: 22, height: 22, borderRadius: 5, borderWidth: 2, borderColor: brand.colors.brand, alignItems: "center", justifyContent: "center" },
+  checkboxFormazioneAttivo: { backgroundColor: brand.colors.brand },
+  checkboxFormazioneSpunta: { color: "#000", fontWeight: "800", fontSize: 13 },
+  rigaSelezioneFormazioneTesto: { color: brand.colors.onSurface, fontSize: 14 },
+  bottoneSalvaFormazione: { backgroundColor: brand.colors.brand, padding: 12, borderRadius: 10, alignItems: "center", marginTop: 8 },
+  bottoneSalvaFormazioneTesto: { color: "#000", fontWeight: "700" },
 });

@@ -18,6 +18,7 @@ export default function Partite() {
   const [mostraSporteasy, setMostraSporteasy] = useState(false);
   const [linkSporteasy, setLinkSporteasy] = useState("");
   const [sincronizzando, setSincronizzando] = useState(false);
+  const [ultimoDettaglioSync, setUltimoDettaglioSync] = useState<{ titolo: string; tipo: string }[]>([]);
 
   const carica = useCallback(async () => {
     if (!team) return;
@@ -77,9 +78,10 @@ export default function Partite() {
     try {
       const r = await sincronizzaSporteasy(team.id);
       if (r.errore) { Alert.alert("Sincronizzazione fallita", r.messaggio ?? "Errore sconosciuto"); return; }
+      setUltimoDettaglioSync(r.dettaglioClassificazione ?? []);
       Alert.alert(
         "Sincronizzazione completata",
-        `Allenamenti: ${r.allenamentiCreati} nuovi, ${r.allenamentiAggiornati} aggiornati.\nPartite: ${r.partiteCreate} nuove, ${r.partiteAggiornate} aggiornate.\n(${r.totaleEventiNelCalendario} eventi trovati nel calendario)`,
+        `Allenamenti: ${r.allenamentiCreati} nuovi, ${r.allenamentiAggiornati} aggiornati.\nPartite: ${r.partiteCreate} nuove, ${r.partiteAggiornate} aggiornate.\n(${r.totaleEventiNelCalendario} eventi trovati nel calendario — vedi sotto come sono stati classificati)`,
       );
       carica();
     } catch (e) {
@@ -123,6 +125,16 @@ export default function Partite() {
               </View>
               {integrazione?.ultimo_esito && integrazione.ultimo_esito !== "ok" && (
                 <Text style={styles.erroreTesto}>Ultimo tentativo non riuscito: {integrazione.ultimo_esito}</Text>
+              )}
+              {ultimoDettaglioSync.length > 0 && (
+                <View style={{ marginTop: 8, gap: 2 }}>
+                  <Text style={styles.nota}>Come sono stati classificati gli eventi trovati (se qualcosa è finito nella categoria sbagliata, segnalamelo così affino la regola):</Text>
+                  {ultimoDettaglioSync.map((d, i) => (
+                    <Text key={i} style={styles.rigaClassificazione}>
+                      <Text style={d.tipo === "partita" ? styles.tagPartita : styles.tagAllenamento}>{d.tipo === "partita" ? "PARTITA" : "ALLENAMENTO"}</Text> — {d.titolo}
+                    </Text>
+                  ))}
+                </View>
               )}
             </View>
           )}
@@ -180,6 +192,9 @@ const styles = StyleSheet.create({
   rigaEspandi: { paddingVertical: 2 },
   rigaEspandiTesto: { color: brand.colors.brandSecondary, fontSize: 13, fontWeight: "600" },
   erroreTesto: { color: brand.colors.error, fontSize: 12 },
+  rigaClassificazione: { color: brand.colors.onSurfaceSecondary, fontSize: 12 },
+  tagPartita: { color: brand.colors.brand, fontWeight: "700" },
+  tagAllenamento: { color: brand.colors.brandSecondary, fontWeight: "700" },
   cardAndamento: { backgroundColor: brand.colors.surfaceSecondary, borderRadius: 12, padding: 12, gap: 6 },
   sottotitoloSezione: { color: brand.colors.onSurface, fontSize: 14, fontWeight: "700" },
   rigaAndamento: { flexDirection: "row", justifyContent: "space-between", paddingVertical: 4, borderBottomWidth: 1, borderBottomColor: brand.colors.border },

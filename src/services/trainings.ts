@@ -67,4 +67,31 @@ export async function elencaRpeAllenamento(trainingId: string): Promise<Rpe[]> {
   return data ?? [];
 }
 
+export interface StoricoPresenzaRiga {
+  training_id: string;
+  titolo: string;
+  data: string;
+  presente: boolean | null;
+  rpe: number | null;
+}
+
+/** Storico personale (per l'atleta): la RLS restituisce solo le proprie righe, mai quelle delle compagne — nessun filtro aggiuntivo necessario qui. */
+export async function elencaMioStoricoPresenze(athleteId: string, limite = 20): Promise<StoricoPresenzaRiga[]> {
+  const [{ data: presenze, error: e1 }, { data: rpeRighe, error: e2 }] = await Promise.all([
+    supabaseClient.from("attendance").select("training_id, presente, trainings(titolo, data)").eq("athlete_id", athleteId).order("registrato_il", { ascending: false }).limit(limite),
+    supabaseClient.from("rpe").select("training_id, valore").eq("athlete_id", athleteId),
+  ]);
+  if (e1) throw e1;
+  if (e2) throw e2;
+
+  const mappaRpe = Object.fromEntries((rpeRighe ?? []).map((r) => [r.training_id, r.valore]));
+  return (presenze ?? []).map((p) => ({
+    training_id: p.training_id,
+    titolo: (p.trainings as unknown as { titolo: string; data: string })?.titolo ?? "Allenamento",
+    data: (p.trainings as unknown as { titolo: string; data: string })?.data ?? "",
+    presente: p.presente,
+    rpe: mappaRpe[p.training_id] ?? null,
+  }));
+}
+
 export type { Athlete };

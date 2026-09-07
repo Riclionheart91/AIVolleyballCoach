@@ -1982,3 +1982,144 @@ create index if not exists idx_team_invites_email_lower on team_invites (lower(e
 -- ascendente oltre a quella discendente sulle stesse colonne.
 
 
+-- ============================================================
+-- 0008 — Pianificazione allenamenti
+--
+-- Aggiunge quanto mancava per pianificare davvero una sessione (non
+-- solo titolo+data): argomento/tema, e per ogni esercizio inserito la
+-- durata in minuti — così si vede il totale della sessione mentre la
+-- si costruisce. Nessuna tabella nuova: additivo su trainings e
+-- training_exercises già esistenti.
+-- ============================================================
+
+alter table trainings add column if not exists argomento text;
+alter table trainings add column if not exists durata_totale_minuti integer;
+
+alter table training_exercises add column if not exists durata_minuti integer;
+
+-- RPC per la generazione via AI: non genera nulla lato database (serve
+-- l'Edge Function ai-router per il vero e proprio prompt), ma questa
+-- funzione applica in un colpo solo la proposta che l'allenatore ha
+-- confermato — sostituendo l'elenco esercizi della sessione con quello
+-- proposto/modificato, invece di più insert separate dal client.
+create or replace function imposta_piano_allenamento(
+  p_training_id uuid,
+  p_argomento text,
+  p_esercizi jsonb -- [{"exercise_id": "...", "durata_minuti": 10, "note": "...", "ordine": 0}, ...]
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_team_id uuid;
+  v_esercizio jsonb;
+  v_totale integer;
+begin
+  if auth.uid() is null then raise exception 'Utente non autenticato'; end if;
+  select team_id into v_team_id from trainings where id = p_training_id;
+  if v_team_id is null then raise exception 'Allenamento non trovato'; end if;
+  if not is_team_coach(v_team_id) then raise exception 'Permesso negato'; end if;
+
+  delete from training_exercises where training_id = p_training_id;
+
+  select coalesce(sum((e->>'durata_minuti')::integer), 0) into v_totale
+  from jsonb_array_elements(p_esercizi) e;
+
+  for v_esercizio in select * from jsonb_array_elements(p_esercizi)
+  loop
+    if not exists (select 1 from exercises where id = (v_esercizio->>'exercise_id')::uuid and team_id = v_team_id) then
+      raise exception 'Uno degli esercizi indicati non appartiene a questa squadra';
+    end if;
+    insert into training_exercises (training_id, exercise_id, durata_minuti, note, ordine)
+    values (
+      p_training_id,
+      (v_esercizio->>'exercise_id')::uuid,
+      (v_esercizio->>'durata_minuti')::integer,
+      coalesce(v_esercizio->>'note', ''),
+      coalesce((v_esercizio->>'ordine')::integer, 0)
+    );
+  end loop;
+
+  update trainings set argomento = p_argomento, durata_totale_minuti = v_totale where id = p_training_id;
+end;
+$$;
+
+revoke execute on function imposta_piano_allenamento(uuid, text, jsonb) from anon;
+grant execute on function imposta_piano_allenamento(uuid, text, jsonb) to authenticated;
+
+-- ============================================================
+-- 0009 — Formazione in campo (scouting avanzato, prima parte)
+--
+-- Risponde a: "lo scouting mi dà tutti i giocatori e non solo quelli
+-- che possono eseguire l'azione". Implementata la parte "chi è
+-- davvero in campo ora" (formazione/sostituzioni), filtrando la
+-- striscia atlete dello scouting live a queste sole 6.
+--
+-- NON implementata in questa passata la rotazione automatica per
+-- ruolo di servizio (chi sta servendo/ricevendo secondo le regole
+-- ufficiali di rotazione) — è un ulteriore livello di complessità
+-- (macchina a stati sul turno di servizio, cambio a ogni side-out)
+-- rimandato di proposito: la formazione già riduce drasticamente la
+-- lista a un tap, la rotazione automatica è un affinamento successivo.
+-- ============================================================
+
+create table if not exists match_set_lineups (
+  id uuid primary key default gen_random_uuid(),
+  set_id uuid not null references match_sets on delete cascade,
+  athlete_id uuid not null references athletes on delete cascade,
+  in_campo boolean not null default true,
+  aggiornato_il timestamptz not null default now(),
+  unique (set_id, athlete_id)
+);
+
+create index if not exists idx_match_set_lineups_set on match_set_lineups (set_id) where in_campo = true;
+
+alter table match_set_lineups enable row level security;
+
+drop policy if exists "match_set_lineups_select_ristretta" on match_set_lineups;
+create policy "match_set_lineups_select_ristretta" on match_set_lineups for select using (
+  is_team_staff_visione_piena((select team_id from match_sets ms join matches m on m.id = ms.match_id where ms.id = set_id))
+  or athlete_id = mio_atleta_id((select team_id from match_sets ms join matches m on m.id = ms.match_id where ms.id = set_id))
+  or is_superuser()
+);
+
+-- Nessuna policy insert/update/delete diretta per il client: si passa
+-- sempre dalla RPC qui sotto (stesso pattern di registra_evento), che
+-- verifica coach + coerenza di team tra set/atleta.
+create or replace function imposta_formazione_set(p_set_id uuid, p_athlete_ids uuid[])
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_team_id uuid;
+  v_athlete_id uuid;
+begin
+  if auth.uid() is null then raise exception 'Utente non autenticato'; end if;
+
+  select m.team_id into v_team_id from match_sets ms join matches m on m.id = ms.match_id where ms.id = p_set_id;
+  if v_team_id is null then raise exception 'Set non trovato'; end if;
+  if not is_team_coach(v_team_id) then raise exception 'Permesso negato'; end if;
+
+  foreach v_athlete_id in array p_athlete_ids
+  loop
+    if not exists (select 1 from athletes where id = v_athlete_id and team_id = v_team_id) then
+      raise exception 'Una delle atlete indicate non appartiene a questa squadra';
+    end if;
+  end loop;
+
+  delete from match_set_lineups where set_id = p_set_id;
+
+  foreach v_athlete_id in array p_athlete_ids
+  loop
+    insert into match_set_lineups (set_id, athlete_id, in_campo) values (p_set_id, v_athlete_id, true);
+  end loop;
+end;
+$$;
+
+revoke execute on function imposta_formazione_set(uuid, uuid[]) from anon;
+grant execute on function imposta_formazione_set(uuid, uuid[]) to authenticated;
+

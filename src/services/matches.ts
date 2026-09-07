@@ -56,6 +56,17 @@ export async function elencaEventiPartita(matchId: string, limite = 20): Promise
   return data ?? [];
 }
 
+export async function impostaFormazioneSet(setId: string, athleteIds: string[]): Promise<void> {
+  const { error } = await supabaseClient.rpc("imposta_formazione_set", { p_set_id: setId, p_athlete_ids: athleteIds });
+  if (error) throw error;
+}
+
+export async function elencaFormazioneSet(setId: string): Promise<string[]> {
+  const { data, error } = await supabaseClient.from("match_set_lineups").select("athlete_id").eq("set_id", setId).eq("in_campo", true);
+  if (error) throw error;
+  return (data ?? []).map((r) => r.athlete_id);
+}
+
 export interface AndamentoSquadraPartiteVoce {
   fondamentale: Skill;
   partita: string;
