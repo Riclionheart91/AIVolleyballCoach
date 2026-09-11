@@ -20,6 +20,8 @@ export default function SchedaAtleta() {
   const [numeroMaglia, setNumeroMaglia] = useState("");
   const [dataNascita, setDataNascita] = useState("");
   const [codiceFiscale, setCodiceFiscale] = useState("");
+  const [numeroLicenza, setNumeroLicenza] = useState("");
+  const [scadenzaCertMedico, setScadenzaCertMedico] = useState("");
   const [telefono, setTelefono] = useState("");
   const [emailContatto, setEmailContatto] = useState("");
   const [notePersonali, setNotePersonali] = useState("");
@@ -36,6 +38,7 @@ export default function SchedaAtleta() {
     setNome(a.nome); setCognome(a.cognome); setRuoloCampo(a.ruolo_campo);
     setNumeroMaglia(a.numero_maglia != null ? String(a.numero_maglia) : "");
     setDataNascita(a.data_nascita ?? ""); setCodiceFiscale(a.codice_fiscale ?? "");
+    setNumeroLicenza(a.numero_licenza ?? ""); setScadenzaCertMedico(a.scadenza_certificato_medico ?? "");
     setTelefono(a.telefono ?? ""); setEmailContatto(a.email_contatto ?? ""); setNotePersonali(a.note_personali ?? "");
   }
 
@@ -43,6 +46,7 @@ export default function SchedaAtleta() {
     nome !== atleta.nome || cognome !== atleta.cognome || ruoloCampo !== atleta.ruolo_campo ||
     numeroMaglia !== (atleta.numero_maglia != null ? String(atleta.numero_maglia) : "") ||
     dataNascita !== (atleta.data_nascita ?? "") || codiceFiscale !== (atleta.codice_fiscale ?? "") ||
+    numeroLicenza !== (atleta.numero_licenza ?? "") || scadenzaCertMedico !== (atleta.scadenza_certificato_medico ?? "") ||
     telefono !== (atleta.telefono ?? "") || emailContatto !== (atleta.email_contatto ?? "") || notePersonali !== (atleta.note_personali ?? "")
   );
 
@@ -62,6 +66,7 @@ export default function SchedaAtleta() {
         nome: nome.trim(), cognome: cognome.trim(), ruolo_campo: ruoloCampo,
         numero_maglia: numeroMaglia ? Number(numeroMaglia) || null : null,
         data_nascita: dataNascita || null, codice_fiscale: codiceFiscale.trim() || null,
+        numero_licenza: numeroLicenza.trim() || null, scadenza_certificato_medico: scadenzaCertMedico || null,
         telefono: telefono.trim() || null, email_contatto: emailContatto.trim() || null, note_personali: notePersonali.trim() || null,
       });
       setAtleta(aggiornato);
@@ -137,6 +142,8 @@ export default function SchedaAtleta() {
             <Campo etichetta="Numero maglia"><TextInput style={styles.input} keyboardType="numeric" value={numeroMaglia} onChangeText={setNumeroMaglia} placeholderTextColor={brand.colors.muted} /></Campo>
             <Campo etichetta="Data di nascita (AAAA-MM-GG)"><TextInput style={styles.input} value={dataNascita} onChangeText={setDataNascita} placeholder="2010-05-20" placeholderTextColor={brand.colors.muted} /></Campo>
             <Campo etichetta="Codice fiscale"><TextInput style={styles.input} autoCapitalize="characters" value={codiceFiscale} onChangeText={setCodiceFiscale} placeholderTextColor={brand.colors.muted} /></Campo>
+            <Campo etichetta="Numero di licenza"><TextInput style={styles.input} value={numeroLicenza} onChangeText={setNumeroLicenza} placeholderTextColor={brand.colors.muted} /></Campo>
+            <Campo etichetta="Scadenza certificato medico (AAAA-MM-GG)"><TextInput style={styles.input} value={scadenzaCertMedico} onChangeText={setScadenzaCertMedico} placeholder="2027-06-30" placeholderTextColor={brand.colors.muted} /></Campo>
             <Campo etichetta="Telefono"><TextInput style={styles.input} keyboardType="phone-pad" value={telefono} onChangeText={setTelefono} placeholderTextColor={brand.colors.muted} /></Campo>
             <Campo etichetta="Email"><TextInput style={styles.input} autoCapitalize="none" keyboardType="email-address" value={emailContatto} onChangeText={setEmailContatto} placeholderTextColor={brand.colors.muted} /></Campo>
             <Campo etichetta="Note"><TextInput style={[styles.input, { minHeight: 80, textAlignVertical: "top" }]} multiline value={notePersonali} onChangeText={setNotePersonali} placeholderTextColor={brand.colors.muted} /></Campo>
@@ -151,6 +158,8 @@ export default function SchedaAtleta() {
             {!!atleta.ruolo_campo && <Text style={styles.sottotitolo}>{atleta.ruolo_campo}{atleta.numero_maglia ? ` — n. ${atleta.numero_maglia}` : ""}</Text>}
             <RigaSolaLettura etichetta="Data di nascita" valore={atleta.data_nascita} />
             <RigaSolaLettura etichetta="Codice fiscale" valore={atleta.codice_fiscale} />
+            <RigaSolaLettura etichetta="Numero di licenza" valore={atleta.numero_licenza} />
+            <RigaSolaLettura etichetta="Scadenza certificato medico" valore={atleta.scadenza_certificato_medico} />
             <RigaSolaLettura etichetta="Telefono" valore={atleta.telefono} />
             <RigaSolaLettura etichetta="Email" valore={atleta.email_contatto} />
             <RigaSolaLettura etichetta="Note" valore={atleta.note_personali} />

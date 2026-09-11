@@ -33,6 +33,8 @@ export interface Athlete {
   numero_maglia: number | null;
   data_nascita: string | null;
   codice_fiscale: string | null;
+  numero_licenza: string | null;
+  scadenza_certificato_medico: string | null;
   status: "attiva" | "archiviata";
   telefono: string | null;
   email_contatto: string | null;

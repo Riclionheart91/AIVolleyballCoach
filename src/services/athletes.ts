@@ -47,6 +47,8 @@ export interface InputAtleta {
   data_nascita: string | null;
   ruolo_campo: RuoloCampo | null;
   codice_fiscale?: string | null;
+  numero_licenza?: string | null;
+  scadenza_certificato_medico?: string | null;
   telefono?: string | null;
   email_contatto?: string | null;
   note_personali?: string | null;

@@ -11,6 +11,7 @@ import {
   analizzaRighe,
   eseguiImportWizard,
   leggiFileExcel,
+  trovaColonnaFiltroTipoPersona,
   type CampoImportabile,
   type FileLetto,
   type RigaAnalizzata,
@@ -72,7 +73,8 @@ export default function ImportaAtlete() {
     setCaricamento(true);
     try {
       const atlete = await elencaAtlete(team.id);
-      setRigheAnalizzate(analizzaRighe(fileLetto.righe, mappatura, atlete));
+      const colonnaFiltro = trovaColonnaFiltroTipoPersona(fileLetto.intestazioni);
+      setRigheAnalizzate(analizzaRighe(fileLetto.righe, mappatura, atlete, colonnaFiltro));
       setPasso("revisione");
     } catch (e) {
       Alert.alert("Errore", (e as Error).message);
@@ -106,6 +108,7 @@ export default function ImportaAtlete() {
   const daAggiornare = righeAnalizzate.filter((r) => r.tipo === "aggiornamento");
   const invariate = righeAnalizzate.filter((r) => r.tipo === "invariata");
   const errori = righeAnalizzate.filter((r) => r.tipo === "errore");
+  const saltate = righeAnalizzate.filter((r) => r.tipo === "saltata");
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={{ padding: 16, gap: 16 }}>
@@ -155,7 +158,7 @@ export default function ImportaAtlete() {
           <View style={styles.card}>
             <Text style={styles.titolo}>3. Rivedi e conferma</Text>
             <Text style={styles.nota}>
-              {nuove.length} nuove · {daAggiornare.length} da aggiornare (deselezionabili) · {invariate.length} già identiche (nessuna azione) · {errori.length} scartate per errore
+              {nuove.length} nuove · {daAggiornare.length} da aggiornare (deselezionabili) · {invariate.length} già identiche (nessuna azione) · {saltate.length} non giocatrici (saltate) · {errori.length} scartate per errore
             </Text>
           </View>
 
@@ -188,6 +191,15 @@ export default function ImportaAtlete() {
               <Text style={styles.sottotitolo}>Nuove atlete da creare</Text>
               {nuove.map((riga) => (
                 <Text key={riga.chiave} style={styles.rigaAtletaNome}>+ {riga.datiFile.nome} {riga.datiFile.cognome}</Text>
+              ))}
+            </View>
+          )}
+
+          {saltate.length > 0 && (
+            <View style={styles.card}>
+              <Text style={styles.sottotitolo}>Righe non importate (non sembrano giocatrici)</Text>
+              {saltate.map((riga, i) => (
+                <Text key={i} style={styles.nota}>{riga.datiFile.nome} {riga.datiFile.cognome} — {riga.errore}</Text>
               ))}
             </View>
           )}
