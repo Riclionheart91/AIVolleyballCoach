@@ -7,6 +7,7 @@ import {
   avviaMatchConfermato,
   avviaPreparazioneMatch,
   chiServeDefaultNuovoSet,
+  chiudiMatch,
   elencaConvocati,
   elencaFormazioneConPosizioni,
   impostaConvocati,
@@ -202,7 +203,21 @@ export default function PreparaPartita() {
   }
 
   function onAnnullaChiudiPartita() {
-    confermaAzione("Annullare e chiudere la partita?", "La partita verrà chiusa senza essere mai iniziata.", "Chiudi partita", async () => {
+    // Al primo set la partita non è mai iniziata: si può eliminare del
+    // tutto. Dal secondo in poi ci sono già set giocati: eliminarla
+    // cancellerebbe anche quelli, quindi la si CHIUDE soltanto,
+    // conservando lo storico.
+    if (numeroSet > 1) {
+      confermaAzione("Chiudere la partita?", "I set già giocati restano registrati. Non sarà più possibile aggiungere eventi.", "Chiudi partita", async () => {
+        try {
+          await chiudiMatch(id!);
+          router.replace("/(tabs)/partite");
+        } catch (e) { Alert.alert("Errore", (e as Error).message); }
+      }, true);
+      return;
+    }
+
+    confermaAzione("Annullare e chiudere la partita?", "La partita verrà eliminata senza essere mai iniziata.", "Elimina partita", async () => {
       try {
         await supabaseClient.from("matches").delete().eq("id", id);
         router.replace("/(tabs)/partite");
@@ -281,7 +296,7 @@ export default function PreparaPartita() {
       <View style={styles.pieDiPagina}>
         {!avviando ? (
           <Pressable style={[styles.bottoneAvvio, !formazioneCompleta && styles.bottoneAvvioDisabilitato]} onPress={onAvvia} disabled={!formazioneCompleta}>
-            <Text style={styles.bottoneAvvioTesto}>▶ INIZIA PARTITA</Text>
+            <Text style={styles.bottoneAvvioTesto}>▶ {numeroSet === 1 ? "INIZIA PARTITA" : `INIZIA SET ${numeroSet}`}</Text>
           </Pressable>
         ) : (
           <ActivityIndicator color={brand.colors.brand} />

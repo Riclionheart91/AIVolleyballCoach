@@ -68,7 +68,7 @@ export default function PartitaLive() {
       const regole = await leggiRegolePunteggio(id);
       setRegolePunteggio(regole);
     }
-    if (attivo && m) verificaFineSetAutomatica(attivo, m);
+    if (attivo && m) verificaFineSetAutomatica(attivo, m, set);
   }, [id]);
 
   useFocusEffect(useCallback(() => { carica(); }, [carica]));
@@ -84,7 +84,7 @@ export default function PartitaLive() {
    * "ultimoPunteggioSegnalato" evita di ripetere lo stesso avviso ad
    * ogni ricarica finché il punteggio non cambia.
    */
-  function verificaFineSetAutomatica(set: MatchSet, m: Match) {
+  function verificaFineSetAutomatica(set: MatchSet, m: Match, tuttiISet: MatchSet[]) {
     if (set.concluso) return;
     const sogliaPunti = set.numero_set === 5 ? regolePunteggio.puntiSetDecisivo : regolePunteggio.puntiPerSet;
     const noiVincono = set.punti_noi >= sogliaPunti && set.punti_noi - set.punti_avversario >= 2;
@@ -95,14 +95,19 @@ export default function PartitaLive() {
     if (ultimoPunteggioSegnalato.current === chiave) return;
     ultimoPunteggioSegnalato.current = chiave;
 
-    // Set vinti finora, includendo questo che sta per concludersi.
-    const setVintiNoiOraCompreso = (m.set_vinti_noi ?? 0) + (noiVincono ? 1 : 0);
-    const setVintiLoroOraCompreso = (m.set_vinti_avversario ?? 0) + (loroVincono ? 1 : 0);
+    // Set vinti contati dai set GIÀ CONCLUSI, più questo che sta per
+    // concludersi. Il campo matches.set_vinti_noi non serve qui: viene
+    // valorizzato solo da chiudi_match(), quindi durante la partita
+    // resta a 0 e non direbbe mai che siamo a 3 set vinti.
+    const conclusiVintiNoi = tuttiISet.filter((s) => s.concluso && s.punti_noi > s.punti_avversario).length;
+    const conclusiVintiLoro = tuttiISet.filter((s) => s.concluso && s.punti_avversario > s.punti_noi).length;
+    const setVintiNoiOraCompreso = conclusiVintiNoi + (noiVincono ? 1 : 0);
+    const setVintiLoroOraCompreso = conclusiVintiLoro + (loroVincono ? 1 : 0);
     const partitaFinita = setVintiNoiOraCompreso >= 3 || setVintiLoroOraCompreso >= 3;
 
     confermaAzione(
       partitaFinita ? "Partita conclusa!" : "Set concluso!",
-      `${set.punti_noi} - ${set.punti_avversario}. ${partitaFinita ? "Chiudere la partita?" : "Passare alla formazione del prossimo set?"}`,
+      `${set.punti_noi} - ${set.punti_avversario} (set ${setVintiNoiOraCompreso}-${setVintiLoroOraCompreso}). ${partitaFinita ? "Chiudere la partita?" : "Passare alla formazione del prossimo set?"}`,
       partitaFinita ? "Chiudi partita" : "Prossimo set",
       async () => {
         try {
