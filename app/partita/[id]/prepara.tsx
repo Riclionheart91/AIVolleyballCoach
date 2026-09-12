@@ -219,7 +219,8 @@ export default function PreparaPartita() {
 
     confermaAzione("Annullare e chiudere la partita?", "La partita verrà eliminata senza essere mai iniziata.", "Elimina partita", async () => {
       try {
-        await supabaseClient.from("matches").delete().eq("id", id);
+        const { error } = await supabaseClient.from("matches").delete().eq("id", id);
+        if (error) throw error;
         router.replace("/(tabs)/partite");
       } catch (e) { Alert.alert("Errore", (e as Error).message); }
     }, true);

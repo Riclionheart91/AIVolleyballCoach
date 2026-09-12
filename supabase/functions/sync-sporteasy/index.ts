@@ -167,11 +167,17 @@ function analizzaIcs(testo: string): VEvent[] {
     const rruleTesto = estraiCampo(corpo, "RRULE");
     if (!uid || !dtstartTesto) continue;
 
-    const dataInizio = parsaDataIcs(dtstartTesto);
+    // Il fuso orario dichiarato sulla riga DTSTART (es.
+    // "DTSTART;TZID=Europe/Rome:...") va letto e applicato, altrimenti
+    // l'orario slitta.
+    const rigaDtstart = corpo.match(/^DTSTART[^\n]*$/m)?.[0] ?? "";
+    const fuso = rigaDtstart.match(/TZID=([^:;]+)/)?.[1] ?? null;
+
+    const dataInizio = parsaDataIcs(dtstartTesto, fuso);
     if (!dataInizio) continue;
 
     if (rruleTesto) {
-      eventi.push(...espandiRicorrenza(uid, summary || "Evento SportEasy", dataInizio, rruleTesto));
+      eventi.push(...espandiRicorrenza(uid, summary || "Evento SportEasy", dataInizio, rruleTesto, fuso));
     } else {
       eventi.push({ uid, summary: summary || "Evento SportEasy", dataInizio });
     }
@@ -189,45 +195,49 @@ function analizzaIcs(testo: string): VEvent[] {
  * allenamenti fissi settimanali; altre frequenze vengono lasciate come
  * singola occorrenza (meglio un'importazione parziale che nessuna).
  */
-function espandiRicorrenza(uidBase: string, summary: string, primaOccorrenza: string, rrule: string): VEvent[] {
+function espandiRicorrenza(uidBase: string, summary: string, primaOccorrenza: string, rrule: string, fuso?: string | null): VEvent[] {
   const parametri = Object.fromEntries(rrule.split(";").map((p) => { const [k, v] = p.split("="); return [k, v]; }));
   if (parametri.FREQ !== "WEEKLY") return [{ uid: uidBase, summary, dataInizio: primaOccorrenza }];
 
   const giorniSettimana = parametri.BYDAY
     ? parametri.BYDAY.split(",").map((g) => GIORNI_ICS[g]).filter((g) => g !== undefined)
-    : [new Date(primaOccorrenza).getDay()];
+    : [new Date(primaOccorrenza).getUTCDay()];
 
   const dataInizio = new Date(primaOccorrenza);
-  const oraOre = dataInizio.getHours(), oraMin = dataInizio.getMinutes();
+  // Ore/minuti presi in UTC: "primaOccorrenza" è già l'istante UTC
+  // corretto, e replicarlo alla stessa ora UTC nei giorni successivi
+  // mantiene la stessa ora locale (salvo il salto dell'ora legale, che
+  // sposta di un'ora le occorrenze oltre il cambio — accettabile, e
+  // comunque correggibile a mano sul singolo allenamento).
+  const oraOre = dataInizio.getUTCHours(), oraMin = dataInizio.getUTCMinutes();
 
   let dataFine: Date;
   if (parametri.UNTIL) {
-    dataFine = parsaDataIcs(parametri.UNTIL) ? new Date(parsaDataIcs(parametri.UNTIL)!) : addGiorni(dataInizio, FINESTRA_ESPANSIONE_GIORNI);
+    const untilIso = parsaDataIcs(parametri.UNTIL, fuso);
+    dataFine = untilIso ? new Date(untilIso) : addGiorni(dataInizio, FINESTRA_ESPANSIONE_GIORNI);
   } else {
     dataFine = addGiorni(dataInizio, FINESTRA_ESPANSIONE_GIORNI);
   }
   const limiteConteggio = parametri.COUNT ? parseInt(parametri.COUNT, 10) : Infinity;
 
   const occorrenze: VEvent[] = [];
-  let cursore = new Date(dataInizio);
-  cursore.setHours(0, 0, 0, 0);
+  const cursore = new Date(Date.UTC(dataInizio.getUTCFullYear(), dataInizio.getUTCMonth(), dataInizio.getUTCDate()));
   let generate = 0;
 
   while (cursore <= dataFine && generate < limiteConteggio && generate < 200) {
-    if (giorniSettimana.includes(cursore.getDay()) && cursore >= startOfDay(dataInizio)) {
-      const occorrenza = new Date(cursore);
-      occorrenza.setHours(oraOre, oraMin, 0, 0);
-      const dataStr = occorrenza.toISOString().slice(0, 10);
-      occorrenze.push({ uid: `${uidBase}-${dataStr}`, summary, dataInizio: occorrenza.toISOString() });
-      generate++;
+    if (giorniSettimana.includes(cursore.getUTCDay())) {
+      const occorrenza = new Date(Date.UTC(cursore.getUTCFullYear(), cursore.getUTCMonth(), cursore.getUTCDate(), oraOre, oraMin));
+      if (occorrenza >= dataInizio) {
+        occorrenze.push({ uid: `${uidBase}-${occorrenza.toISOString().slice(0, 10)}`, summary, dataInizio: occorrenza.toISOString() });
+        generate++;
+      }
     }
-    cursore = addGiorni(cursore, 1);
+    cursore.setUTCDate(cursore.getUTCDate() + 1);
   }
 
   return occorrenze.length > 0 ? occorrenze : [{ uid: uidBase, summary, dataInizio: primaOccorrenza }];
 }
 
-function startOfDay(d: Date): Date { const x = new Date(d); x.setHours(0, 0, 0, 0); return x; }
 function addGiorni(d: Date, n: number): Date { const x = new Date(d); x.setDate(x.getDate() + n); return x; }
 
 function estraiCampo(corpo: string, nome: string): string | null {
@@ -248,12 +258,66 @@ function decodificaTestoIcs(testo: string | null): string {
   return testo.replace(/\\n/g, " ").replace(/\\,/g, ",").replace(/\\;/g, ";").replace(/\\\\/g, "\\");
 }
 
-function parsaDataIcs(valore: string): string | null {
+/**
+ * Converte una data/ora "naive" espressa in un fuso orario indicato
+ * (TZID) nell'istante UTC corrispondente. Serve perché
+ * "DTSTART;TZID=Europe/Rome:20260915T183000" significa 18:30 ORA
+ * ITALIANA: interpretarlo come UTC (come faceva la versione
+ * precedente) faceva slittare tutti gli allenamenti di 1-2 ore, a
+ * seconda dell'ora legale.
+ */
+function daFusoOrarioAUtc(anno: number, mese: number, giorno: number, ora: number, minuto: number, secondo: number, fuso: string): Date {
+  // Primo tentativo: assumiamo che i componenti siano già UTC, poi
+  // misuriamo di quanto il fuso indicato si discosta in quell'istante
+  // e correggiamo. Un secondo giro copre i casi al confine del cambio
+  // di ora legale, dove l'offset del primo tentativo può essere quello
+  // "sbagliato" dei due.
+  let istante = Date.UTC(anno, mese - 1, giorno, ora, minuto, secondo);
+  for (let i = 0; i < 2; i++) {
+    const scarto = scartoFusoOrario(new Date(istante), fuso);
+    const corretto = Date.UTC(anno, mese - 1, giorno, ora, minuto, secondo) - scarto;
+    if (corretto === istante) break;
+    istante = corretto;
+  }
+  return new Date(istante);
+}
+
+/** Di quanti millisecondi il fuso indicato è avanti rispetto a UTC, nell'istante dato. */
+function scartoFusoOrario(istante: Date, fuso: string): number {
+  try {
+    const formattatore = new Intl.DateTimeFormat("en-US", {
+      timeZone: fuso, hour12: false,
+      year: "numeric", month: "2-digit", day: "2-digit",
+      hour: "2-digit", minute: "2-digit", second: "2-digit",
+    });
+    const p: Record<string, string> = {};
+    for (const parte of formattatore.formatToParts(istante)) p[parte.type] = parte.value;
+    const comeUtc = Date.UTC(
+      Number(p.year), Number(p.month) - 1, Number(p.day),
+      Number(p.hour) % 24, Number(p.minute), Number(p.second),
+    );
+    return comeUtc - istante.getTime();
+  } catch {
+    // Fuso non riconosciuto: meglio nessuna correzione che un errore.
+    return 0;
+  }
+}
+
+function parsaDataIcs(valore: string, fuso?: string | null): string | null {
   const m = valore.match(/^(\d{4})(\d{2})(\d{2})(?:T(\d{2})(\d{2})(\d{2})(Z)?)?$/);
   if (!m) return null;
   const [, anno, mese, giorno, ora = "00", min = "00", sec = "00", zulu] = m;
-  const iso = `${anno}-${mese}-${giorno}T${ora}:${min}:${sec}${zulu ? "Z" : ""}`;
-  const data = new Date(iso);
+
+  // Con la "Z" finale è già UTC; con un TZID va convertito; senza né
+  // l'uno né l'altro è "ora locale fluttuante" e la trattiamo come ora
+  // italiana, che è il caso reale per un calendario di una squadra
+  // italiana.
+  if (!zulu) {
+    const data = daFusoOrarioAUtc(Number(anno), Number(mese), Number(giorno), Number(ora), Number(min), Number(sec), fuso || "Europe/Rome");
+    return isNaN(data.getTime()) ? null : data.toISOString();
+  }
+
+  const data = new Date(`${anno}-${mese}-${giorno}T${ora}:${min}:${sec}Z`);
   return isNaN(data.getTime()) ? null : data.toISOString();
 }
 
