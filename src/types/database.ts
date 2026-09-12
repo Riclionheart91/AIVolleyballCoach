@@ -153,8 +153,33 @@ export interface Match {
   set_vinti_noi: number;
   set_vinti_avversario: number;
   sporteasy_uid: string | null;
+  campionato_id: string | null;
+  tipo_gara: "campionato" | "amichevole";
   creato_il: string;
   creato_da: string | null;
+}
+
+export interface Campionato {
+  id: string;
+  team_id: string;
+  nome: string;
+  federazione: "FIPAV" | "PGS" | "CSI" | "ALTRO";
+  punti_per_set: number;
+  punti_set_decisivo: number;
+  numero_liberi_max: number;
+  numero_sostituzioni_max_per_set: number;
+  numero_maglia_max: number;
+  distinta_min_giocatrici: number;
+  distinta_max_giocatrici: number;
+  attivo: boolean;
+  creato_il: string;
+}
+
+export interface MatchConvocato {
+  id: string;
+  match_id: string;
+  athlete_id: string;
+  is_libero: boolean;
 }
 
 export interface TeamIntegration {
@@ -171,6 +196,7 @@ export interface MatchSet {
   punti_noi: number;
   punti_avversario: number;
   concluso: boolean;
+  squadra_al_servizio: "noi" | "avversario" | null;
 }
 
 export interface MatchEvent {
@@ -189,6 +215,7 @@ export interface MatchSetLineup {
   set_id: string;
   athlete_id: string;
   in_campo: boolean;
+  posizione: number | null;
   aggiornato_il: string;
 }
 

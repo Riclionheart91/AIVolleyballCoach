@@ -2,18 +2,22 @@ import { useCallback, useState } from "react";
 import { View, Text, FlatList, TextInput, Pressable, StyleSheet, RefreshControl, Alert, ActivityIndicator } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { useAuth } from "@/src/context/AuthContext";
-import { andamentoSquadraPartite, avviaMatch, creaMatch, elencaPartite, type AndamentoSquadraPartiteVoce } from "@/src/services/matches";
+import { andamentoSquadraPartite, creaMatch, elencaPartite, type AndamentoSquadraPartiteVoce } from "@/src/services/matches";
+import { elencaCampionati } from "@/src/services/championships";
 import { impostaLinkSporteasy, leggiIntegrazione, sincronizzaSporteasy } from "@/src/services/sporteasy";
 import { brand } from "@/src/config";
-import type { Match, TeamIntegration } from "@/src/types/database";
+import type { Campionato, Match, TeamIntegration } from "@/src/types/database";
 
 export default function Partite() {
   const { team, puoScrivere } = useAuth();
   const [partite, setPartite] = useState<Match[]>([]);
   const [andamento, setAndamento] = useState<AndamentoSquadraPartiteVoce[]>([]);
+  const [campionati, setCampionati] = useState<Campionato[]>([]);
   const [caricamento, setCaricamento] = useState(true);
   const [avversario, setAvversario] = useState("");
   const [luogo, setLuogo] = useState<"casa" | "trasferta">("casa");
+  const [tipoGara, setTipoGara] = useState<"campionato" | "amichevole">("amichevole");
+  const [campionatoId, setCampionatoId] = useState<string | null>(null);
   const [integrazione, setIntegrazione] = useState<TeamIntegration | null>(null);
   const [mostraSporteasy, setMostraSporteasy] = useState(false);
   const [linkSporteasy, setLinkSporteasy] = useState("");
@@ -24,14 +28,16 @@ export default function Partite() {
     if (!team) return;
     setCaricamento(true);
     try {
-      const [listaPartite, listaAndamento, integ] = await Promise.all([
+      const [listaPartite, listaAndamento, integ, listaCampionati] = await Promise.all([
         elencaPartite(team.id),
         andamentoSquadraPartite(team.id).catch(() => []),
         puoScrivere ? leggiIntegrazione(team.id).catch(() => null) : Promise.resolve(null),
+        elencaCampionati(team.id).catch(() => []),
       ]);
       setPartite(listaPartite);
       setAndamento(listaAndamento);
       setIntegrazione(integ);
+      setCampionati(listaCampionati);
       if (integ?.sporteasy_ical_url) setLinkSporteasy(integ.sporteasy_ical_url);
     } finally {
       setCaricamento(false);
@@ -43,21 +49,18 @@ export default function Partite() {
   async function nuovaPartita() {
     if (!team || !avversario.trim()) return;
     try {
-      const matchId = await creaMatch(team.id, avversario.trim(), new Date().toISOString(), luogo);
+      const matchId = await creaMatch(team.id, avversario.trim(), new Date().toISOString(), luogo, tipoGara === "campionato" ? campionatoId : null, tipoGara);
       setAvversario("");
-      router.push(`/partita/${matchId}`);
+      router.push(`/partita/${matchId}/prepara`);
     } catch (e) {
       Alert.alert("Errore", (e as Error).message);
     }
   }
 
-  async function apriPartita(m: Match) {
+  function apriPartita(m: Match) {
     if (m.stato === "programmata") {
-      if (!puoScrivere) { Alert.alert("Partita non ancora iniziata", "L'allenatore non ha ancora avviato lo scouting per questa partita."); return; }
-      try {
-        await avviaMatch(m.id);
-        router.push(`/partita/${m.id}`);
-      } catch (e) { Alert.alert("Errore", (e as Error).message); }
+      if (!puoScrivere) { Alert.alert("Partita non ancora iniziata", "L'allenatore non ha ancora preparato questa partita."); return; }
+      router.push(`/partita/${m.id}/prepara`);
       return;
     }
     router.push(`/partita/${m.id}`);
@@ -103,9 +106,27 @@ export default function Partite() {
                   <Text style={[styles.chipTesto, luogo === l && styles.chipTestoAttivo]}>{l === "casa" ? "Casa" : "Trasferta"}</Text>
                 </Pressable>
               ))}
+              {(["amichevole", "campionato"] as const).map((t) => (
+                <Pressable key={t} onPress={() => setTipoGara(t)} style={[styles.chip, tipoGara === t && styles.chipAttivo]}>
+                  <Text style={[styles.chipTesto, tipoGara === t && styles.chipTestoAttivo]}>{t === "amichevole" ? "Amichevole" : "Campionato"}</Text>
+                </Pressable>
+              ))}
             </View>
-            <Pressable style={styles.bottone} onPress={nuovaPartita}>
-              <Text style={styles.bottoneTesto}>Inizia partita adesso (scouting live)</Text>
+            {tipoGara === "campionato" && (
+              <View style={styles.selettoreRiga}>
+                {campionati.length === 0 ? (
+                  <Text style={styles.nota}>Nessun campionato configurato — aggiungine uno da Impostazioni, oppure procedi come amichevole.</Text>
+                ) : (
+                  campionati.map((c) => (
+                    <Pressable key={c.id} onPress={() => setCampionatoId(c.id)} style={[styles.chip, campionatoId === c.id && styles.chipAttivo]}>
+                      <Text style={[styles.chipTesto, campionatoId === c.id && styles.chipTestoAttivo]}>{c.nome}</Text>
+                    </Pressable>
+                  ))
+                )}
+              </View>
+            )}
+            <Pressable style={styles.bottone} onPress={nuovaPartita} disabled={!avversario.trim()}>
+              <Text style={styles.bottoneTesto}>Crea partita (poi convocati e formazione)</Text>
             </Pressable>
           </View>
 
@@ -163,10 +184,10 @@ export default function Partite() {
             <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
               <Text style={styles.cardTitolo}>vs {item.avversario}</Text>
               <Text style={[styles.badge, item.stato === "in_corso" && styles.badgeInCorso, item.stato === "programmata" && styles.badgeProgrammata]}>
-                {item.stato === "programmata" ? "da iniziare" : item.stato}
+                {item.stato === "programmata" ? "da preparare" : item.stato}
               </Text>
             </View>
-            <Text style={styles.cardSotto}>{new Date(item.data).toLocaleDateString("it-IT")} — {item.luogo}{item.sporteasy_uid ? " · da SportEasy" : ""}</Text>
+            <Text style={styles.cardSotto}>{new Date(item.data).toLocaleDateString("it-IT")} — {item.luogo} — {item.tipo_gara}{item.sporteasy_uid ? " · da SportEasy" : ""}</Text>
             {item.stato === "conclusa" && <Text style={styles.cardRisultato}>Set: {item.set_vinti_noi} - {item.set_vinti_avversario}</Text>}
           </Pressable>
         )}
@@ -184,7 +205,7 @@ const styles = StyleSheet.create({
   bottoneTesto: { color: "#000", fontWeight: "700" },
   bottoneSecondario: { borderColor: brand.colors.brand, borderWidth: 1, padding: 10, borderRadius: 8, alignItems: "center", flex: 1 },
   bottoneSecondarioTesto: { color: brand.colors.brand, fontWeight: "600" },
-  selettoreRiga: { flexDirection: "row", gap: 8 },
+  selettoreRiga: { flexDirection: "row", gap: 8, flexWrap: "wrap" },
   chip: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 16, backgroundColor: brand.colors.surfaceTertiary },
   chipAttivo: { backgroundColor: brand.colors.brand },
   chipTesto: { color: brand.colors.onSurfaceSecondary, fontSize: 13 },
