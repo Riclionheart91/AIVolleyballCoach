@@ -197,6 +197,7 @@ export interface MatchSet {
   punti_avversario: number;
   concluso: boolean;
   squadra_al_servizio: "noi" | "avversario" | null;
+  chi_ha_servito_per_primo: "noi" | "avversario" | null;
 }
 
 export interface MatchEvent {
@@ -217,6 +218,28 @@ export interface MatchSetLineup {
   in_campo: boolean;
   posizione: number | null;
   aggiornato_il: string;
+}
+
+export interface PianoAnnuale {
+  id: string;
+  team_id: string;
+  season_id: string | null;
+  titolo: string;
+  contenuto: string;
+  generato_da_ai: boolean;
+  ultima_proposta_il: string | null;
+  creato_il: string;
+  aggiornato_il: string;
+}
+
+export interface PropostaAggiornamentoPiano {
+  id: string;
+  piano_id: string;
+  contenuto_proposto: string;
+  motivo: string;
+  stato: "pendente" | "accettata" | "rifiutata";
+  creato_il: string;
+  decisa_il: string | null;
 }
 
 // Placeholder minimale: non generiamo il tipo Database completo via CLI

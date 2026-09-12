@@ -6,6 +6,7 @@ import { elencaAtlete } from "@/src/services/athletes";
 import {
   avviaMatchConfermato,
   avviaPreparazioneMatch,
+  chiServeDefaultNuovoSet,
   elencaConvocati,
   elencaFormazioneConPosizioni,
   impostaConvocati,
@@ -22,12 +23,15 @@ export default function PreparaPartita() {
   const { team } = useAuth();
   const [match, setMatch] = useState<Match | null>(null);
   const [setId, setSetId] = useState<string | null>(null);
+  const [numeroSet, setNumeroSet] = useState(1);
   const [atlete, setAtlete] = useState<Athlete[]>([]);
   const [convocateIds, setConvocateIds] = useState<Set<string>>(new Set());
   const [liberoIds, setLiberoIds] = useState<Set<string>>(new Set());
-  const [posizioni, setPosizioni] = useState<Record<number, string>>({}); // posizione -> athleteId
+  const [posizioni, setPosizioni] = useState<Record<number, string>>({});
   const [posizioneInModifica, setPosizioneInModifica] = useState<number | null>(null);
   const [chiServe, setChiServe] = useState<"noi" | "avversario">("noi");
+  const [chiServeRichiesto, setChiServeRichiesto] = useState(true); // false = auto-dedotto, non richiesto (set 2-4)
+  const [mostraFormazione, setMostraFormazione] = useState(false); // "pulsante dedicato": la formazione si apre solo dopo averlo premuto
   const [caricamento, setCaricamento] = useState(true);
   const [salvandoConvocati, setSalvandoConvocati] = useState(false);
   const [avviando, setAvviando] = useState(false);
@@ -41,6 +45,9 @@ export default function PreparaPartita() {
 
       const nuovoSetId = await avviaPreparazioneMatch(id);
       setSetId(nuovoSetId);
+      const { data: setRow } = await supabaseClient.from("match_sets").select("numero_set").eq("id", nuovoSetId).single();
+      const numero = setRow?.numero_set ?? 1;
+      setNumeroSet(numero);
 
       const [listaAtlete, convocati, formazioneAttuale] = await Promise.all([
         elencaAtlete(team.id),
@@ -55,6 +62,23 @@ export default function PreparaPartita() {
       const posizioniIniziali: Record<number, string> = {};
       for (const riga of formazioneAttuale) if (riga.posizione) posizioniIniziali[riga.posizione] = riga.athlete_id;
       setPosizioni(posizioniIniziali);
+      if (Object.keys(posizioniIniziali).length > 0) setMostraFormazione(true);
+
+      // Chi serve: richiesto solo al 1° e al 5° set (per regolamento).
+      // Negli altri, si alterna in automatico rispetto al set
+      // precedente — non richiesto, mostrato solo come informazione.
+      const defaultServizio = await chiServeDefaultNuovoSet(id, numero);
+      if (defaultServizio) {
+        setChiServe(defaultServizio);
+        setChiServeRichiesto(false);
+      } else {
+        setChiServeRichiesto(true);
+      }
+
+      // I convocati si chiedono UNA SOLA VOLTA, all'avvio della partita
+      // (set 1): dal secondo set in poi sono già fissati per l'intera
+      // gara, si salta direttamente alla formazione.
+      if (numero > 1 && convocati.length > 0) setMostraFormazione(true);
     } catch (e) {
       Alert.alert("Errore", (e as Error).message);
     } finally {
@@ -97,14 +121,20 @@ export default function PreparaPartita() {
   }
 
   const atleteConvocate = atlete.filter((a) => convocateIds.has(a.id));
+  // Esclude dal selettore le convocate già posizionate in UN'ALTRA
+  // casella — richiesto esplicitamente: non deve essere possibile
+  // selezionarle due volte, nemmeno per errore.
+  const atleteDisponibiliPerPosizione = atleteConvocate.filter(
+    (a) => !Object.entries(posizioni).some(([pos, athleteId]) => athleteId === a.id && Number(pos) !== posizioneInModifica),
+  );
+
   const occupantiCampo: OccupanteCampo[] = Object.entries(posizioni).map(([pos, athleteId]) => {
     const a = atlete.find((x) => x.id === athleteId);
-    return { posizione: Number(pos), cognome: a?.cognome ?? "?", numeroMaglia: a?.numero_maglia ?? null };
+    return { posizione: Number(pos), cognome: a?.cognome ?? "?", numeroMaglia: a?.numero_maglia ?? null, ruolo: a?.ruolo_campo ?? null };
   });
 
   function assegnaPosizione(athleteId: string) {
     if (posizioneInModifica === null) return;
-    // Se quella giocatrice occupava già un'altra posizione, la libera.
     setPosizioni((prev) => {
       const nuovo = { ...prev };
       for (const p of Object.keys(nuovo)) if (nuovo[Number(p)] === athleteId) delete nuovo[Number(p)];
@@ -116,14 +146,15 @@ export default function PreparaPartita() {
 
   const formazioneCompleta = Object.keys(posizioni).length === 6;
 
-  async function salvaFormazione() {
-    if (!setId || !formazioneCompleta) return;
+  async function salvaFormazione(): Promise<boolean> {
+    if (!setId || !formazioneCompleta) return false;
     try {
       const payload = Object.fromEntries(Object.entries(posizioni).map(([p, a]) => [p, a]));
       await impostaFormazioneIniziale(setId, payload, chiServe);
-      Alert.alert("Salvata", "Formazione iniziale impostata.");
+      return true;
     } catch (e) {
       Alert.alert("Errore formazione", (e as Error).message);
+      return false;
     }
   }
 
@@ -131,7 +162,8 @@ export default function PreparaPartita() {
     if (!id) return;
     setAvviando(true);
     try {
-      await salvaFormazione();
+      const ok = await salvaFormazione();
+      if (!ok) return;
       await avviaMatchConfermato(id);
       router.replace(`/partita/${id}`);
     } catch (e) {
@@ -155,49 +187,63 @@ export default function PreparaPartita() {
   return (
     <View style={styles.container}>
       <ScrollView contentContainerStyle={{ padding: 16, gap: 16, paddingBottom: 100 }}>
-        <Text style={styles.titolo}>Prepara: vs {match.avversario}</Text>
+        <Text style={styles.titolo}>Prepara: vs {match.avversario} — Set {numeroSet}</Text>
 
-        <View style={styles.card}>
-          <Text style={styles.sottotitolo}>1. Convocati per questa gara</Text>
-          <Text style={styles.nota}>Seleziona chi è convocata (può essere meno dell'intera rosa). Segna anche chi gioca da Libero.</Text>
-          {atlete.map((a) => (
-            <View key={a.id} style={styles.rigaConvocata}>
-              <Pressable style={styles.rigaConvocataInfo} onPress={() => toggleConvocata(a.id)}>
-                <View style={[styles.checkbox, convocateIds.has(a.id) && styles.checkboxAttivo]}>
-                  {convocateIds.has(a.id) && <Text style={styles.checkboxSpunta}>✓</Text>}
-                </View>
-                <Text style={styles.rigaConvocataTesto}>{a.numero_maglia ? `#${a.numero_maglia} ` : ""}{a.nome} {a.cognome}</Text>
-              </Pressable>
-              {convocateIds.has(a.id) && (
-                <Pressable onPress={() => toggleLibero(a.id)}>
-                  <Text style={[styles.tagLibero, liberoIds.has(a.id) && styles.tagLiberoAttivo]}>LIB</Text>
+        {numeroSet === 1 ? (
+          <View style={styles.card}>
+            <Text style={styles.sottotitolo}>1. Convocati per questa gara</Text>
+            <Text style={styles.nota}>Seleziona chi è convocata (può essere meno dell'intera rosa). Segna anche chi gioca da Libero. Si chiede una sola volta: valida per tutta la partita.</Text>
+            {atlete.map((a) => (
+              <View key={a.id} style={styles.rigaConvocata}>
+                <Pressable style={styles.rigaConvocataInfo} onPress={() => toggleConvocata(a.id)}>
+                  <View style={[styles.checkbox, convocateIds.has(a.id) && styles.checkboxAttivo]}>
+                    {convocateIds.has(a.id) && <Text style={styles.checkboxSpunta}>✓</Text>}
+                  </View>
+                  <Text style={styles.rigaConvocataTesto}>{a.numero_maglia ? `#${a.numero_maglia} ` : ""}{a.nome} {a.cognome}</Text>
                 </Pressable>
-              )}
-            </View>
-          ))}
-          <Pressable style={styles.bottoneSecondario} onPress={salvaConvocati} disabled={salvandoConvocati || convocateIds.size === 0}>
-            {salvandoConvocati ? <ActivityIndicator color={brand.colors.brand} /> : <Text style={styles.bottoneSecondarioTesto}>Salva convocati ({convocateIds.size})</Text>}
-          </Pressable>
-        </View>
-
-        <View style={styles.card}>
-          <Text style={styles.sottotitolo}>2. Formazione iniziale (tocca una posizione)</Text>
-          <Text style={styles.nota}>Tocca una casella del campo, poi scegli la convocata da mettere lì. La posizione 1 è la zona di battuta.</Text>
-          <Campo9x9 occupanti={occupantiCampo} onTapPosizione={(p) => setPosizioneInModifica(p)} consentiPosizioniVuote />
-
-          <Text style={[styles.etichetta, { marginTop: 10 }]}>Chi serve per prima in questo set?</Text>
-          <View style={styles.selettoreRiga}>
-            {(["noi", "avversario"] as const).map((v) => (
-              <Pressable key={v} onPress={() => setChiServe(v)} style={[styles.chip, chiServe === v && styles.chipAttivo]}>
-                <Text style={[styles.chipTesto, chiServe === v && styles.chipTestoAttivo]}>{v === "noi" ? "Noi" : "Loro"}</Text>
-              </Pressable>
+                {convocateIds.has(a.id) && (
+                  <Pressable onPress={() => toggleLibero(a.id)}>
+                    <Text style={[styles.tagLibero, liberoIds.has(a.id) && styles.tagLiberoAttivo]}>LIB</Text>
+                  </Pressable>
+                )}
+              </View>
             ))}
+            <Pressable style={styles.bottoneSecondario} onPress={salvaConvocati} disabled={salvandoConvocati || convocateIds.size === 0}>
+              {salvandoConvocati ? <ActivityIndicator color={brand.colors.brand} /> : <Text style={styles.bottoneSecondarioTesto}>Salva convocati ({convocateIds.size})</Text>}
+            </Pressable>
           </View>
+        ) : (
+          <Text style={styles.nota}>Convocati già fissati per questa partita ({convocateIds.size}) — scegli solo la formazione per questo set.</Text>
+        )}
 
-          <Pressable style={styles.bottoneSecondario} onPress={salvaFormazione} disabled={!formazioneCompleta}>
-            <Text style={styles.bottoneSecondarioTesto}>{formazioneCompleta ? "Salva formazione" : `Formazione incompleta (${Object.keys(posizioni).length}/6)`}</Text>
+        {!mostraFormazione ? (
+          <Pressable style={styles.bottoneApriFormazione} onPress={() => setMostraFormazione(true)} disabled={convocateIds.size < 6}>
+            <Text style={styles.bottoneApriFormazioneTesto}>{convocateIds.size < 6 ? `Servono almeno 6 convocate (${convocateIds.size}/6)` : "2. Imposta formazione iniziale →"}</Text>
           </Pressable>
-        </View>
+        ) : (
+          <View style={styles.card}>
+            <Text style={styles.sottotitolo}>2. Formazione iniziale (tocca una posizione)</Text>
+            <Text style={styles.nota}>Tocca una casella del campo, poi scegli la convocata da mettere lì. La posizione 1 è la zona di battuta. Una giocatrice già posizionata non compare più tra le scelte per un'altra casella.</Text>
+            <Campo9x9 occupanti={occupantiCampo} onTapPosizione={(p) => setPosizioneInModifica(p)} consentiPosizioniVuote />
+
+            <Text style={[styles.etichetta, { marginTop: 10 }]}>Chi serve per prima in questo set?</Text>
+            {chiServeRichiesto ? (
+              <View style={styles.selettoreRiga}>
+                {(["noi", "avversario"] as const).map((v) => (
+                  <Pressable key={v} onPress={() => setChiServe(v)} style={[styles.chip, chiServe === v && styles.chipAttivo]}>
+                    <Text style={[styles.chipTesto, chiServe === v && styles.chipTestoAttivo]}>{v === "noi" ? "Noi" : "Loro"}</Text>
+                  </Pressable>
+                ))}
+              </View>
+            ) : (
+              <Text style={styles.nota}>{chiServe === "noi" ? "Noi" : "Loro"} — dedotto in automatico dall'alternanza con il set precedente (non richiesto ai set 2-4 per regolamento; verrà richiesto di nuovo al 5° set).</Text>
+            )}
+
+            <Pressable style={styles.bottoneSecondario} onPress={salvaFormazione} disabled={!formazioneCompleta}>
+              <Text style={styles.bottoneSecondarioTesto}>{formazioneCompleta ? "Salva formazione" : `Formazione incompleta (${Object.keys(posizioni).length}/6)`}</Text>
+            </Pressable>
+          </View>
+        )}
       </ScrollView>
 
       <View style={styles.pieDiPagina}>
@@ -218,14 +264,14 @@ export default function PreparaPartita() {
           <View style={styles.cartaPopup}>
             <Text style={styles.titoloPopup}>Chi va in posizione {posizioneInModifica}?</Text>
             <FlatList
-              data={atleteConvocate}
+              data={atleteDisponibiliPerPosizione}
               keyExtractor={(a) => a.id}
               renderItem={({ item }) => (
                 <Pressable style={styles.rigaSceltaAtleta} onPress={() => assegnaPosizione(item.id)}>
                   <Text style={styles.rigaSceltaAtletaTesto}>{item.numero_maglia ? `#${item.numero_maglia} ` : ""}{item.nome} {item.cognome}</Text>
                 </Pressable>
               )}
-              ListEmptyComponent={<Text style={styles.nota}>Nessuna convocata disponibile — salva prima i convocati sopra.</Text>}
+              ListEmptyComponent={<Text style={styles.nota}>Tutte le convocate sono già posizionate altrove.</Text>}
             />
             <Pressable onPress={() => setPosizioneInModifica(null)}><Text style={styles.linkAnnulla}>Chiudi</Text></Pressable>
           </View>
@@ -252,6 +298,8 @@ const styles = StyleSheet.create({
   tagLiberoAttivo: { color: brand.colors.brandSecondary, borderColor: brand.colors.brandSecondary },
   bottoneSecondario: { borderColor: brand.colors.brand, borderWidth: 1, padding: 10, borderRadius: 8, alignItems: "center", marginTop: 4 },
   bottoneSecondarioTesto: { color: brand.colors.brand, fontWeight: "700" },
+  bottoneApriFormazione: { backgroundColor: brand.colors.surfaceSecondary, borderWidth: 1, borderColor: brand.colors.brandSecondary, borderRadius: 10, padding: 14, alignItems: "center" },
+  bottoneApriFormazioneTesto: { color: brand.colors.brandSecondary, fontWeight: "700" },
   selettoreRiga: { flexDirection: "row", gap: 8 },
   chip: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 16, backgroundColor: brand.colors.surfaceTertiary },
   chipAttivo: { backgroundColor: brand.colors.brand },

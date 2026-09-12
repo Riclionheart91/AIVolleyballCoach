@@ -1,6 +1,6 @@
 import { useCallback, useState } from "react";
 import { View, Text, TextInput, Pressable, StyleSheet, ScrollView, Alert, Switch } from "react-native";
-import { useFocusEffect } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 import { useAuth } from "@/src/context/AuthContext";
 import { impostaLinkSporteasy, leggiIntegrazione } from "@/src/services/sporteasy";
 import { elencaProvider, salvaProvider, type AiProviderConfig } from "@/src/services/aiProviders";
@@ -93,6 +93,13 @@ export default function Impostazioni() {
           <Pressable style={styles.bottone} onPress={salvaSporteasy}><Text style={styles.bottoneTesto}>Salva link</Text></Pressable>
         )}
       </View>
+
+      {puoScrivere && (
+        <Pressable style={styles.card} onPress={() => router.push("/pianificazione-annuale")}>
+          <Text style={styles.sezioneTitolo}>Pianificazione annuale (gestione cicli) →</Text>
+          <Text style={styles.nota}>Periodizzazione della stagione (macrocicli/mesocicli/microcicli), generabile con AI e aggiornabile nel tempo in base alle valutazioni delle atlete.</Text>
+        </Pressable>
+      )}
 
       {puoScrivere && (
         <View style={styles.card}>

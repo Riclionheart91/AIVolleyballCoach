@@ -11,6 +11,7 @@ import {
   elencaEventiPartita,
   elencaFormazioneConPosizioni,
   elencaSet,
+  elencaStoricoFormazioneSet,
   nuovoSet,
   registraEvento,
 } from "@/src/services/matches";
@@ -20,15 +21,11 @@ import { supabaseClient } from "@/src/lib/supabase";
 import { confermaAzione } from "@/src/lib/confermaAzione";
 import { Campo9x9, type OccupanteCampo } from "@/src/components/Campo9x9";
 
-/**
- * Interfaccia di scouting live: campo 9x9 con le 6 posizioni reali,
- * rotazione applicata automaticamente dal database ad ogni cambio
- * palla (mai calcolata a mano lato client — vedi i trigger in
- * 0010_regolamento_formazione.sql). Un tap sulla posizione seleziona
- * l'atleta, poi due tap (fondamentale + esito) registrano l'evento.
- * Scrittura ottimistica sul punteggio: il numero si aggiorna subito,
- * la chiamata di rete parte in background.
- */
+interface CambioInSospeso {
+  uscente: Athlete;
+  entrante: Athlete;
+}
+
 export default function PartitaLive() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { puoScrivere } = useAuth();
@@ -38,10 +35,13 @@ export default function PartitaLive() {
   const [atlete, setAtlete] = useState<Athlete[]>([]);
   const [convocateIds, setConvocateIds] = useState<string[]>([]);
   const [formazione, setFormazione] = useState<MatchSetLineup[]>([]);
+  const [storicoFormazione, setStoricoFormazione] = useState<MatchSetLineup[]>([]);
   const [atletaSelId, setAtletaSelId] = useState<string | null>(null);
   const [skillSelezionata, setSkillSelezionata] = useState<Skill | null>(null);
-  const [modalitaEssenziale, setModalitaEssenziale] = useState(false);
+  const [modalitaEssenziale, setModalitaEssenziale] = useState(true);
   const [popupCambioAperto, setPopupCambioAperto] = useState(false);
+  const [cambioInSospeso, setCambioInSospeso] = useState<CambioInSospeso | null>(null);
+  const [erroreVisibile, setErroreVisibile] = useState<string | null>(null);
 
   const carica = useCallback(async () => {
     if (!id) return;
@@ -56,7 +56,11 @@ export default function PartitaLive() {
       setAtlete(lista);
       setConvocateIds(convocati.map((c) => c.athlete_id));
     }
-    if (attivo) setFormazione(await elencaFormazioneConPosizioni(attivo.id));
+    if (attivo) {
+      const [inCampo, storico] = await Promise.all([elencaFormazioneConPosizioni(attivo.id), elencaStoricoFormazioneSet(attivo.id)]);
+      setFormazione(inCampo);
+      setStoricoFormazione(storico);
+    }
   }, [id]);
 
   useFocusEffect(useCallback(() => { carica(); }, [carica]));
@@ -67,10 +71,20 @@ export default function PartitaLive() {
 
   const occupantiCampo: OccupanteCampo[] = formazione.map((f) => {
     const a = nomeAtleta(f.athlete_id);
-    return { posizione: f.posizione ?? 0, cognome: a?.cognome ?? "?", numeroMaglia: a?.numero_maglia ?? null, attivo: atletaSelId === f.athlete_id };
+    return {
+      posizione: f.posizione ?? 0,
+      cognome: a?.cognome ?? "?",
+      numeroMaglia: a?.numero_maglia ?? null,
+      ruolo: a?.ruolo_campo ?? null,
+      attivo: atletaSelId === f.athlete_id,
+    };
   }).filter((o) => o.posizione > 0);
 
-  const inPanchina = atlete.filter((a) => convocateIds.includes(a.id) && !formazione.some((f) => f.athlete_id === a.id));
+  // Chi è già uscita in questo set (una riga con in_campo=false è la
+  // "prova" che era in campo ed è stata sostituita): esclusa dal
+  // cambio, non può rientrare — richiesto esplicitamente.
+  const idGiaUscite = new Set(storicoFormazione.filter((r) => !r.in_campo).map((r) => r.athlete_id));
+  const inPanchina = atlete.filter((a) => convocateIds.includes(a.id) && !formazione.some((f) => f.athlete_id === a.id) && !idGiaUscite.has(a.id));
 
   /** Applica localmente lo stesso calcolo del trigger SQL, per il feedback istantaneo. */
   function applicaDeltaLocale(skill: Skill, esito: Esito | null, segno: 1 | -1) {
@@ -88,6 +102,7 @@ export default function PartitaLive() {
 
   async function registra(skill: Skill, esito: Esito | null) {
     if (!match || !setCorrente) return;
+    setErroreVisibile(null);
     const eventoOttimistico: MatchEvent = {
       id: `temp-${Date.now()}`, match_id: match.id, set_id: setCorrente.id, skill, esito,
       athlete_id: atletaSelId, creato_il: new Date().toISOString(), creato_da: null,
@@ -95,17 +110,21 @@ export default function PartitaLive() {
     setEventi((prev) => [eventoOttimistico, ...prev]);
     applicaDeltaLocale(skill, esito, 1);
     setSkillSelezionata(null);
+    // Deseleziona subito la giocatrice: un evento registrato = pronta
+    // per la prossima azione, non resta "appiccicata" alla selezione
+    // precedente (richiesto esplicitamente).
+    setAtletaSelId(null);
 
     try {
-      await registraEvento(match.id, setCorrente.id, skill, esito, atletaSelId);
-      // La rotazione (se scattata) è avvenuta lato database: ricarichiamo
-      // la formazione per rispecchiarla — è l'unica parte non ottimistica,
-      // ma è un solo round-trip leggero, non blocca la UI del punteggio.
+      await registraEvento(match.id, setCorrente.id, skill, esito, eventoOttimistico.athlete_id);
       carica();
     } catch (e) {
+      const messaggio = (e as Error).message;
+      console.error("Errore registrazione evento:", e);
       setEventi((prev) => prev.filter((ev) => ev.id !== eventoOttimistico.id));
       applicaDeltaLocale(skill, esito, -1);
-      Alert.alert("Evento non salvato", (e as Error).message);
+      setErroreVisibile(messaggio);
+      Alert.alert("Evento non salvato", messaggio);
     }
   }
 
@@ -120,7 +139,7 @@ export default function PartitaLive() {
     applicaDeltaLocale(ultimo.skill, ultimo.esito, -1);
     try {
       await annullaUltimoEvento(match.id);
-      carica(); // la rotazione potrebbe essere stata annullata: ricarica per rispecchiarlo
+      carica();
     } catch (e) {
       carica();
       Alert.alert("Errore nell'annullamento", (e as Error).message);
@@ -142,16 +161,29 @@ export default function PartitaLive() {
     }, true);
   }
 
-  async function onConfermaCambio(entranteId: string) {
-    if (!setCorrente || !atletaSelId) return;
+  /** Fase 1 del cambio: segna a video chi entra ed esce, non esegue ancora nulla. */
+  function onSegnaCambio(entrante: Athlete) {
+    const uscente = atletaSelId ? nomeAtleta(atletaSelId) : undefined;
+    if (!uscente) return;
+    setCambioInSospeso({ uscente, entrante });
+    setPopupCambioAperto(false);
+  }
+
+  /** Fase 2: chiude davvero il cambio (chiamata al database). Da qui la giocatrice uscita non può più rientrare in questo set. */
+  async function onChiudiCambio() {
+    if (!setCorrente || !cambioInSospeso) return;
     try {
-      await cambiaGiocatore(setCorrente.id, atletaSelId, entranteId);
-      setPopupCambioAperto(false);
+      await cambiaGiocatore(setCorrente.id, cambioInSospeso.uscente.id, cambioInSospeso.entrante.id);
+      setCambioInSospeso(null);
       setAtletaSelId(null);
       carica();
     } catch (e) {
       Alert.alert("Cambio non riuscito", (e as Error).message);
     }
+  }
+
+  function onAnnullaCambioInSospeso() {
+    setCambioInSospeso(null);
   }
 
   if (!match) {
@@ -177,29 +209,49 @@ export default function PartitaLive() {
 
   const skillsDaMostrare = modalitaEssenziale ? skillsScoutingEssenziali : skillsScouting;
   const atletaSelezionata = atletaSelId ? nomeAtleta(atletaSelId) : null;
+  const atletaAlServizio = setCorrente.squadra_al_servizio === "noi" ? formazione.find((f) => f.posizione === 1) : null;
+  const nomeAlServizio = atletaAlServizio ? nomeAtleta(atletaAlServizio.athlete_id) : null;
 
   return (
     <View style={styles.container}>
       <View style={styles.scoreboard}>
         <View>
           <Text style={styles.scoreboardAvversario}>vs {match.avversario}</Text>
-          <Text style={styles.scoreboardSet}>Set {setCorrente.numero_set} — al servizio: {setCorrente.squadra_al_servizio === "noi" ? "noi" : "loro"}</Text>
+          <Text style={styles.scoreboardSet}>
+            Set {setCorrente.numero_set} — al servizio: {setCorrente.squadra_al_servizio === "noi" ? (nomeAlServizio ? `noi (#${nomeAlServizio.numero_maglia ?? "-"} ${nomeAlServizio.cognome})` : "noi") : "loro"}
+          </Text>
         </View>
         <Text style={styles.scoreboardPunti}>{setCorrente.punti_noi} - {setCorrente.punti_avversario}</Text>
       </View>
 
+      {erroreVisibile && (
+        <Pressable style={styles.bannerErrore} onPress={() => setErroreVisibile(null)}>
+          <Text style={styles.bannerErroreTesto}>⚠ {erroreVisibile} (tocca per chiudere)</Text>
+        </Pressable>
+      )}
+
+      {cambioInSospeso && (
+        <View style={styles.bannerCambio}>
+          <Text style={styles.bannerCambioTesto}>
+            Cambio: <Text style={{ fontWeight: "800" }}>#{cambioInSospeso.uscente.numero_maglia ?? "-"} {cambioInSospeso.uscente.cognome}</Text> esce, <Text style={{ fontWeight: "800" }}>#{cambioInSospeso.entrante.numero_maglia ?? "-"} {cambioInSospeso.entrante.cognome}</Text> entra
+          </Text>
+          <View style={styles.bannerCambioAzioni}>
+            <Pressable onPress={onAnnullaCambioInSospeso}><Text style={styles.linkAnnullaCambio}>Annulla</Text></Pressable>
+            <Pressable style={styles.bottoneChiudiCambio} onPress={onChiudiCambio}><Text style={styles.bottoneChiudiCambioTesto}>✓ Chiudi cambio</Text></Pressable>
+          </View>
+        </View>
+      )}
+
       {puoScrivere ? (
         <>
           <Campo9x9 occupanti={occupantiCampo} onTapPosizione={(pos) => {
-            const occ = occupantiCampo.find((o) => o.posizione === pos);
             const riga = formazione.find((f) => f.posizione === pos);
             setAtletaSelId(riga ? (atletaSelId === riga.athlete_id ? null : riga.athlete_id) : null);
-            void occ;
           }} />
 
           <View style={styles.rigaAzioniAtleta}>
             <Text style={styles.nota}>{atletaSelezionata ? `Selezionata: #${atletaSelezionata.numero_maglia ?? "-"} ${atletaSelezionata.cognome}` : "Tocca una giocatrice in campo"}</Text>
-            {atletaSelId && (
+            {atletaSelId && !cambioInSospeso && (
               <Pressable onPress={() => setPopupCambioAperto(true)}><Text style={styles.linkCambio}>⇄ Cambio</Text></Pressable>
             )}
           </View>
@@ -240,7 +292,7 @@ export default function PartitaLive() {
               <Text style={styles.tastoAnnullaTesto}>↺ Annulla ultima azione</Text>
             </Pressable>
             <View style={styles.rigaToggle}>
-              <Text style={styles.nota}>Modalità essenziale</Text>
+              <Text style={styles.nota}>Essenziale</Text>
               <Switch value={modalitaEssenziale} onValueChange={setModalitaEssenziale} trackColor={{ true: brand.colors.brand }} />
             </View>
           </View>
@@ -249,6 +301,15 @@ export default function PartitaLive() {
             <Pressable onPress={onNuovoSet} style={styles.tastoSecondario}><Text style={styles.tastoSecondarioTesto}>Nuovo set</Text></Pressable>
             <Pressable onPress={onChiudiPartita} style={styles.tastoSecondarioDistruttivo}><Text style={styles.tastoSecondarioDistruttivoTesto}>Chiudi partita</Text></Pressable>
           </View>
+
+          {idGiaUscite.size > 0 && (
+            <View style={styles.rigaUscite}>
+              {[...idGiaUscite].map((idA) => {
+                const a = nomeAtleta(idA);
+                return a ? <Text key={idA} style={styles.tagUscita}>#{a.numero_maglia ?? "-"} {a.cognome} — uscita</Text> : null;
+              })}
+            </View>
+          )}
         </>
       ) : (
         <>
@@ -285,7 +346,7 @@ export default function PartitaLive() {
               keyExtractor={(a) => a.id}
               ListEmptyComponent={<Text style={styles.nota}>Nessuna convocata in panchina disponibile.</Text>}
               renderItem={({ item }) => (
-                <Pressable style={styles.rigaSelezioneFormazione} onPress={() => onConfermaCambio(item.id)}>
+                <Pressable style={styles.rigaSelezioneFormazione} onPress={() => onSegnaCambio(item)}>
                   <Text style={styles.rigaSelezioneFormazioneTesto}>{item.numero_maglia ? `#${item.numero_maglia} ` : ""}{item.nome} {item.cognome}</Text>
                 </Pressable>
               )}
@@ -298,40 +359,50 @@ export default function PartitaLive() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: brand.colors.surface, padding: 12, gap: 10 },
+  container: { flex: 1, backgroundColor: brand.colors.surface, padding: 12, gap: 8 },
   vuoto: { color: brand.colors.muted, textAlign: "center", marginTop: 32 },
-  scoreboard: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", backgroundColor: brand.colors.surfaceSecondary, borderRadius: 12, padding: 14 },
-  scoreboardAvversario: { color: brand.colors.onSurface, fontWeight: "700", fontSize: 16 },
-  scoreboardSet: { color: brand.colors.muted, fontSize: 12 },
-  scoreboardPunti: { color: brand.colors.brand, fontWeight: "800", fontSize: 28 },
+  scoreboard: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", backgroundColor: brand.colors.surfaceSecondary, borderRadius: 12, padding: 12 },
+  scoreboardAvversario: { color: brand.colors.onSurface, fontWeight: "700", fontSize: 15 },
+  scoreboardSet: { color: brand.colors.muted, fontSize: 11 },
+  scoreboardPunti: { color: brand.colors.brand, fontWeight: "800", fontSize: 26 },
+  bannerErrore: { backgroundColor: "#4A1620", borderRadius: 8, padding: 10 },
+  bannerErroreTesto: { color: "#fff", fontSize: 12, fontWeight: "600" },
+  bannerCambio: { backgroundColor: brand.colors.surfaceSecondary, borderRadius: 8, padding: 10, gap: 8, borderWidth: 1, borderColor: brand.colors.brandSecondary },
+  bannerCambioTesto: { color: brand.colors.onSurface, fontSize: 13 },
+  bannerCambioAzioni: { flexDirection: "row", justifyContent: "flex-end", gap: 16, alignItems: "center" },
+  linkAnnullaCambio: { color: brand.colors.muted, fontSize: 12 },
+  bottoneChiudiCambio: { backgroundColor: brand.colors.success, paddingVertical: 6, paddingHorizontal: 12, borderRadius: 8 },
+  bottoneChiudiCambioTesto: { color: "#000", fontWeight: "700", fontSize: 12 },
   rigaAzioniAtleta: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   linkCambio: { color: brand.colors.brandSecondary, fontWeight: "700", fontSize: 13 },
-  grigliaSkill: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  tastoSkill: { flexGrow: 1, minWidth: "30%", backgroundColor: brand.colors.surfaceSecondary, paddingVertical: 20, borderRadius: 10, alignItems: "center" },
+  grigliaSkill: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
+  tastoSkill: { flexGrow: 1, minWidth: "30%", backgroundColor: brand.colors.surfaceSecondary, paddingVertical: 14, borderRadius: 10, alignItems: "center" },
   tastoSkillTesto: { color: brand.colors.onSurface, fontWeight: "700" },
-  tastoPuntoAvversario: { flexBasis: "100%", backgroundColor: "#4A1620", paddingVertical: 14, borderRadius: 10, alignItems: "center" },
-  grigliaEsito: { gap: 10 },
-  etichettaEsito: { color: brand.colors.onSurface, fontSize: 16, fontWeight: "700", textAlign: "center" },
-  rigaEsito: { flexDirection: "row", gap: 8 },
-  tastoEsito: { flex: 1, paddingVertical: 28, borderRadius: 10, alignItems: "center" },
+  tastoPuntoAvversario: { flexBasis: "100%", backgroundColor: "#4A1620", paddingVertical: 10, borderRadius: 10, alignItems: "center" },
+  grigliaEsito: { gap: 8 },
+  etichettaEsito: { color: brand.colors.onSurface, fontSize: 15, fontWeight: "700", textAlign: "center" },
+  rigaEsito: { flexDirection: "row", gap: 6 },
+  tastoEsito: { flex: 1, paddingVertical: 20, borderRadius: 10, alignItems: "center" },
   tastoEsitoPunto: { backgroundColor: brand.colors.success },
   tastoEsitoNeutro: { backgroundColor: brand.colors.surfaceTertiary },
   tastoEsitoErrore: { backgroundColor: brand.colors.error },
-  tastoEsitoTesto: { color: "#fff", fontWeight: "800", fontSize: 16 },
-  tastoAnnullaSelezione: { alignItems: "center", paddingVertical: 6 },
-  tastoAnnullaSelezioneTesto: { color: brand.colors.muted, fontSize: 13 },
+  tastoEsitoTesto: { color: "#fff", fontWeight: "800", fontSize: 15 },
+  tastoAnnullaSelezione: { alignItems: "center", paddingVertical: 4 },
+  tastoAnnullaSelezioneTesto: { color: brand.colors.muted, fontSize: 12 },
   rigaControlli: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  tastoAnnulla: { backgroundColor: brand.colors.surfaceSecondary, paddingVertical: 10, paddingHorizontal: 14, borderRadius: 8 },
-  tastoAnnullaTesto: { color: brand.colors.warning, fontWeight: "700" },
+  tastoAnnulla: { backgroundColor: brand.colors.surfaceSecondary, paddingVertical: 8, paddingHorizontal: 12, borderRadius: 8 },
+  tastoAnnullaTesto: { color: brand.colors.warning, fontWeight: "700", fontSize: 12 },
   rigaToggle: { flexDirection: "row", alignItems: "center", gap: 6 },
-  tastoSecondario: { borderColor: brand.colors.brand, borderWidth: 1, paddingVertical: 8, paddingHorizontal: 12, borderRadius: 8 },
-  tastoSecondarioTesto: { color: brand.colors.brand, fontWeight: "600", fontSize: 13 },
-  tastoSecondarioDistruttivo: { borderColor: brand.colors.error, borderWidth: 1, paddingVertical: 8, paddingHorizontal: 12, borderRadius: 8 },
-  tastoSecondarioDistruttivoTesto: { color: brand.colors.error, fontWeight: "600", fontSize: 13 },
+  tastoSecondario: { borderColor: brand.colors.brand, borderWidth: 1, paddingVertical: 6, paddingHorizontal: 10, borderRadius: 8 },
+  tastoSecondarioTesto: { color: brand.colors.brand, fontWeight: "600", fontSize: 12 },
+  tastoSecondarioDistruttivo: { borderColor: brand.colors.error, borderWidth: 1, paddingVertical: 6, paddingHorizontal: 10, borderRadius: 8 },
+  tastoSecondarioDistruttivoTesto: { color: brand.colors.error, fontWeight: "600", fontSize: 12 },
+  rigaUscite: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
+  tagUscita: { color: brand.colors.error, fontSize: 10, fontWeight: "600" },
   nota: { color: brand.colors.muted, fontSize: 12 },
-  etichettaLog: { color: brand.colors.muted, fontSize: 12, textTransform: "uppercase", marginTop: 4 },
-  rigaLog: { paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: brand.colors.border },
-  rigaLogTesto: { color: brand.colors.onSurfaceSecondary, fontSize: 13 },
+  etichettaLog: { color: brand.colors.muted, fontSize: 11, textTransform: "uppercase" },
+  rigaLog: { paddingVertical: 4, borderBottomWidth: 1, borderBottomColor: brand.colors.border },
+  rigaLogTesto: { color: brand.colors.onSurfaceSecondary, fontSize: 12 },
   sfondoPopup: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "flex-end" },
   cartaPopupFormazione: { backgroundColor: brand.colors.surfaceSecondary, borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, gap: 10, maxHeight: "75%" },
   intestazionePopup: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },

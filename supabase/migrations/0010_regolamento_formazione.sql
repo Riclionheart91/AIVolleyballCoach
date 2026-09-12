@@ -94,6 +94,19 @@ begin
 
   if v_mappa = '{}'::jsonb then return; end if;
 
+  -- FASE 1: libera tutte le posizioni prima di riassegnarle. Farlo in
+  -- un'unica sequenza di UPDATE (come nella prima versione) violava per
+  -- un istante l'indice univoco su (set_id, posizione) — nel momento in
+  -- cui la seconda atleta veniva spostata nella posizione della prima,
+  -- prima che quest'ultima fosse spostata via, le due finivano a
+  -- occupare la stessa posizione contemporaneamente. Postgres
+  -- bloccava l'intera transazione con un errore di vincolo — che
+  -- annullava anche l'inserimento dell'evento e l'aggiornamento del
+  -- punteggio, essendo tutti nella stessa transazione atomica. Da qui
+  -- il sintomo "i punti non si registrano quando scatta la rotazione".
+  update match_set_lineups set posizione = null where set_id = p_set_id and in_campo = true and posizione is not null;
+
+  -- FASE 2: assegna le posizioni finali, tutte le vecchie sono già a null.
   update match_set_lineups set posizione = 1 where set_id = p_set_id and athlete_id = (v_mappa->>'2')::uuid;
   update match_set_lineups set posizione = 6 where set_id = p_set_id and athlete_id = (v_mappa->>'1')::uuid;
   update match_set_lineups set posizione = 5 where set_id = p_set_id and athlete_id = (v_mappa->>'6')::uuid;
@@ -121,6 +134,8 @@ begin
   end loop;
 
   if v_mappa = '{}'::jsonb then return; end if;
+
+  update match_set_lineups set posizione = null where set_id = p_set_id and in_campo = true and posizione is not null;
 
   update match_set_lineups set posizione = 2 where set_id = p_set_id and athlete_id = (v_mappa->>'1')::uuid;
   update match_set_lineups set posizione = 1 where set_id = p_set_id and athlete_id = (v_mappa->>'6')::uuid;
@@ -460,6 +475,15 @@ begin
   end if;
   if exists (select 1 from match_set_lineups where set_id = p_set_id and athlete_id = p_atleta_entrante and in_campo = true) then
     raise exception 'La giocatrice entrante è già in campo';
+  end if;
+  -- Una giocatrice che è già uscita in questo set (una riga con
+  -- in_campo=false è la "prova" che era in campo ed è stata
+  -- sostituita) non può più rientrare: il regolamento (Art. 15.6)
+  -- ammette un rientro solo per le titolari, e solo nella stessa
+  -- posizione — enforcement che rimandiamo (vedi REGOLE_PALLAVOLO.md);
+  -- per ora impediamo semplicemente qualunque rientro.
+  if exists (select 1 from match_set_lineups where set_id = p_set_id and athlete_id = p_atleta_entrante and in_campo = false) then
+    raise exception 'Questa giocatrice è già uscita in questo set e non può rientrare';
   end if;
 
   update match_set_lineups set in_campo = false, posizione = null where set_id = p_set_id and athlete_id = p_atleta_uscente;

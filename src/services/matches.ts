@@ -103,6 +103,20 @@ export async function elencaFormazioneConPosizioni(setId: string): Promise<Match
   return data ?? [];
 }
 
+/** TUTTE le righe del set (anche chi è uscita) — serve per sapere chi è già stata sostituita e non può rientrare, non solo chi è in campo ora. */
+export async function elencaStoricoFormazioneSet(setId: string): Promise<MatchSetLineup[]> {
+  const { data, error } = await supabaseClient.from("match_set_lineups").select("*").eq("set_id", setId);
+  if (error) throw error;
+  return data ?? [];
+}
+
+/** Chi deve servire per prima nel prossimo set, secondo l'alternanza automatica — null se va richiesto (1° o 5° set). */
+export async function chiServeDefaultNuovoSet(matchId: string, numeroSet: number): Promise<"noi" | "avversario" | null> {
+  const { data, error } = await supabaseClient.rpc("chi_serve_default_nuovo_set", { p_match_id: matchId, p_numero_nuovo_set: numeroSet });
+  if (error) throw error;
+  return (data as "noi" | "avversario" | null) ?? null;
+}
+
 export interface AndamentoSquadraPartiteVoce {
   fondamentale: Skill;
   partita: string;

@@ -1,8 +1,9 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Tabs, router } from "expo-router";
 import { Pressable, Text, View, ActivityIndicator, StyleSheet } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "@/src/context/AuthContext";
+import { calcolaNotifiche } from "@/src/services/notifiche";
 import { brand } from "@/src/config";
 
 /** Banner stagione: sempre visibile in header, tocco -> tab Stagioni (dove si vede l'elenco di quelle passate e si può cambiare/attivare). */
@@ -13,6 +14,27 @@ function BannerStagione() {
       <Ionicons name="trophy-outline" size={14} color={brand.colors.brand} />
       <Text style={styles.bannerTesto} numberOfLines={1}>{stagioneAttiva ? stagioneAttiva.nome : "Nessuna stagione attiva"}</Text>
       <Ionicons name="chevron-down" size={14} color={brand.colors.muted} />
+    </Pressable>
+  );
+}
+
+function BottoneNotifiche() {
+  const { team, puoScrivere } = useAuth();
+  const [conteggio, setConteggio] = useState(0);
+
+  useEffect(() => {
+    if (!team || !puoScrivere) return;
+    calcolaNotifiche(team.id, puoScrivere).then((n) => setConteggio(n.length)).catch(() => setConteggio(0));
+  }, [team, puoScrivere]);
+
+  return (
+    <Pressable onPress={() => router.push("/notifiche")} style={{ marginRight: 12 }}>
+      <Ionicons name="notifications-outline" size={24} color={brand.colors.onSurface} />
+      {conteggio > 0 && (
+        <View style={styles.badgeNotifiche}>
+          <Text style={styles.badgeNotificheTesto}>{conteggio > 9 ? "9+" : conteggio}</Text>
+        </View>
+      )}
     </Pressable>
   );
 }
@@ -76,7 +98,12 @@ export default function TabsLayout() {
         headerTintColor: brand.colors.onSurface,
         headerTitle: () => <BannerStagione />,
         headerLeft: () => <BottoneCambiaSquadra />,
-        headerRight: () => <BottoneProfilo />,
+        headerRight: () => (
+          <View style={{ flexDirection: "row" }}>
+            <BottoneNotifiche />
+            <BottoneProfilo />
+          </View>
+        ),
         tabBarStyle: { backgroundColor: brand.colors.surfaceSecondary, borderTopColor: brand.colors.border },
         tabBarActiveTintColor: brand.colors.brand,
         tabBarInactiveTintColor: brand.colors.muted,
@@ -136,6 +163,8 @@ export default function TabsLayout() {
 }
 
 const styles = StyleSheet.create({
+  badgeNotifiche: { position: "absolute", top: -4, right: -4, backgroundColor: brand.colors.error, borderRadius: 8, minWidth: 16, height: 16, alignItems: "center", justifyContent: "center", paddingHorizontal: 3 },
+  badgeNotificheTesto: { color: "#fff", fontSize: 9, fontWeight: "800" },
   banner: { flexDirection: "row", alignItems: "center", gap: 6, maxWidth: 220 },
   bannerTesto: { color: brand.colors.onSurface, fontWeight: "700", fontSize: 15 },
   caricamentoContainer: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: brand.colors.surface, padding: 24, gap: 16 },

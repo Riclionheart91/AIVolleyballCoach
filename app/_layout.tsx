@@ -17,6 +17,8 @@ export default function RootLayout() {
         <Stack.Screen name="partita/[id]/prepara" options={{ headerShown: true, title: "Prepara partita" }} />
         <Stack.Screen name="profilo" options={{ headerShown: true, title: "Profilo", presentation: "modal" }} />
         <Stack.Screen name="impostazioni" options={{ headerShown: true, title: "Impostazioni", presentation: "modal" }} />
+        <Stack.Screen name="notifiche" options={{ headerShown: false, presentation: "modal" }} />
+        <Stack.Screen name="pianificazione-annuale" options={{ headerShown: false }} />
         <Stack.Screen name="importa-atlete" options={{ headerShown: true, title: "Importa atlete" }} />
       </Stack>
     </AuthProvider>

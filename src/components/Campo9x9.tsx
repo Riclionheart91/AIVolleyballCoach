@@ -5,6 +5,7 @@ export interface OccupanteCampo {
   posizione: number; // 1-6
   cognome: string;
   numeroMaglia: number | null;
+  ruolo?: string | null;
   attivo?: boolean; // evidenziata (es. selezionata per cambio/evento)
 }
 
@@ -46,6 +47,7 @@ export function Campo9x9({ occupanti, onTapPosizione, consentiPosizioniVuote }: 
                   <>
                     <Text style={styles.numeroMaglia}>{occupante.numeroMaglia ?? "–"}</Text>
                     <Text style={styles.cognome} numberOfLines={1}>{occupante.cognome}</Text>
+                    {occupante.ruolo ? <Text style={styles.ruolo} numberOfLines={1}>{occupante.ruolo}</Text> : null}
                   </>
                 ) : (
                   <Text style={styles.vuotaTesto}>vuota</Text>
@@ -60,15 +62,19 @@ export function Campo9x9({ occupanti, onTapPosizione, consentiPosizioniVuote }: 
 }
 
 const styles = StyleSheet.create({
-  contenitore: { backgroundColor: "#1a3a2a", borderRadius: 12, padding: 12, gap: 8, borderWidth: 2, borderColor: brand.colors.brand },
-  rete: { alignItems: "center", borderBottomWidth: 3, borderBottomColor: "#fff", paddingBottom: 4, marginBottom: 4 },
-  reteTesto: { color: "#fff", fontSize: 10, fontWeight: "700", letterSpacing: 2 },
-  riga: { flexDirection: "row", gap: 8 },
-  cella: { flex: 1, aspectRatio: 1, backgroundColor: "rgba(255,255,255,0.08)", borderRadius: 8, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "rgba(255,255,255,0.2)" },
+  contenitore: { backgroundColor: "#1a3a2a", borderRadius: 12, padding: 8, gap: 6, borderWidth: 2, borderColor: brand.colors.brand },
+  rete: { alignItems: "center", borderBottomWidth: 3, borderBottomColor: "#fff", paddingBottom: 2, marginBottom: 2 },
+  reteTesto: { color: "#fff", fontSize: 9, fontWeight: "700", letterSpacing: 2 },
+  riga: { flexDirection: "row", gap: 6 },
+  // Niente più aspectRatio: 1 (rendeva il campo troppo grande e
+  // quadrato). Altezza fissa contenuta, più larga che alta — sta
+  // tutto in una schermata anche su telefono senza scroll.
+  cella: { flex: 1, height: 64, backgroundColor: "rgba(255,255,255,0.08)", borderRadius: 8, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "rgba(255,255,255,0.2)" },
   cellaVuota: { backgroundColor: "rgba(255,255,255,0.03)", borderStyle: "dashed" },
   cellaAttiva: { backgroundColor: brand.colors.brand, borderColor: brand.colors.brand },
-  numeroPosizione: { position: "absolute", top: 3, left: 5, color: "rgba(255,255,255,0.5)", fontSize: 9, fontWeight: "700" },
-  numeroMaglia: { color: "#fff", fontSize: 20, fontWeight: "800" },
-  cognome: { color: "#fff", fontSize: 10, maxWidth: "90%" },
-  vuotaTesto: { color: "rgba(255,255,255,0.4)", fontSize: 11 },
+  numeroPosizione: { position: "absolute", top: 2, left: 4, color: "rgba(255,255,255,0.5)", fontSize: 8, fontWeight: "700" },
+  numeroMaglia: { color: "#fff", fontSize: 16, fontWeight: "800", lineHeight: 18 },
+  cognome: { color: "#fff", fontSize: 9, maxWidth: "90%" },
+  ruolo: { color: "rgba(255,255,255,0.6)", fontSize: 7, maxWidth: "90%" },
+  vuotaTesto: { color: "rgba(255,255,255,0.4)", fontSize: 10 },
 });
