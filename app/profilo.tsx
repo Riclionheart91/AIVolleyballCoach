@@ -81,6 +81,17 @@ export default function Profilo() {
         </View>
       )}
 
+      {puoScrivere && (
+        <>
+          <Pressable style={styles.bottoneSecondario} onPress={() => router.push("/pianificazione-annuale")}>
+            <Text style={styles.bottoneSecondarioTesto}>📋 Pianificazione annuale (cicli)</Text>
+          </Pressable>
+          <Pressable style={styles.bottoneSecondario} onPress={() => router.push("/campionati")}>
+            <Text style={styles.bottoneSecondarioTesto}>🏆 Campionati</Text>
+          </Pressable>
+        </>
+      )}
+
       {(puoScrivere || isSuperuser) && (
         <Pressable style={styles.bottoneSecondario} onPress={() => router.push("/impostazioni")}>
           <Text style={styles.bottoneSecondarioTesto}>Impostazioni</Text>

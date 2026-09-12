@@ -171,6 +171,8 @@ export interface Campionato {
   numero_maglia_max: number;
   distinta_min_giocatrici: number;
   distinta_max_giocatrici: number;
+  data_inizio: string | null;
+  data_fine: string | null;
   attivo: boolean;
   creato_il: string;
 }

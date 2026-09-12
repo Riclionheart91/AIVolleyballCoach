@@ -173,12 +173,23 @@ export default function PianoAllenamento() {
           {esercizi.length === 0 ? (
             <Text style={styles.nota}>Nessun esercizio ancora in questo piano.</Text>
           ) : (
-            esercizi.map((e, i) => (
-              <View key={i} style={styles.rigaEsercizio}>
-                <Text style={styles.rigaEsercizioNome}>{e.nome}</Text>
-                <TextInput style={styles.inputDurata} keyboardType="numeric" value={String(e.durataMinuti)} onChangeText={(t) => aggiornaDurata(i, t)} />
-                <Text style={styles.nota}>min</Text>
-                <Pressable onPress={() => rimuoviEsercizio(i)}><Text style={styles.rimuovi}>✕</Text></Pressable>
+            Object.entries(
+              esercizi.reduce<Record<string, { e: VoceRiepilogoPiano; i: number }[]>>((acc, e, i) => {
+                const cat = catalogo.find((c) => c.id === e.exerciseId)?.categoria?.trim() || "Senza categoria";
+                (acc[cat] ??= []).push({ e, i });
+                return acc;
+              }, {}),
+            ).sort(([a], [b]) => a.localeCompare(b)).map(([categoria, voci]) => (
+              <View key={categoria}>
+                <Text style={styles.etichettaCategoriaPiano}>{categoria}</Text>
+                {voci.map(({ e, i }) => (
+                  <View key={i} style={styles.rigaEsercizio}>
+                    <Text style={styles.rigaEsercizioNome}>{e.nome}</Text>
+                    <TextInput style={styles.inputDurata} keyboardType="numeric" value={String(e.durataMinuti)} onChangeText={(t) => aggiornaDurata(i, t)} />
+                    <Text style={styles.nota}>min</Text>
+                    <Pressable onPress={() => rimuoviEsercizio(i)}><Text style={styles.rimuovi}>✕</Text></Pressable>
+                  </View>
+                ))}
               </View>
             ))
           )}
@@ -247,6 +258,7 @@ const styles = StyleSheet.create({
   rigaCategoriaTesto: { color: brand.colors.onSurface, fontSize: 14, fontWeight: "700" },
   rigaCatalogo: { paddingVertical: 8, paddingLeft: 20, borderBottomWidth: 1, borderBottomColor: brand.colors.border },
   rigaCatalogoTesto: { color: brand.colors.onSurfaceSecondary, fontSize: 13 },
+  etichettaCategoriaPiano: { color: brand.colors.brandSecondary, fontSize: 12, fontWeight: "700", marginTop: 8, textTransform: "uppercase" },
   rigaEsercizio: { flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 6, borderTopWidth: 1, borderTopColor: brand.colors.border },
   rigaEsercizioNome: { color: brand.colors.onSurface, flex: 1, fontSize: 14 },
   inputDurata: { backgroundColor: brand.colors.surfaceTertiary, color: brand.colors.onSurface, borderRadius: 6, padding: 6, width: 44, textAlign: "center" },

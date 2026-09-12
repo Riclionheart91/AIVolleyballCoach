@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { View, Text, Pressable, StyleSheet, FlatList, Switch, Alert, Modal } from "react-native";
 import { useLocalSearchParams, useFocusEffect, router } from "expo-router";
 import { useAuth } from "@/src/context/AuthContext";
@@ -12,6 +12,7 @@ import {
   elencaFormazioneConPosizioni,
   elencaSet,
   elencaStoricoFormazioneSet,
+  leggiRegolePunteggio,
   nuovoSet,
   registraEvento,
 } from "@/src/services/matches";
@@ -42,6 +43,8 @@ export default function PartitaLive() {
   const [popupCambioAperto, setPopupCambioAperto] = useState(false);
   const [cambioInSospeso, setCambioInSospeso] = useState<CambioInSospeso | null>(null);
   const [erroreVisibile, setErroreVisibile] = useState<string | null>(null);
+  const [regolePunteggio, setRegolePunteggio] = useState({ puntiPerSet: 25, puntiSetDecisivo: 15 });
+  const ultimoPunteggioSegnalato = useRef("");
 
   const carica = useCallback(async () => {
     if (!id) return;
@@ -61,9 +64,59 @@ export default function PartitaLive() {
       setFormazione(inCampo);
       setStoricoFormazione(storico);
     }
+    if (m) {
+      const regole = await leggiRegolePunteggio(id);
+      setRegolePunteggio(regole);
+    }
+    if (attivo && m) verificaFineSetAutomatica(attivo, m);
   }, [id]);
 
   useFocusEffect(useCallback(() => { carica(); }, [carica]));
+
+  /**
+   * Controlla il punteggio del set corrente contro le regole vere di
+   * regolamento (25 punti/2 di scarto, 15 al 5° set — o quelle del
+   * campionato collegato se diverse) e, se il set risulta concluso,
+   * lo segnala automaticamente invece di aspettare che l'allenatore
+   * se ne accorga da solo e prema "Nuovo set" a mano. Se la vittoria
+   * di questo set porta a 3 set vinti, propone di chiudere la
+   * partita invece che aprire un set che non si giocherà mai.
+   * "ultimoPunteggioSegnalato" evita di ripetere lo stesso avviso ad
+   * ogni ricarica finché il punteggio non cambia.
+   */
+  function verificaFineSetAutomatica(set: MatchSet, m: Match) {
+    if (set.concluso) return;
+    const sogliaPunti = set.numero_set === 5 ? regolePunteggio.puntiSetDecisivo : regolePunteggio.puntiPerSet;
+    const noiVincono = set.punti_noi >= sogliaPunti && set.punti_noi - set.punti_avversario >= 2;
+    const loroVincono = set.punti_avversario >= sogliaPunti && set.punti_avversario - set.punti_noi >= 2;
+    if (!noiVincono && !loroVincono) return;
+
+    const chiave = `${set.id}-${set.punti_noi}-${set.punti_avversario}`;
+    if (ultimoPunteggioSegnalato.current === chiave) return;
+    ultimoPunteggioSegnalato.current = chiave;
+
+    // Set vinti finora, includendo questo che sta per concludersi.
+    const setVintiNoiOraCompreso = (m.set_vinti_noi ?? 0) + (noiVincono ? 1 : 0);
+    const setVintiLoroOraCompreso = (m.set_vinti_avversario ?? 0) + (loroVincono ? 1 : 0);
+    const partitaFinita = setVintiNoiOraCompreso >= 3 || setVintiLoroOraCompreso >= 3;
+
+    confermaAzione(
+      partitaFinita ? "Partita conclusa!" : "Set concluso!",
+      `${set.punti_noi} - ${set.punti_avversario}. ${partitaFinita ? "Chiudere la partita?" : "Passare alla formazione del prossimo set?"}`,
+      partitaFinita ? "Chiudi partita" : "Prossimo set",
+      async () => {
+        try {
+          if (partitaFinita) {
+            await chiudiMatch(m.id);
+            router.back();
+          } else {
+            await nuovoSet(m.id);
+            router.replace(`/partita/${m.id}/prepara`);
+          }
+        } catch (e) { Alert.alert("Errore", (e as Error).message); }
+      },
+    );
+  }
 
   function nomeAtleta(athleteId: string): Athlete | undefined {
     return atlete.find((a) => a.id === athleteId);

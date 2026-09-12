@@ -93,10 +93,21 @@ Deno.serve(async (req) => {
         const avversario = estraiAvversario(ev.summary);
         const { data: esistente } = await admin.from("matches").select("id").eq("team_id", team_id).eq("sporteasy_uid", ev.uid).maybeSingle();
         if (esistente) {
+          // Aggiorna solo avversario/data: il campionato, se già
+          // assegnato (magari corretto a mano dall'allenatore), non
+          // viene mai sovrascritto da una risincronizzazione.
           await admin.from("matches").update({ avversario, data: ev.dataInizio }).eq("id", esistente.id);
           partiteAggiornate++;
         } else {
-          await admin.from("matches").insert({ team_id, avversario, data: ev.dataInizio, luogo: "casa", stato: "programmata", sporteasy_uid: ev.uid });
+          // Solo alla PRIMA creazione: assegna in automatico il
+          // campionato il cui periodo copre la data della partita —
+          // sempre modificabile a mano dopo, dalla tab Partite.
+          const dataSolaData = ev.dataInizio.slice(0, 10);
+          const { data: campionatoId } = await admin.rpc("trova_campionato_per_data", { p_team_id: team_id, p_data: dataSolaData });
+          await admin.from("matches").insert({
+            team_id, avversario, data: ev.dataInizio, luogo: "casa", stato: "programmata", sporteasy_uid: ev.uid,
+            campionato_id: campionatoId ?? null, tipo_gara: campionatoId ? "campionato" : "amichevole",
+          });
           partiteCreate++;
         }
       }

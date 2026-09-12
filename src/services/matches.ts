@@ -117,6 +117,14 @@ export async function chiServeDefaultNuovoSet(matchId: string, numeroSet: number
   return (data as "noi" | "avversario" | null) ?? null;
 }
 
+/** Regole punteggio applicabili a questa partita: quelle del campionato collegato, o i default di regolamento (25 punti/set, 15 al 5°) se la partita non ha un campionato assegnato. */
+export async function leggiRegolePunteggio(matchId: string): Promise<{ puntiPerSet: number; puntiSetDecisivo: number }> {
+  const { data: m } = await supabaseClient.from("matches").select("campionato_id").eq("id", matchId).single();
+  if (!m?.campionato_id) return { puntiPerSet: 25, puntiSetDecisivo: 15 };
+  const { data: c } = await supabaseClient.from("campionati").select("punti_per_set, punti_set_decisivo").eq("id", m.campionato_id).single();
+  return { puntiPerSet: c?.punti_per_set ?? 25, puntiSetDecisivo: c?.punti_set_decisivo ?? 15 };
+}
+
 export interface AndamentoSquadraPartiteVoce {
   fondamentale: Skill;
   partita: string;

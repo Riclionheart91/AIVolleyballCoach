@@ -144,6 +144,34 @@ export default function PreparaPartita() {
     setPosizioneInModifica(null);
   }
 
+  /** Pulsante per singola casella: rimuove solo quella giocatrice, lasciando le altre posizioni intatte. */
+  function rimuoviPosizione(pos: number) {
+    setPosizioni((prev) => {
+      const nuovo = { ...prev };
+      delete nuovo[pos];
+      return nuovo;
+    });
+  }
+
+  /** Pulsante sopra lo schema: ripulisce l'intera formazione in un colpo solo. */
+  function svuotaFormazione() {
+    confermaAzione("Svuotare la formazione?", "Tutte le posizioni verranno rimosse.", "Svuota", () => setPosizioni({}), true);
+  }
+
+  /** Pulsante sopra lo schema: ruota l'intero schieramento di una posizione (stessa direzione oraria della rotazione automatica: 2→1, 1→6, 6→5, 5→4, 4→3, 3→2). Utile per impostare rapidamente formazioni "a scalare" senza riassegnare ogni casella a mano. */
+  function ruotaFormazioneDiUnaPosizione() {
+    setPosizioni((prev) => {
+      const nuovo: Record<number, string> = {};
+      if (prev[2]) nuovo[1] = prev[2];
+      if (prev[1]) nuovo[6] = prev[1];
+      if (prev[6]) nuovo[5] = prev[6];
+      if (prev[5]) nuovo[4] = prev[5];
+      if (prev[4]) nuovo[3] = prev[4];
+      if (prev[3]) nuovo[2] = prev[3];
+      return nuovo;
+    });
+  }
+
   const formazioneCompleta = Object.keys(posizioni).length === 6;
 
   async function salvaFormazione(): Promise<boolean> {
@@ -224,7 +252,11 @@ export default function PreparaPartita() {
           <View style={styles.card}>
             <Text style={styles.sottotitolo}>2. Formazione iniziale (tocca una posizione)</Text>
             <Text style={styles.nota}>Tocca una casella del campo, poi scegli la convocata da mettere lì. La posizione 1 è la zona di battuta. Una giocatrice già posizionata non compare più tra le scelte per un'altra casella.</Text>
-            <Campo9x9 occupanti={occupantiCampo} onTapPosizione={(p) => setPosizioneInModifica(p)} consentiPosizioniVuote />
+            <View style={styles.rigaAzioniCampo}>
+              <Pressable onPress={svuotaFormazione} style={styles.bottoneAzioneCampo}><Text style={styles.bottoneAzioneCampoTesto}>🗑 Svuota tutto</Text></Pressable>
+              <Pressable onPress={ruotaFormazioneDiUnaPosizione} style={styles.bottoneAzioneCampo}><Text style={styles.bottoneAzioneCampoTesto}>↻ Ruota di 1</Text></Pressable>
+            </View>
+            <Campo9x9 occupanti={occupantiCampo} onTapPosizione={(p) => setPosizioneInModifica(p)} onRimuoviPosizione={rimuoviPosizione} consentiPosizioniVuote />
 
             <Text style={[styles.etichetta, { marginTop: 10 }]}>Chi serve per prima in questo set?</Text>
             {chiServeRichiesto ? (
@@ -300,6 +332,9 @@ const styles = StyleSheet.create({
   bottoneSecondarioTesto: { color: brand.colors.brand, fontWeight: "700" },
   bottoneApriFormazione: { backgroundColor: brand.colors.surfaceSecondary, borderWidth: 1, borderColor: brand.colors.brandSecondary, borderRadius: 10, padding: 14, alignItems: "center" },
   bottoneApriFormazioneTesto: { color: brand.colors.brandSecondary, fontWeight: "700" },
+  rigaAzioniCampo: { flexDirection: "row", gap: 8 },
+  bottoneAzioneCampo: { flex: 1, borderWidth: 1, borderColor: brand.colors.muted, borderRadius: 8, paddingVertical: 8, alignItems: "center" },
+  bottoneAzioneCampoTesto: { color: brand.colors.onSurfaceSecondary, fontSize: 12, fontWeight: "600" },
   selettoreRiga: { flexDirection: "row", gap: 8 },
   chip: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 16, backgroundColor: brand.colors.surfaceTertiary },
   chipAttivo: { backgroundColor: brand.colors.brand },

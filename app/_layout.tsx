@@ -19,6 +19,7 @@ export default function RootLayout() {
         <Stack.Screen name="impostazioni" options={{ headerShown: true, title: "Impostazioni", presentation: "modal" }} />
         <Stack.Screen name="notifiche" options={{ headerShown: false, presentation: "modal" }} />
         <Stack.Screen name="pianificazione-annuale" options={{ headerShown: false }} />
+        <Stack.Screen name="campionati" options={{ headerShown: false }} />
         <Stack.Screen name="importa-atlete" options={{ headerShown: true, title: "Importa atlete" }} />
       </Stack>
     </AuthProvider>

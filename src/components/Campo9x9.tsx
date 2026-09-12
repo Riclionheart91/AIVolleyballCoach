@@ -12,6 +12,8 @@ export interface OccupanteCampo {
 interface Props {
   occupanti: OccupanteCampo[];
   onTapPosizione?: (posizione: number) => void;
+  /** Se presente, mostra una "✕" su ogni casella occupata per rimuoverla singolarmente. */
+  onRimuoviPosizione?: (posizione: number) => void;
   /** Se true, le posizioni vuote sono comunque tappabili (usato in fase di composizione formazione). */
   consentiPosizioniVuote?: boolean;
 }
@@ -24,7 +26,7 @@ const GRIGLIA: number[][] = [
   [5, 6, 1], // fila difesa — 1 è la zona di battuta
 ];
 
-export function Campo9x9({ occupanti, onTapPosizione, consentiPosizioniVuote }: Props) {
+export function Campo9x9({ occupanti, onTapPosizione, onRimuoviPosizione, consentiPosizioniVuote }: Props) {
   const mappa = Object.fromEntries(occupanti.map((o) => [o.posizione, o]));
 
   return (
@@ -43,6 +45,15 @@ export function Campo9x9({ occupanti, onTapPosizione, consentiPosizioniVuote }: 
                 style={[styles.cella, occupante?.attivo && styles.cellaAttiva, !occupante && styles.cellaVuota]}
               >
                 <Text style={styles.numeroPosizione}>{pos}</Text>
+                {occupante && onRimuoviPosizione && (
+                  <Pressable
+                    hitSlop={8}
+                    onPress={(e) => { e.stopPropagation?.(); onRimuoviPosizione(pos); }}
+                    style={styles.bottoneRimuoviPosizione}
+                  >
+                    <Text style={styles.bottoneRimuoviPosizioneTesto}>✕</Text>
+                  </Pressable>
+                )}
                 {occupante ? (
                   <>
                     <Text style={styles.numeroMaglia}>{occupante.numeroMaglia ?? "–"}</Text>
@@ -73,6 +84,8 @@ const styles = StyleSheet.create({
   cellaVuota: { backgroundColor: "rgba(255,255,255,0.03)", borderStyle: "dashed" },
   cellaAttiva: { backgroundColor: brand.colors.brand, borderColor: brand.colors.brand },
   numeroPosizione: { position: "absolute", top: 2, left: 4, color: "rgba(255,255,255,0.5)", fontSize: 8, fontWeight: "700" },
+  bottoneRimuoviPosizione: { position: "absolute", top: 2, right: 2, width: 16, height: 16, borderRadius: 8, backgroundColor: "rgba(0,0,0,0.5)", alignItems: "center", justifyContent: "center", zIndex: 2 },
+  bottoneRimuoviPosizioneTesto: { color: "#fff", fontSize: 10, fontWeight: "800", lineHeight: 12 },
   numeroMaglia: { color: "#fff", fontSize: 16, fontWeight: "800", lineHeight: 18 },
   cognome: { color: "#fff", fontSize: 9, maxWidth: "90%" },
   ruolo: { color: "rgba(255,255,255,0.6)", fontSize: 7, maxWidth: "90%" },

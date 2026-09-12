@@ -3,7 +3,7 @@ import { View, Text, FlatList, TextInput, Pressable, StyleSheet, RefreshControl,
 import { router, useFocusEffect } from "expo-router";
 import { useAuth } from "@/src/context/AuthContext";
 import { andamentoSquadraPartite, creaMatch, elencaPartite, type AndamentoSquadraPartiteVoce } from "@/src/services/matches";
-import { elencaCampionati } from "@/src/services/championships";
+import { elencaCampionati, riassegnaCampionatoPartita } from "@/src/services/championships";
 import { impostaLinkSporteasy, leggiIntegrazione, sincronizzaSporteasy } from "@/src/services/sporteasy";
 import { brand } from "@/src/config";
 import type { Campionato, Match, TeamIntegration } from "@/src/types/database";
@@ -23,6 +23,7 @@ export default function Partite() {
   const [linkSporteasy, setLinkSporteasy] = useState("");
   const [sincronizzando, setSincronizzando] = useState(false);
   const [ultimoDettaglioSync, setUltimoDettaglioSync] = useState<{ titolo: string; tipo: string }[]>([]);
+  const [pickerCampionatoMatchId, setPickerCampionatoMatchId] = useState<string | null>(null);
 
   const carica = useCallback(async () => {
     if (!team) return;
@@ -64,6 +65,16 @@ export default function Partite() {
       return;
     }
     router.push(`/partita/${m.id}`);
+  }
+
+  async function onScegliCampionato(matchId: string, campionatoId: string | null) {
+    try {
+      await riassegnaCampionatoPartita(matchId, campionatoId);
+      setPickerCampionatoMatchId(null);
+      carica();
+    } catch (e) {
+      Alert.alert("Errore", (e as Error).message);
+    }
   }
 
   async function salvaLinkSporteasy() {
@@ -188,6 +199,25 @@ export default function Partite() {
               </Text>
             </View>
             <Text style={styles.cardSotto}>{new Date(item.data).toLocaleDateString("it-IT")} — {item.luogo} — {item.tipo_gara}{item.sporteasy_uid ? " · da SportEasy" : ""}</Text>
+            {puoScrivere && (
+              <Pressable onPress={() => setPickerCampionatoMatchId(pickerCampionatoMatchId === item.id ? null : item.id)}>
+                <Text style={styles.linkCampionato}>
+                  Campionato: {campionati.find((c) => c.id === item.campionato_id)?.nome ?? "nessuno (amichevole)"} — tocca per cambiare
+                </Text>
+              </Pressable>
+            )}
+            {pickerCampionatoMatchId === item.id && (
+              <View style={styles.selettoreRiga}>
+                <Pressable onPress={() => onScegliCampionato(item.id, null)} style={[styles.chip, !item.campionato_id && styles.chipAttivo]}>
+                  <Text style={[styles.chipTesto, !item.campionato_id && styles.chipTestoAttivo]}>Amichevole</Text>
+                </Pressable>
+                {campionati.map((c) => (
+                  <Pressable key={c.id} onPress={() => onScegliCampionato(item.id, c.id)} style={[styles.chip, item.campionato_id === c.id && styles.chipAttivo]}>
+                    <Text style={[styles.chipTesto, item.campionato_id === c.id && styles.chipTestoAttivo]}>{c.nome}</Text>
+                  </Pressable>
+                ))}
+              </View>
+            )}
             {item.stato === "conclusa" && <Text style={styles.cardRisultato}>Set: {item.set_vinti_noi} - {item.set_vinti_avversario}</Text>}
           </Pressable>
         )}
@@ -224,6 +254,7 @@ const styles = StyleSheet.create({
   card: { backgroundColor: brand.colors.surfaceSecondary, borderRadius: 12, padding: 14, marginBottom: 10, gap: 2 },
   cardTitolo: { color: brand.colors.onSurface, fontSize: 16, fontWeight: "700" },
   cardSotto: { color: brand.colors.muted, fontSize: 13 },
+  linkCampionato: { color: brand.colors.brandSecondary, fontSize: 12, fontWeight: "600", marginTop: 4 },
   cardRisultato: { color: brand.colors.brand, fontWeight: "700", marginTop: 4 },
   badge: { color: brand.colors.muted, fontSize: 12, textTransform: "uppercase" },
   badgeInCorso: { color: brand.colors.warning, fontWeight: "700" },
