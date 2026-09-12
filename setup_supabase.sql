@@ -2357,6 +2357,16 @@ create trigger trg_annulla_rotazione after delete on match_events
 -- immediatamente. Ora si limita a creare la riga "programmata": la
 -- partita entra davvero in gioco solo dopo convocati + formazione +
 -- il pulsante esplicito di avvio (avvia_match_confermato).
+--
+-- IMPORTANTE: questa versione ha 6 parametri, la precedente (0003) ne
+-- aveva 4. CREATE OR REPLACE con una firma diversa non sostituisce la
+-- funzione, la SOVRACCARICA — il database si ritrovava con due
+-- "crea_match" distinte, causa reale del pulsante che sembrava non
+-- funzionare (stesso problema già visto con invita_membro). Il DROP
+-- esplicito qui sotto rimuove la vecchia firma prima di ricreare quella
+-- nuova.
+drop function if exists crea_match(uuid, text, timestamptz, text);
+
 create or replace function crea_match(p_team_id uuid, p_avversario text, p_data timestamptz, p_luogo text default 'casa', p_campionato_id uuid default null, p_tipo_gara text default 'amichevole')
 returns uuid
 language plpgsql

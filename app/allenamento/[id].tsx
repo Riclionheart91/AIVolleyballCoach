@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import { View, Text, TextInput, Pressable, StyleSheet, ScrollView, Alert, ActivityIndicator } from "react-native";
+import { View, Text, TextInput, Pressable, StyleSheet, ScrollView, Alert, ActivityIndicator, Modal, FlatList } from "react-native";
 import { useLocalSearchParams, useFocusEffect, router } from "expo-router";
 import { useAuth } from "@/src/context/AuthContext";
 import { elencaEsercizi } from "@/src/services/exercises";
@@ -18,7 +18,10 @@ export default function PianoAllenamento() {
   const [durataObiettivo, setDurataObiettivo] = useState("60");
   const [esercizi, setEsercizi] = useState<VoceRiepilogoPiano[]>([]);
   const [mostraCatalogo, setMostraCatalogo] = useState(false);
+  const [categorieEspanse, setCategorieEspanse] = useState<Set<string>>(new Set());
   const [generando, setGenerando] = useState(false);
+  const [percentualeGenerazione, setPercentualeGenerazione] = useState(0);
+  const [erroreGenerazione, setErroreGenerazione] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
 
   const carica = useCallback(async () => {
@@ -50,6 +53,22 @@ export default function PianoAllenamento() {
     setEsercizi((prev) => prev.filter((_, i) => i !== indice));
   }
 
+  function toggleCategoria(categoria: string) {
+    setCategorieEspanse((prev) => {
+      const nuovo = new Set(prev);
+      if (nuovo.has(categoria)) nuovo.delete(categoria);
+      else nuovo.add(categoria);
+      return nuovo;
+    });
+  }
+
+  const ETICHETTA_SENZA_CATEGORIA = "Senza categoria";
+  const catalogoPerCategoria = catalogo.reduce<Record<string, Exercise[]>>((acc, ex) => {
+    const chiave = ex.categoria?.trim() || ETICHETTA_SENZA_CATEGORIA;
+    (acc[chiave] ??= []).push(ex);
+    return acc;
+  }, {});
+
   function aggiornaDurata(indice: number, testo: string) {
     const valore = Number(testo) || 0;
     setEsercizi((prev) => prev.map((e, i) => (i === indice ? { ...e, durataMinuti: valore } : e)));
@@ -65,15 +84,37 @@ export default function PianoAllenamento() {
 
     async function eseguiGenerazione() {
       setGenerando(true);
+      setErroreGenerazione(null);
+      setPercentualeGenerazione(5);
+      // Una singola chiamata AI non ha un progresso reale misurabile:
+      // questa percentuale è simulata (sale fino al 90% mentre si
+      // aspetta, salta al 100% al termine) — dà comunque un riscontro
+      // molto più chiaro di uno spinner fermo, specie se il provider
+      // ci mette qualche secondo a rispondere.
+      const intervallo = setInterval(() => {
+        setPercentualeGenerazione((p) => (p < 90 ? p + Math.max(1, Math.round((90 - p) * 0.15)) : p));
+      }, 400);
+
       try {
         const r = await generaPianoAllenamentoAI(team!.id, argomento || "allenamento generico", Number(durataObiettivo) || 60, catalogo);
-        if (r.errore || !r.esercizi) { Alert.alert("Generazione non riuscita", r.messaggio ?? "Errore sconosciuto"); return; }
+        if (r.errore || !r.esercizi) {
+          const messaggio = r.messaggio ?? "Errore sconosciuto";
+          setErroreGenerazione(messaggio);
+          Alert.alert("Generazione non riuscita", messaggio);
+          return;
+        }
+        setPercentualeGenerazione(100);
         setEsercizi(r.esercizi);
         if (r.argomentoSuggerito) setArgomento(r.argomentoSuggerito);
       } catch (e) {
-        Alert.alert("Errore", (e as Error).message);
+        const messaggio = (e as Error).message;
+        console.error("Errore generazione piano AI:", e);
+        setErroreGenerazione(messaggio);
+        Alert.alert("Errore", messaggio);
       } finally {
+        clearInterval(intervallo);
         setGenerando(false);
+        setTimeout(() => setPercentualeGenerazione(0), 600);
       }
     }
   }
@@ -111,31 +152,23 @@ export default function PianoAllenamento() {
               <TextInput style={styles.input} keyboardType="numeric" value={durataObiettivo} onChangeText={setDurataObiettivo} />
             </View>
             <Pressable style={styles.bottoneAI} onPress={onGeneraAI} disabled={generando}>
-              {generando ? <ActivityIndicator color={brand.colors.brandSecondary} /> : <Text style={styles.bottoneAITesto}>✨ Genera con AI</Text>}
+              {generando ? <Text style={styles.bottoneAITesto}>{percentualeGenerazione}%</Text> : <Text style={styles.bottoneAITesto}>✨ Genera con AI</Text>}
             </Pressable>
           </View>
+          {generando && (
+            <View style={styles.barraAvanzamentoSfondo}>
+              <View style={[styles.barraAvanzamentoRiempimento, { width: `${percentualeGenerazione}%` }]} />
+            </View>
+          )}
+          {erroreGenerazione && !generando && <Text style={styles.erroreTesto}>{erroreGenerazione}</Text>}
           <Text style={styles.nota}>La proposta AI usa solo esercizi già nel tuo catalogo, e resta modificabile prima di salvare — se non risponde, costruisci il piano scegliendo qui sotto.</Text>
         </View>
 
         <View style={styles.card}>
           <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
             <Text style={styles.etichetta}>Esercizi ({totaleMinuti} min totali)</Text>
-            <Pressable onPress={() => setMostraCatalogo(!mostraCatalogo)}><Text style={styles.linkAggiungi}>{mostraCatalogo ? "Chiudi" : "+ Aggiungi"}</Text></Pressable>
+            <Pressable onPress={() => setMostraCatalogo(true)}><Text style={styles.linkAggiungi}>+ Aggiungi</Text></Pressable>
           </View>
-
-          {mostraCatalogo && (
-            <View style={styles.listaCatalogo}>
-              {catalogo.length === 0 ? (
-                <Text style={styles.nota}>Nessun esercizio nel catalogo — aggiungine dalla tab Esercizi.</Text>
-              ) : (
-                catalogo.map((ex) => (
-                  <Pressable key={ex.id} style={styles.rigaCatalogo} onPress={() => aggiungiEsercizio(ex)}>
-                    <Text style={styles.rigaCatalogoTesto}>{ex.nome}{ex.categoria ? ` (${ex.categoria})` : ""}</Text>
-                  </Pressable>
-                ))
-              )}
-            </View>
-          )}
 
           {esercizi.length === 0 ? (
             <Text style={styles.nota}>Nessun esercizio ancora in questo piano.</Text>
@@ -155,6 +188,37 @@ export default function PianoAllenamento() {
           {salvando ? <ActivityIndicator color="#000" /> : <Text style={styles.bottoneSalvaTesto}>Salva piano</Text>}
         </Pressable>
       </ScrollView>
+
+      <Modal visible={mostraCatalogo} animationType="slide" transparent onRequestClose={() => setMostraCatalogo(false)}>
+        <View style={styles.sfondoPopup}>
+          <View style={styles.cartaPopup}>
+            <View style={styles.intestazionePopup}>
+              <Text style={styles.titoloPopup}>Scegli un esercizio</Text>
+              <Pressable onPress={() => setMostraCatalogo(false)}><Text style={styles.chiudiPopup}>✕</Text></Pressable>
+            </View>
+            {catalogo.length === 0 ? (
+              <Text style={styles.nota}>Nessun esercizio nel catalogo — aggiungine dalla tab Esercizi.</Text>
+            ) : (
+              <FlatList
+                data={Object.keys(catalogoPerCategoria).sort()}
+                keyExtractor={(c) => c}
+                renderItem={({ item: categoria }) => (
+                  <View>
+                    <Pressable style={styles.rigaCategoria} onPress={() => toggleCategoria(categoria)}>
+                      <Text style={styles.rigaCategoriaTesto}>{categorieEspanse.has(categoria) ? "▾" : "▸"} {categoria} ({catalogoPerCategoria[categoria].length})</Text>
+                    </Pressable>
+                    {categorieEspanse.has(categoria) && catalogoPerCategoria[categoria].map((ex) => (
+                      <Pressable key={ex.id} style={styles.rigaCatalogo} onPress={() => aggiungiEsercizio(ex)}>
+                        <Text style={styles.rigaCatalogoTesto}>{ex.nome}</Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                )}
+              />
+            )}
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -168,11 +232,20 @@ const styles = StyleSheet.create({
   input: { backgroundColor: brand.colors.surfaceTertiary, color: brand.colors.onSurface, borderRadius: 8, padding: 10 },
   nota: { color: brand.colors.muted, fontSize: 12 },
   rigaGenerazione: { flexDirection: "row", gap: 10, alignItems: "flex-end" },
-  bottoneAI: { borderWidth: 1, borderColor: brand.colors.brandSecondary, borderRadius: 8, paddingVertical: 10, paddingHorizontal: 14, justifyContent: "center" },
+  bottoneAI: { borderWidth: 1, borderColor: brand.colors.brandSecondary, borderRadius: 8, paddingVertical: 10, paddingHorizontal: 14, justifyContent: "center", minWidth: 60, alignItems: "center" },
+  barraAvanzamentoSfondo: { height: 4, backgroundColor: brand.colors.surfaceTertiary, borderRadius: 2, overflow: "hidden" },
+  barraAvanzamentoRiempimento: { height: "100%", backgroundColor: brand.colors.brandSecondary },
+  erroreTesto: { color: brand.colors.error, fontSize: 12 },
   bottoneAITesto: { color: brand.colors.brandSecondary, fontWeight: "700" },
   linkAggiungi: { color: brand.colors.brand, fontWeight: "600", fontSize: 13 },
-  listaCatalogo: { maxHeight: 180, gap: 4 },
-  rigaCatalogo: { paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: brand.colors.border },
+  sfondoPopup: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "flex-end" },
+  cartaPopup: { backgroundColor: brand.colors.surfaceSecondary, borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, gap: 8, maxHeight: "80%" },
+  intestazionePopup: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 4 },
+  titoloPopup: { color: brand.colors.onSurface, fontSize: 16, fontWeight: "700" },
+  chiudiPopup: { color: brand.colors.muted, fontSize: 18 },
+  rigaCategoria: { paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: brand.colors.border },
+  rigaCategoriaTesto: { color: brand.colors.onSurface, fontSize: 14, fontWeight: "700" },
+  rigaCatalogo: { paddingVertical: 8, paddingLeft: 20, borderBottomWidth: 1, borderBottomColor: brand.colors.border },
   rigaCatalogoTesto: { color: brand.colors.onSurfaceSecondary, fontSize: 13 },
   rigaEsercizio: { flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 6, borderTopWidth: 1, borderTopColor: brand.colors.border },
   rigaEsercizioNome: { color: brand.colors.onSurface, flex: 1, fontSize: 14 },
