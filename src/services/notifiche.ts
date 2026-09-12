@@ -1,9 +1,9 @@
 import { elencaAtlete } from "@/src/services/athletes";
 import { elencaInvitiPendenti } from "@/src/services/teamInvites";
-import { elencaPropostePendenti as elencaPropostePendentiValutazioni } from "@/src/services/evaluations";
+import { atleteDaValutare, elencaPropostePendenti as elencaPropostePendentiValutazioni } from "@/src/services/evaluations";
 import { leggiPianoAnnuale, serveProporreAggiornamento } from "@/src/services/pianoAnnuale";
 
-export type TipoNotifica = "certificato_medico" | "invito" | "proposta_valutazione" | "piano_annuale";
+export type TipoNotifica = "certificato_medico" | "invito" | "proposta_valutazione" | "piano_annuale" | "ciclo_valutazione";
 
 export interface Notifica {
   id: string;
@@ -66,6 +66,17 @@ export async function calcolaNotifiche(teamId: string, puoScrivere: boolean): Pr
         id: "proposte-valutazioni", tipo: "proposta_valutazione", urgente: false,
         titolo: "Proposte di valutazione AI da rivedere",
         descrizione: `${proposteValutazioni.length} proposta/e in attesa di conferma`,
+        link: "/(tabs)/valutazioni",
+      });
+    }
+
+    const daValutare = await atleteDaValutare(teamId).catch(() => []);
+    if (daValutare.length > 0) {
+      const maiValutate = daValutare.filter((a) => a.giorni_dall_ultima === null).length;
+      notifiche.push({
+        id: "ciclo-valutazione", tipo: "ciclo_valutazione", urgente: false,
+        titolo: "Valutazioni da aggiornare",
+        descrizione: `${daValutare.length} atleta/e oltre la cadenza${maiValutate > 0 ? ` (${maiValutate} mai valutata/e)` : ""}`,
         link: "/(tabs)/valutazioni",
       });
     }

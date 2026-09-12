@@ -155,3 +155,24 @@ function interpretaRispostaAI(testo: string): { valore: number; confidenza: "bas
     return { valore: 6, confidenza: "bassa", motivazione: "Risposta AI non nel formato atteso, valore indicativo." };
   }
 }
+
+export interface AtletaDaValutare {
+  athlete_id: string;
+  nome: string;
+  cognome: string;
+  numero_maglia: number | null;
+  ultima_valutazione: string | null;
+  giorni_dall_ultima: number | null;
+}
+
+/** Atlete mai valutate o la cui valutazione più recente supera la cadenza impostata per la squadra (30 giorni di default). */
+export async function atleteDaValutare(teamId: string): Promise<AtletaDaValutare[]> {
+  const { data, error } = await supabaseClient.rpc("atlete_da_valutare", { p_team_id: teamId });
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function impostaCadenzaValutazione(teamId: string, giorni: number): Promise<void> {
+  const { error } = await supabaseClient.rpc("imposta_cadenza_valutazione", { p_team_id: teamId, p_giorni: giorni });
+  if (error) throw error;
+}

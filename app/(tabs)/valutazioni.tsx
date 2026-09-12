@@ -6,13 +6,16 @@ import { elencaAtlete } from "@/src/services/athletes";
 import { elencaMioStoricoPresenze, type StoricoPresenzaRiga } from "@/src/services/trainings";
 import {
   andamentoSquadra,
+  atleteDaValutare,
   decidiProposta,
   elencaPropostePendenti,
   elencaValutazioni,
   generaPropostaValutazioneAI,
+  impostaCadenzaValutazione,
   registraValutazione,
   rigettaProposta,
   type AndamentoSquadraVoce,
+  type AtletaDaValutare,
 } from "@/src/services/evaluations";
 import { brand, fondamentali, uiStrings } from "@/src/config";
 import type { Athlete, Evaluation, EvaluationProposal, Fondamentale } from "@/src/types/database";
@@ -46,9 +49,79 @@ export default function Valutazioni() {
         )}
       </View>
 
+      {puoScrivere && team && <SezioneCicloValutazione teamId={team.id} />}
       {puoScrivere && <SezioneValutazioneCoach teamId={team!.id} />}
       {ruolo === "atleta" && atletaId && <SezioneValutazionePersonale athleteId={atletaId} />}
       {ruolo === "presidente" && team && <SezioneValutazionePresidente teamId={team.id} />}
+    </View>
+  );
+}
+
+/**
+ * Ciclo di valutazione a cadenza configurabile: mostra sempre CHI è
+ * oltre la scadenza, invece di lasciare all'allenatore il compito di
+ * ricordarselo. Il promemoria compare anche nel centro notifiche.
+ */
+function SezioneCicloValutazione({ teamId }: { teamId: string }) {
+  const [daValutare, setDaValutare] = useState<AtletaDaValutare[]>([]);
+  const [mostraTutte, setMostraTutte] = useState(false);
+  const [cadenzaInModifica, setCadenzaInModifica] = useState(false);
+  const [cadenza, setCadenza] = useState("30");
+
+  const carica = useCallback(async () => {
+    try { setDaValutare(await atleteDaValutare(teamId)); } catch { setDaValutare([]); }
+  }, [teamId]);
+
+  useFocusEffect(useCallback(() => { carica(); }, [carica]));
+
+  async function salvaCadenza() {
+    const giorni = Number(cadenza);
+    if (!giorni || giorni < 7 || giorni > 365) { Alert.alert("Cadenza non valida", "Indica un valore tra 7 e 365 giorni."); return; }
+    try {
+      await impostaCadenzaValutazione(teamId, giorni);
+      setCadenzaInModifica(false);
+      carica();
+    } catch (e) { Alert.alert("Errore", (e as Error).message); }
+  }
+
+  const daMostrare = mostraTutte ? daValutare : daValutare.slice(0, 5);
+
+  return (
+    <View style={styles.cardAndamento}>
+      <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+        <Text style={styles.sottotitoloSezione}>Da valutare ({daValutare.length})</Text>
+        <Pressable onPress={() => setCadenzaInModifica(!cadenzaInModifica)}>
+          <Text style={styles.linkCadenza}>Cadenza</Text>
+        </Pressable>
+      </View>
+
+      {cadenzaInModifica && (
+        <View style={styles.rigaCadenza}>
+          <TextInput style={styles.inputCadenza} keyboardType="numeric" value={cadenza} onChangeText={setCadenza} />
+          <Text style={styles.vuoto}>giorni tra una valutazione e l'altra</Text>
+          <Pressable onPress={salvaCadenza}><Text style={styles.linkCadenza}>Salva</Text></Pressable>
+        </View>
+      )}
+
+      {daValutare.length === 0 ? (
+        <Text style={styles.vuoto}>Tutte le atlete sono state valutate di recente.</Text>
+      ) : (
+        <>
+          {daMostrare.map((a) => (
+            <View key={a.athlete_id} style={styles.rigaAndamento}>
+              <Text style={styles.rigaAndamentoTesto}>{a.numero_maglia ? `#${a.numero_maglia} ` : ""}{a.nome} {a.cognome}</Text>
+              <Text style={[styles.rigaAndamentoValore, a.giorni_dall_ultima === null && styles.valoreMaiValutata]}>
+                {a.giorni_dall_ultima === null ? "mai valutata" : `${a.giorni_dall_ultima} gg fa`}
+              </Text>
+            </View>
+          ))}
+          {daValutare.length > 5 && (
+            <Pressable onPress={() => setMostraTutte(!mostraTutte)}>
+              <Text style={styles.linkCadenza}>{mostraTutte ? "Mostra meno" : `Mostra tutte (${daValutare.length})`}</Text>
+            </Pressable>
+          )}
+        </>
+      )}
     </View>
   );
 }
@@ -290,6 +363,10 @@ const styles = StyleSheet.create({
   rigaAndamento: { flexDirection: "row", justifyContent: "space-between", paddingVertical: 4, borderBottomWidth: 1, borderBottomColor: brand.colors.border },
   rigaAndamentoTesto: { color: brand.colors.onSurfaceSecondary, fontSize: 13 },
   rigaAndamentoValore: { color: brand.colors.brand, fontWeight: "700" },
+  valoreMaiValutata: { color: brand.colors.warning },
+  linkCadenza: { color: brand.colors.brandSecondary, fontSize: 12, fontWeight: "600" },
+  rigaCadenza: { flexDirection: "row", alignItems: "center", gap: 8 },
+  inputCadenza: { backgroundColor: brand.colors.surfaceTertiary, color: brand.colors.onSurface, borderRadius: 6, padding: 6, width: 50, textAlign: "center" },
   rigaAndamentoN: { color: brand.colors.muted, fontWeight: "400", fontSize: 11 },
   selettoreRiga: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   chip: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 16, backgroundColor: brand.colors.surfaceSecondary, marginRight: 6 },
