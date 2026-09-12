@@ -93,9 +93,14 @@ export default function Partite() {
       const r = await sincronizzaSporteasy(team.id);
       if (r.errore) { Alert.alert("Sincronizzazione fallita", r.messaggio ?? "Errore sconosciuto"); return; }
       setUltimoDettaglioSync(r.dettaglioClassificazione ?? []);
+      const righeErrore = r.erroriScrittura ?? [];
       Alert.alert(
-        "Sincronizzazione completata",
-        `Allenamenti: ${r.allenamentiCreati} nuovi, ${r.allenamentiAggiornati} aggiornati.\nPartite: ${r.partiteCreate} nuove, ${r.partiteAggiornate} aggiornate.\n(${r.totaleEventiNelCalendario} eventi trovati nel calendario — vedi sotto come sono stati classificati)`,
+        righeErrore.length > 0 ? "Sincronizzazione con errori" : "Sincronizzazione completata",
+        `Calendario scaricato: ${r.byteScaricati ?? 0} byte, ${r.blocchiVeventTrovati ?? 0} eventi grezzi trovati.\n` +
+        `Eventi interpretati: ${r.totaleEventiNelCalendario}.\n` +
+        `Allenamenti: ${r.allenamentiCreati} nuovi, ${r.allenamentiAggiornati} aggiornati.\n` +
+        `Partite: ${r.partiteCreate} nuove, ${r.partiteAggiornate} aggiornate.` +
+        (righeErrore.length > 0 ? `\n\nERRORI DI SCRITTURA (${righeErrore.length}):\n${righeErrore.slice(0, 5).join("\n")}` : ""),
       );
       carica();
     } catch (e) {

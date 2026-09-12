@@ -75,6 +75,7 @@ Deno.serve(async (req) => {
 
     let allenamentiCreati = 0, allenamentiAggiornati = 0, partiteCreate = 0, partiteAggiornate = 0;
     const dettaglioClassificazione: { titolo: string; tipo: string }[] = [];
+    const erroriScrittura: string[] = [];
 
     for (const ev of eventi) {
       const eAllenamento = !sembraPartita(ev.summary);
@@ -83,11 +84,11 @@ Deno.serve(async (req) => {
       if (eAllenamento) {
         const { data: esistente } = await admin.from("trainings").select("id").eq("team_id", team_id).eq("sporteasy_uid", ev.uid).maybeSingle();
         if (esistente) {
-          await admin.from("trainings").update({ titolo: ev.summary, data: ev.dataInizio }).eq("id", esistente.id);
-          allenamentiAggiornati++;
+          const { error } = await admin.from("trainings").update({ titolo: ev.summary, data: ev.dataInizio }).eq("id", esistente.id);
+          if (error) erroriScrittura.push(`"${ev.summary}": ${error.message}`); else allenamentiAggiornati++;
         } else {
-          await admin.from("trainings").insert({ team_id, titolo: ev.summary, data: ev.dataInizio, note: "", sporteasy_uid: ev.uid });
-          allenamentiCreati++;
+          const { error } = await admin.from("trainings").insert({ team_id, titolo: ev.summary, data: ev.dataInizio, note: "", sporteasy_uid: ev.uid });
+          if (error) erroriScrittura.push(`"${ev.summary}": ${error.message}`); else allenamentiCreati++;
         }
       } else {
         const avversario = estraiAvversario(ev.summary);
@@ -96,24 +97,24 @@ Deno.serve(async (req) => {
           // Aggiorna solo avversario/data: il campionato, se già
           // assegnato (magari corretto a mano dall'allenatore), non
           // viene mai sovrascritto da una risincronizzazione.
-          await admin.from("matches").update({ avversario, data: ev.dataInizio }).eq("id", esistente.id);
-          partiteAggiornate++;
+          const { error } = await admin.from("matches").update({ avversario, data: ev.dataInizio }).eq("id", esistente.id);
+          if (error) erroriScrittura.push(`"${ev.summary}": ${error.message}`); else partiteAggiornate++;
         } else {
           // Solo alla PRIMA creazione: assegna in automatico il
           // campionato il cui periodo copre la data della partita —
           // sempre modificabile a mano dopo, dalla tab Partite.
           const dataSolaData = ev.dataInizio.slice(0, 10);
           const { data: campionatoId } = await admin.rpc("trova_campionato_per_data", { p_team_id: team_id, p_data: dataSolaData });
-          await admin.from("matches").insert({
+          const { error } = await admin.from("matches").insert({
             team_id, avversario, data: ev.dataInizio, luogo: "casa", stato: "programmata", sporteasy_uid: ev.uid,
             campionato_id: campionatoId ?? null, tipo_gara: campionatoId ? "campionato" : "amichevole",
           });
-          partiteCreate++;
+          if (error) erroriScrittura.push(`"${ev.summary}": ${error.message}`); else partiteCreate++;
         }
       }
     }
 
-    await registraEsito(admin, team_id, "ok");
+    await registraEsito(admin, team_id, erroriScrittura.length > 0 ? `${erroriScrittura.length} errori di scrittura` : "ok");
 
     return jsonResponse({
       errore: false,
@@ -123,6 +124,16 @@ Deno.serve(async (req) => {
       // stato classificato, invece di dover indovinare perché un evento
       // è finito nella categoria sbagliata.
       dettaglioClassificazione,
+      // Errori di scrittura REALI: prima venivano ignorati del tutto e
+      // i contatori venivano incrementati comunque, quindi la
+      // sincronizzazione dichiarava "N creati" anche quando nel
+      // database non finiva nulla.
+      erroriScrittura,
+      // Se il calendario viene scaricato ma non contiene eventi
+      // riconoscibili, questi due valori lo dicono subito invece di
+      // lasciare pensare a un problema dell'app.
+      byteScaricati: testoIcs.length,
+      blocchiVeventTrovati: (testoIcs.match(/BEGIN:VEVENT/g) ?? []).length,
     });
   } catch (e) {
     return jsonResponse({ errore: true, messaggio: "Errore interno: " + (e as Error).message }, 500);
