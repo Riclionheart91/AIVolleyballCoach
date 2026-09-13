@@ -107,6 +107,8 @@ export interface VoceSessione {
   id: string;
   exercise_id: string;
   nome: string;
+  /** Descrizione dal catalogo: serve a bordo campo per spiegare l'esercizio senza uscire dalla sessione. */
+  descrizione: string;
   durata_minuti: number | null;
   note: string;
   ordine: number;
@@ -123,10 +125,10 @@ export async function elencaSessione(trainingId: string, catalogo: Exercise[]): 
     .eq("training_id", trainingId)
     .order("ordine");
   if (error) throw error;
-  return (data ?? []).map((r) => ({
-    ...r,
-    nome: catalogo.find((c) => c.id === r.exercise_id)?.nome ?? "Esercizio",
-  })) as VoceSessione[];
+  return (data ?? []).map((r) => {
+    const ex = catalogo.find((c) => c.id === r.exercise_id);
+    return { ...r, nome: ex?.nome ?? "Esercizio", descrizione: ex?.descrizione ?? "" };
+  }) as VoceSessione[];
 }
 
 export async function avviaSessione(trainingId: string): Promise<void> {
