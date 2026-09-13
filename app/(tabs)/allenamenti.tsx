@@ -9,6 +9,7 @@ import {
 } from "@/src/services/trainings";
 import { confermaAzione } from "@/src/lib/confermaAzione";
 import { FabAggiungi } from "@/src/components/Fab";
+import { PannelloSporteasy } from "@/src/components/PannelloSporteasy";
 import { PopupForm } from "@/src/components/PopupForm";
 import { brand } from "@/src/config";
 import type { Athlete, Attendance, Rpe, Training } from "@/src/types/database";
@@ -92,7 +93,8 @@ export default function Allenamenti() {
         keyExtractor={(t) => t.id}
         contentContainerStyle={{ padding: 16, paddingBottom: 90 }}
         refreshControl={<RefreshControl refreshing={false} onRefresh={carica} tintColor={brand.colors.brand} />}
-        ListEmptyComponent={<Text style={styles.vuoto}>Nessun allenamento ancora. Usa il pulsante + qui sotto.</Text>}
+        ListHeaderComponent={puoScrivere && team ? <View style={{ marginBottom: 12 }}><PannelloSporteasy teamId={team.id} onSincronizzato={carica} /></View> : null}
+        ListEmptyComponent={<Text style={styles.vuoto}>Nessun allenamento ancora. Usa il pulsante + qui sotto, oppure sincronizza il calendario SportEasy qui sopra.</Text>}
         renderItem={({ item }) => (
           <View style={styles.card}>
             <Pressable onPress={() => setAperto(aperto === item.id ? null : item.id)}>

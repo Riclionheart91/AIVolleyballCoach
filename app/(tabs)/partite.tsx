@@ -4,9 +4,9 @@ import { router, useFocusEffect } from "expo-router";
 import { useAuth } from "@/src/context/AuthContext";
 import { andamentoSquadraPartite, creaMatch, elencaPartite, type AndamentoSquadraPartiteVoce } from "@/src/services/matches";
 import { elencaCampionati, riassegnaCampionatoPartita } from "@/src/services/championships";
-import { impostaLinkSporteasy, leggiIntegrazione, sincronizzaSporteasy } from "@/src/services/sporteasy";
+import { PannelloSporteasy } from "@/src/components/PannelloSporteasy";
 import { brand } from "@/src/config";
-import type { Campionato, Match, TeamIntegration } from "@/src/types/database";
+import type { Campionato, Match } from "@/src/types/database";
 
 export default function Partite() {
   const { team, puoScrivere } = useAuth();
@@ -18,28 +18,20 @@ export default function Partite() {
   const [luogo, setLuogo] = useState<"casa" | "trasferta">("casa");
   const [tipoGara, setTipoGara] = useState<"campionato" | "amichevole">("amichevole");
   const [campionatoId, setCampionatoId] = useState<string | null>(null);
-  const [integrazione, setIntegrazione] = useState<TeamIntegration | null>(null);
-  const [mostraSporteasy, setMostraSporteasy] = useState(false);
-  const [linkSporteasy, setLinkSporteasy] = useState("");
-  const [sincronizzando, setSincronizzando] = useState(false);
-  const [ultimoDettaglioSync, setUltimoDettaglioSync] = useState<{ titolo: string; tipo: string }[]>([]);
   const [pickerCampionatoMatchId, setPickerCampionatoMatchId] = useState<string | null>(null);
 
   const carica = useCallback(async () => {
     if (!team) return;
     setCaricamento(true);
     try {
-      const [listaPartite, listaAndamento, integ, listaCampionati] = await Promise.all([
+      const [listaPartite, listaAndamento, listaCampionati] = await Promise.all([
         elencaPartite(team.id),
         andamentoSquadraPartite(team.id).catch(() => []),
-        puoScrivere ? leggiIntegrazione(team.id).catch(() => null) : Promise.resolve(null),
         elencaCampionati(team.id).catch(() => []),
       ]);
       setPartite(listaPartite);
       setAndamento(listaAndamento);
-      setIntegrazione(integ);
       setCampionati(listaCampionati);
-      if (integ?.sporteasy_ical_url) setLinkSporteasy(integ.sporteasy_ical_url);
     } finally {
       setCaricamento(false);
     }
@@ -74,39 +66,6 @@ export default function Partite() {
       carica();
     } catch (e) {
       Alert.alert("Errore", (e as Error).message);
-    }
-  }
-
-  async function salvaLinkSporteasy() {
-    if (!team || !linkSporteasy.trim()) return;
-    try {
-      await impostaLinkSporteasy(team.id, linkSporteasy.trim());
-      carica();
-      Alert.alert("Salvato", "Link calendario salvato. Premi \"Sincronizza ora\" per importare gli eventi.");
-    } catch (e) { Alert.alert("Errore", (e as Error).message); }
-  }
-
-  async function sincronizza() {
-    if (!team) return;
-    setSincronizzando(true);
-    try {
-      const r = await sincronizzaSporteasy(team.id);
-      if (r.errore) { Alert.alert("Sincronizzazione fallita", r.messaggio ?? "Errore sconosciuto"); return; }
-      setUltimoDettaglioSync(r.dettaglioClassificazione ?? []);
-      const righeErrore = r.erroriScrittura ?? [];
-      Alert.alert(
-        righeErrore.length > 0 ? "Sincronizzazione con errori" : "Sincronizzazione completata",
-        `Calendario scaricato: ${r.byteScaricati ?? 0} byte, ${r.blocchiVeventTrovati ?? 0} eventi grezzi trovati.\n` +
-        `Eventi interpretati: ${r.totaleEventiNelCalendario}.\n` +
-        `Allenamenti: ${r.allenamentiCreati} nuovi, ${r.allenamentiAggiornati} aggiornati.\n` +
-        `Partite: ${r.partiteCreate} nuove, ${r.partiteAggiornate} aggiornate.` +
-        (righeErrore.length > 0 ? `\n\nERRORI DI SCRITTURA (${righeErrore.length}):\n${righeErrore.slice(0, 5).join("\n")}` : ""),
-      );
-      carica();
-    } catch (e) {
-      Alert.alert("Errore", (e as Error).message);
-    } finally {
-      setSincronizzando(false);
     }
   }
 
@@ -146,35 +105,8 @@ export default function Partite() {
             </Pressable>
           </View>
 
-          <Pressable style={styles.rigaEspandi} onPress={() => setMostraSporteasy(!mostraSporteasy)}>
-            <Text style={styles.rigaEspandiTesto}>{mostraSporteasy ? "▾" : "▸"} Sincronizzazione SportEasy {integrazione?.ultima_sincronizzazione ? `(ultima: ${new Date(integrazione.ultima_sincronizzazione).toLocaleString("it-IT")})` : ""}</Text>
-          </Pressable>
+          <PannelloSporteasy teamId={team!.id} onSincronizzato={carica} />
 
-          {mostraSporteasy && (
-            <View style={styles.form}>
-              <Text style={styles.nota}>Incolla qui il link del calendario iCal della squadra (SportEasy → Impostazioni squadra → Esporta calendario). Importa solo allenamenti e partite, mai l'anagrafica atlete.</Text>
-              <TextInput style={styles.input} placeholder="webcal://calendar.sporteasy.net/..." placeholderTextColor={brand.colors.muted} autoCapitalize="none" value={linkSporteasy} onChangeText={setLinkSporteasy} />
-              <View style={styles.selettoreRiga}>
-                <Pressable style={styles.bottoneSecondario} onPress={salvaLinkSporteasy}><Text style={styles.bottoneSecondarioTesto}>Salva link</Text></Pressable>
-                <Pressable style={styles.bottone} onPress={sincronizza} disabled={sincronizzando || !integrazione?.sporteasy_ical_url}>
-                  {sincronizzando ? <ActivityIndicator color="#000" /> : <Text style={styles.bottoneTesto}>Sincronizza ora</Text>}
-                </Pressable>
-              </View>
-              {integrazione?.ultimo_esito && integrazione.ultimo_esito !== "ok" && (
-                <Text style={styles.erroreTesto}>Ultimo tentativo non riuscito: {integrazione.ultimo_esito}</Text>
-              )}
-              {ultimoDettaglioSync.length > 0 && (
-                <View style={{ marginTop: 8, gap: 2 }}>
-                  <Text style={styles.nota}>Come sono stati classificati gli eventi trovati (se qualcosa è finito nella categoria sbagliata, segnalamelo così affino la regola):</Text>
-                  {ultimoDettaglioSync.map((d, i) => (
-                    <Text key={i} style={styles.rigaClassificazione}>
-                      <Text style={d.tipo === "partita" ? styles.tagPartita : styles.tagAllenamento}>{d.tipo === "partita" ? "PARTITA" : "ALLENAMENTO"}</Text> — {d.titolo}
-                    </Text>
-                  ))}
-                </View>
-              )}
-            </View>
-          )}
         </>
       )}
 
