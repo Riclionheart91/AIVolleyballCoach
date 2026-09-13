@@ -4,7 +4,7 @@ import { router, useFocusEffect } from "expo-router";
 import { useAuth } from "@/src/context/AuthContext";
 import { elencaAtlete } from "@/src/services/athletes";
 import {
-  aggiornaAllenamento, convertiAllenamentoInPartita, creaAllenamento, eliminaAllenamento, elencaAllenamenti,
+  aggiornaAllenamento, archiviaAllenamento, archiviaAllenamentiPassati, convertiAllenamentoInPartita, creaAllenamento, eliminaAllenamento, elencaAllenamenti,
   elencaPresenzeAllenamento, elencaRpeAllenamento, registraPresenza, registraRpe,
 } from "@/src/services/trainings";
 import { confermaAzione, avvisa } from "@/src/lib/confermaAzione";
@@ -32,16 +32,44 @@ function dataIsoATesto(iso: string): string {
 export default function Allenamenti() {
   const { team, puoScrivere } = useAuth();
   const [allenamenti, setAllenamenti] = useState<Training[]>([]);
+  // Si mostra un mese alla volta: con centinaia di sedute importate da
+  // SportEasy un elenco unico diventa illeggibile.
+  const [meseVisualizzato, setMeseVisualizzato] = useState(() => { const d = new Date(); d.setDate(1); d.setHours(0,0,0,0); return d; });
+  const [archiviati, setArchiviati] = useState<Training[]>([]);
+  const [mostraArchivio, setMostraArchivio] = useState(false);
   const [aperto, setAperto] = useState<string | null>(null);
   const [popupAperto, setPopupAperto] = useState(false);
   const [allenamentoInModifica, setAllenamentoInModifica] = useState<Training | null>(null);
   const [titolo, setTitolo] = useState("Allenamento");
   const [dataTesto, setDataTesto] = useState(dataIsoATesto(new Date().toISOString()));
 
+  const inizioMese = meseVisualizzato;
+  const fineMese = new Date(meseVisualizzato.getFullYear(), meseVisualizzato.getMonth() + 1, 0, 23, 59, 59);
+
   const carica = useCallback(async () => {
     if (!team) return;
-    setAllenamenti(await elencaAllenamenti(team.id));
-  }, [team]);
+    setAllenamenti(await elencaAllenamenti(team.id, { daData: inizioMese.toISOString(), aData: fineMese.toISOString() }));
+    if (mostraArchivio) setArchiviati(await elencaAllenamenti(team.id, { archiviato: true }));
+  }, [team, meseVisualizzato, mostraArchivio]);
+
+  function cambiaMese(delta: number) {
+    setMeseVisualizzato((m) => new Date(m.getFullYear(), m.getMonth() + delta, 1));
+  }
+
+  async function onArchiviaPassati() {
+    if (!team) return;
+    confermaAzione("Archiviare le sedute passate?", "Tutti gli allenamenti già svolti verranno spostati nell'archivio. Restano consultabili e ripristinabili.", "Archivia", async () => {
+      try {
+        const n = await archiviaAllenamentiPassati(team.id);
+        carica();
+        avvisa("Archiviati", `${n} allenamenti spostati nell'archivio.`);
+      } catch (e) { avvisa("Errore", (e as Error).message); }
+    });
+  }
+
+  async function onArchiviaSingolo(t: Training, archivia: boolean) {
+    try { await archiviaAllenamento(t.id, archivia); carica(); } catch (e) { avvisa("Errore", (e as Error).message); }
+  }
 
   useFocusEffect(useCallback(() => { carica(); }, [carica]));
 
@@ -108,8 +136,38 @@ export default function Allenamenti() {
         keyExtractor={(t) => t.id}
         contentContainerStyle={{ padding: 16, paddingBottom: 90 }}
         refreshControl={<RefreshControl refreshing={false} onRefresh={carica} tintColor={brand.colors.brand} />}
-        ListHeaderComponent={puoScrivere && team ? <View style={{ marginBottom: 12 }}><PannelloSporteasy teamId={team.id} onSincronizzato={carica} /></View> : null}
-        ListEmptyComponent={<Text style={styles.vuoto}>Nessun allenamento ancora. Usa il pulsante + qui sotto, oppure sincronizza il calendario SportEasy qui sopra.</Text>}
+        ListHeaderComponent={
+          <View style={{ marginBottom: 12, gap: 10 }}>
+            {puoScrivere && team && <PannelloSporteasy teamId={team.id} onSincronizzato={carica} />}
+
+            <View style={styles.barraMese}>
+              <Pressable onPress={() => cambiaMese(-1)} hitSlop={10}><Text style={styles.frecciaMese}>‹</Text></Pressable>
+              <Text style={styles.etichettaMese}>
+                {meseVisualizzato.toLocaleDateString("it-IT", { month: "long", year: "numeric" })} · {allenamenti.length}
+              </Text>
+              <Pressable onPress={() => cambiaMese(1)} hitSlop={10}><Text style={styles.frecciaMese}>›</Text></Pressable>
+            </View>
+
+            {puoScrivere && (
+              <View style={styles.rigaArchivio}>
+                <Pressable onPress={() => setMostraArchivio(!mostraArchivio)}>
+                  <Text style={styles.linkArchivio}>{mostraArchivio ? "▾" : "▸"} Archivio ({archiviati.length})</Text>
+                </Pressable>
+                <Pressable onPress={onArchiviaPassati}>
+                  <Text style={styles.linkArchivio}>Archivia passati</Text>
+                </Pressable>
+              </View>
+            )}
+
+            {mostraArchivio && archiviati.map((a) => (
+              <View key={a.id} style={styles.rigaArchiviato}>
+                <Text style={styles.rigaArchiviatoTesto}>{a.titolo} — {new Date(a.data).toLocaleDateString("it-IT")}</Text>
+                <Pressable onPress={() => onArchiviaSingolo(a, false)}><Text style={styles.linkArchivio}>Ripristina</Text></Pressable>
+              </View>
+            ))}
+          </View>
+        }
+        ListEmptyComponent={<Text style={styles.vuoto}>Nessun allenamento in questo mese. Usa le frecce per cambiare mese, il pulsante + per aggiungerne uno, oppure sincronizza SportEasy qui sopra.</Text>}
         renderItem={({ item }) => (
           <View style={styles.card}>
             <Pressable onPress={() => setAperto(aperto === item.id ? null : item.id)}>
@@ -125,6 +183,7 @@ export default function Allenamenti() {
                 <Pressable onPress={() => router.push(`/allenamento/${item.id}`)}><Text style={styles.azioneCard}>Piano allenamento{item.durata_totale_minuti ? ` (${item.durata_totale_minuti} min)` : ""}</Text></Pressable>
                 <Pressable onPress={() => apriModifica(item)}><Text style={styles.azioneCard}>Modifica</Text></Pressable>
                 <Pressable onPress={() => chiediConversione(item)}><Text style={styles.azioneCard}>È una partita</Text></Pressable>
+                <Pressable onPress={() => onArchiviaSingolo(item, true)}><Text style={styles.azioneCard}>Archivia</Text></Pressable>
                 <Pressable onPress={() => chiediEliminazione(item)}><Text style={styles.azioneCardDistruttiva}>Elimina</Text></Pressable>
               </View>
             )}
@@ -265,6 +324,13 @@ const styles = StyleSheet.create({
   azioneCard: { color: brand.colors.brand, fontSize: 12, fontWeight: "600" },
   azioneCardDistruttiva: { color: brand.colors.error, fontSize: 12, fontWeight: "600" },
   vuoto: { color: brand.colors.muted, textAlign: "center", marginTop: 32 },
+  barraMese: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", backgroundColor: brand.colors.surfaceSecondary, borderRadius: 10, paddingVertical: 8, paddingHorizontal: 16 },
+  frecciaMese: { color: brand.colors.brand, fontSize: 24, fontWeight: "700", lineHeight: 26 },
+  etichettaMese: { color: brand.colors.onSurface, fontWeight: "700", fontSize: 14, textTransform: "capitalize" },
+  rigaArchivio: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  linkArchivio: { color: brand.colors.brandSecondary, fontSize: 12, fontWeight: "600" },
+  rigaArchiviato: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: 4, paddingLeft: 8 },
+  rigaArchiviatoTesto: { color: brand.colors.muted, fontSize: 12, flex: 1 },
   presenzeContainer: { marginTop: 12, gap: 8, borderTopWidth: 1, borderTopColor: brand.colors.border, paddingTop: 12 },
   rigaAtleta: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
   rigaAtletaNome: { color: brand.colors.onSurface, flex: 1 },

@@ -3196,3 +3196,115 @@ revoke execute on function converti_partita_in_allenamento(uuid, text) from anon
 grant execute on function converti_allenamento_in_partita(uuid, text) to authenticated;
 grant execute on function converti_partita_in_allenamento(uuid, text) to authenticated;
 
+-- 0017 — Fix quota AI chiamata da Edge Function + archivio allenamenti
+--
+-- BUG: ai_chiamate_residue_oggi() verifica is_team_member(p_team_id),
+-- che si basa su auth.uid(). La Edge Function ai-router la chiama con
+-- la service role key, dove auth.uid() è NULL: il controllo falliva
+-- sempre, la funzione restituiva 0 e il router rispondeva 429 ("limite
+-- giornaliero raggiunto") anche alla primissima chiamata. Da qui
+-- l'errore "Edge Function returned a non-2xx status code" sulla
+-- generazione del piano annuale.
+
+create or replace function ai_chiamate_residue_oggi(p_team_id uuid)
+returns integer
+language sql stable
+security definer
+set search_path = public
+as $$
+  select case
+    when auth.role() = 'service_role' or is_team_member(p_team_id) then
+      greatest(0, 20 - (select count(*)::integer from ai_call_log where team_id = p_team_id and creato_il >= date_trunc('day', now())))
+    else 0
+  end;
+$$;
+
+alter table trainings add column if not exists archiviato boolean not null default false;
+create index if not exists idx_trainings_team_archiviato_data on trainings (team_id, archiviato, data);
+
+create or replace function archivia_allenamenti_passati(p_team_id uuid)
+returns integer
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_conteggio integer;
+begin
+  if auth.uid() is null then raise exception 'Utente non autenticato'; end if;
+  if not is_team_coach(p_team_id) then raise exception 'Permesso negato'; end if;
+
+  update trainings
+  set archiviato = true
+  where team_id = p_team_id and archiviato = false and data < now();
+
+  get diagnostics v_conteggio = row_count;
+  return v_conteggio;
+end;
+$$;
+
+revoke execute on function archivia_allenamenti_passati(uuid) from anon;
+grant execute on function archivia_allenamenti_passati(uuid) to authenticated;
+
+-- 0018 — Piano annuale a blocchi (periodizzazione strutturata)
+-- Vedi commento esteso nella migrazione applicata: struttura la
+-- stagione in blocchi datati con tipo e obiettivi, invece del solo
+-- testo libero. Il testo libero resta per le note generali.
+
+create table if not exists blocchi_piano (
+  id uuid primary key default gen_random_uuid(),
+  piano_id uuid not null references piani_annuali on delete cascade,
+  nome text not null,
+  tipo text not null default 'preparazione_generale'
+    check (tipo in ('preparazione_generale','preparazione_specifica','pre_competitiva','competitiva','scarico','transizione')),
+  data_inizio date not null,
+  data_fine date not null,
+  obiettivi_tecnici text not null default '',
+  obiettivi_fisici text not null default '',
+  obiettivi_tattici text not null default '',
+  note text not null default '',
+  creato_il timestamptz not null default now(),
+  check (data_fine >= data_inizio)
+);
+
+create index if not exists idx_blocchi_piano_piano_data on blocchi_piano (piano_id, data_inizio);
+alter table blocchi_piano enable row level security;
+
+drop policy if exists "blocchi_piano_select_member" on blocchi_piano;
+create policy "blocchi_piano_select_member" on blocchi_piano for select using (
+  is_team_member((select team_id from piani_annuali where id = piano_id)) or is_superuser()
+);
+drop policy if exists "blocchi_piano_write_coach" on blocchi_piano;
+create policy "blocchi_piano_write_coach" on blocchi_piano for all using (
+  is_team_coach((select team_id from piani_annuali where id = piano_id))
+) with check (
+  is_team_coach((select team_id from piani_annuali where id = piano_id))
+);
+
+create or replace function riepilogo_blocchi_piano(p_piano_id uuid)
+returns table(blocco_id uuid, partite_nel_periodo integer, allenamenti_nel_periodo integer)
+language sql stable security definer set search_path = public
+as $$
+  select b.id,
+    (select count(*)::integer from matches m where m.team_id = pa.team_id and m.data::date between b.data_inizio and b.data_fine),
+    (select count(*)::integer from trainings t where t.team_id = pa.team_id and t.data::date between b.data_inizio and b.data_fine)
+  from blocchi_piano b join piani_annuali pa on pa.id = b.piano_id
+  where b.piano_id = p_piano_id;
+$$;
+
+revoke execute on function riepilogo_blocchi_piano(uuid) from anon;
+grant execute on function riepilogo_blocchi_piano(uuid) to authenticated;
+
+create or replace function blocco_per_data(p_team_id uuid, p_data date)
+returns table(nome text, tipo text, obiettivi_tecnici text, obiettivi_fisici text, obiettivi_tattici text)
+language sql stable security definer set search_path = public
+as $$
+  select b.nome, b.tipo, b.obiettivi_tecnici, b.obiettivi_fisici, b.obiettivi_tattici
+  from blocchi_piano b join piani_annuali pa on pa.id = b.piano_id
+  where pa.team_id = p_team_id and p_data between b.data_inizio and b.data_fine and is_team_member(p_team_id)
+  order by b.data_inizio desc limit 1;
+$$;
+
+revoke execute on function blocco_per_data(uuid, date) from anon;
+grant execute on function blocco_per_data(uuid, date) to authenticated;
+

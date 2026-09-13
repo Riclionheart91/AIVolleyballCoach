@@ -1,7 +1,7 @@
 import { supabaseClient } from "@/src/lib/supabase";
 import { supabase as cfg } from "@/src/config";
 import { andamentoSquadra } from "@/src/services/evaluations";
-import type { PianoAnnuale, PropostaAggiornamentoPiano } from "@/src/types/database";
+import type { BloccoPiano, PianoAnnuale, PropostaAggiornamentoPiano, RiepilogoBlocco, TipoBlocco } from "@/src/types/database";
 
 const GIORNI_PRIMA_DI_RIPROPORRE = 30;
 
@@ -100,4 +100,114 @@ export async function generaPianoAnnualeAI(teamId: string, contestoStagione: str
   if (data.errore) return { errore: true, messaggio: data.messaggio };
 
   return { errore: false, contenuto: data.testo };
+}
+
+// ─────────── Blocchi di periodizzazione ───────────
+
+export const ETICHETTE_TIPO_BLOCCO: Record<TipoBlocco, string> = {
+  preparazione_generale: "Preparazione generale",
+  preparazione_specifica: "Preparazione specifica",
+  pre_competitiva: "Pre-competitiva",
+  competitiva: "Competitiva",
+  scarico: "Scarico",
+  transizione: "Transizione",
+};
+
+/** Colori per la timeline: il carico cresce dal verde (generale) al rosso (competitiva), lo scarico è azzurro. */
+export const COLORI_TIPO_BLOCCO: Record<TipoBlocco, string> = {
+  preparazione_generale: "#2E7D32",
+  preparazione_specifica: "#689F38",
+  pre_competitiva: "#F9A825",
+  competitiva: "#C62828",
+  scarico: "#0277BD",
+  transizione: "#6A6A6A",
+};
+
+export async function elencaBlocchi(pianoId: string): Promise<BloccoPiano[]> {
+  const { data, error } = await supabaseClient.from("blocchi_piano").select("*").eq("piano_id", pianoId).order("data_inizio");
+  if (error) throw error;
+  return data ?? [];
+}
+
+export type InputBlocco = Omit<BloccoPiano, "id" | "piano_id" | "creato_il">;
+
+export async function creaBlocco(pianoId: string, input: InputBlocco): Promise<BloccoPiano> {
+  const { data, error } = await supabaseClient.from("blocchi_piano").insert({ piano_id: pianoId, ...input }).select().single();
+  if (error) throw error;
+  return data;
+}
+
+export async function aggiornaBlocco(id: string, input: Partial<InputBlocco>): Promise<void> {
+  const { error } = await supabaseClient.from("blocchi_piano").update(input).eq("id", id);
+  if (error) throw error;
+}
+
+export async function eliminaBlocco(id: string): Promise<void> {
+  const { error } = await supabaseClient.from("blocchi_piano").delete().eq("id", id);
+  if (error) throw error;
+}
+
+/** Quante partite e quanti allenamenti cadono nel periodo di ogni blocco: serve a vedere i conflitti di carico. */
+export async function riepilogoBlocchi(pianoId: string): Promise<RiepilogoBlocco[]> {
+  const { data, error } = await supabaseClient.rpc("riepilogo_blocchi_piano", { p_piano_id: pianoId });
+  if (error) throw error;
+  return data ?? [];
+}
+
+export interface RisultatoGenerazioneBlocchi {
+  errore: boolean;
+  messaggio?: string;
+  blocchi?: InputBlocco[];
+}
+
+/**
+ * Chiede all'AI una periodizzazione in blocchi datati. Manual-first:
+ * i blocchi proposti vengono mostrati e restano modificabili (o
+ * cancellabili) uno per uno prima e dopo il salvataggio — mai
+ * applicati come verità assoluta.
+ */
+export async function generaBlocchiAI(
+  teamId: string,
+  dataInizioStagione: string,
+  dataFineStagione: string,
+  contesto: string,
+): Promise<RisultatoGenerazioneBlocchi> {
+  const prompt =
+    `Sei un preparatore di pallavolo. Costruisci la periodizzazione annuale dal ${dataInizioStagione} al ${dataFineStagione}.\n` +
+    `Contesto squadra: ${contesto}\n\n` +
+    `Rispondi SOLO con JSON, nessun altro testo, in questo formato:\n` +
+    `{"blocchi":[{"nome":"...","tipo":"preparazione_generale","data_inizio":"AAAA-MM-GG","data_fine":"AAAA-MM-GG","obiettivi_tecnici":"...","obiettivi_fisici":"...","obiettivi_tattici":"..."}]}\n` +
+    `I valori ammessi per "tipo" sono esattamente: preparazione_generale, preparazione_specifica, pre_competitiva, competitiva, scarico, transizione. ` +
+    `Inserisci blocchi di scarico periodici. I blocchi devono coprire tutto il periodo senza sovrapporsi.`;
+
+  const { data: sessione } = await supabaseClient.auth.getSession();
+  if (!sessione.session) return { errore: true, messaggio: "Sessione scaduta, effettua di nuovo l'accesso." };
+
+  const { data, error } = await supabaseClient.functions.invoke(cfg.aiRouterFunction, { body: { team_id: teamId, prompt } });
+  if (error) return { errore: true, messaggio: error.message };
+  if (data.errore) return { errore: true, messaggio: data.messaggio };
+
+  try {
+    const pulito = String(data.testo).trim().replace(/^```json\s*|```$/g, "");
+    const parsed = JSON.parse(pulito);
+    const tipiAmmessi = Object.keys(ETICHETTE_TIPO_BLOCCO);
+    const blocchi: InputBlocco[] = (parsed.blocchi ?? [])
+      .filter((b: Record<string, unknown>) => b.data_inizio && b.data_fine && b.nome)
+      .map((b: Record<string, string>) => ({
+        nome: String(b.nome),
+        // Se l'AI inventa un tipo non previsto si ricade su quello più
+        // neutro, invece di far fallire l'inserimento per il vincolo.
+        tipo: (tipiAmmessi.includes(b.tipo) ? b.tipo : "preparazione_generale") as TipoBlocco,
+        data_inizio: String(b.data_inizio).slice(0, 10),
+        data_fine: String(b.data_fine).slice(0, 10),
+        obiettivi_tecnici: String(b.obiettivi_tecnici ?? ""),
+        obiettivi_fisici: String(b.obiettivi_fisici ?? ""),
+        obiettivi_tattici: String(b.obiettivi_tattici ?? ""),
+        note: "",
+      }));
+    if (blocchi.length === 0) return { errore: true, messaggio: "L'AI non ha proposto blocchi utilizzabili. Puoi comunque costruirli a mano." };
+    return { errore: false, blocchi };
+  } catch {
+    return { errore: true, messaggio: "Risposta AI non nel formato atteso. Puoi comunque costruire i blocchi a mano." };
+  }
 }

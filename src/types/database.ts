@@ -59,6 +59,7 @@ export interface Training {
   note: string;
   argomento: string | null;
   durata_totale_minuti: number | null;
+  archiviato: boolean;
   sporteasy_uid: string | null;
   creato_il: string;
 }
@@ -249,3 +250,31 @@ export interface PropostaAggiornamentoPiano {
 // con un progetto collegato). Da rigenerare al primo `supabase db push`.
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
 export interface Database {}
+
+export type TipoBlocco =
+  | "preparazione_generale"
+  | "preparazione_specifica"
+  | "pre_competitiva"
+  | "competitiva"
+  | "scarico"
+  | "transizione";
+
+export interface BloccoPiano {
+  id: string;
+  piano_id: string;
+  nome: string;
+  tipo: TipoBlocco;
+  data_inizio: string;
+  data_fine: string;
+  obiettivi_tecnici: string;
+  obiettivi_fisici: string;
+  obiettivi_tattici: string;
+  note: string;
+  creato_il: string;
+}
+
+export interface RiepilogoBlocco {
+  blocco_id: string;
+  partite_nel_periodo: number;
+  allenamenti_nel_periodo: number;
+}

@@ -3,54 +3,68 @@ import { View, Text, TextInput, Pressable, StyleSheet, ScrollView, ActivityIndic
 import { router, useFocusEffect } from "expo-router";
 import { useAuth } from "@/src/context/AuthContext";
 import {
-  accettaPropostaPiano,
-  aggiornaPianoAnnuale,
+  COLORI_TIPO_BLOCCO,
+  ETICHETTE_TIPO_BLOCCO,
+  aggiornaBlocco,
+  creaBlocco,
   creaPianoAnnuale,
-  creaPropostaAggiornamento,
-  elencaPropostePendentiPiano,
-  generaPianoAnnualeAI,
+  elencaBlocchi,
+  eliminaBlocco,
+  generaBlocchiAI,
   leggiPianoAnnuale,
-  rifiutaPropostaPiano,
-  serveProporreAggiornamento,
+  riepilogoBlocchi,
+  type InputBlocco,
 } from "@/src/services/pianoAnnuale";
 import { elencaAtlete } from "@/src/services/athletes";
 import { confermaAzione, avvisa } from "@/src/lib/confermaAzione";
 import { brand } from "@/src/config";
-import type { PianoAnnuale, PropostaAggiornamentoPiano } from "@/src/types/database";
+import type { BloccoPiano, PianoAnnuale, RiepilogoBlocco, TipoBlocco } from "@/src/types/database";
+
+const TIPI: TipoBlocco[] = ["preparazione_generale", "preparazione_specifica", "pre_competitiva", "competitiva", "scarico", "transizione"];
+
+function oggiIso() { return new Date().toISOString().slice(0, 10); }
+function fraMesi(n: number) { const d = new Date(); d.setMonth(d.getMonth() + n); return d.toISOString().slice(0, 10); }
 
 /**
- * "Gestione dei cicli": pianificazione annuale (periodizzazione)
- * generabile via AI, sempre modificabile a mano, con proposte di
- * aggiornamento quando conviene rivederla (30+ giorni dall'ultima
- * proposta, o nuove valutazioni disponibili) — controllato quando si
- * apre questa schermata, non con un vero cron in background (vedi
- * nota nella migrazione 0012).
+ * Pianificazione annuale a BLOCCHI, sul modello delle app di settore
+ * (TeamBuildr, CoachRx): la stagione è una sequenza di periodi datati
+ * con un tipo e obiettivi propri, non un testo unico. Ogni blocco
+ * mostra quante partite e quanti allenamenti cadono nel suo periodo,
+ * così i conflitti di carico (blocco "competitiva" senza partite,
+ * oppure "preparazione" pieno di gare) si vedono a colpo d'occhio.
  */
 export default function PianificazioneAnnuale() {
   const { team, stagioneAttiva } = useAuth();
   const [piano, setPiano] = useState<PianoAnnuale | null>(null);
-  const [titolo, setTitolo] = useState("Piano annuale");
-  const [contenuto, setContenuto] = useState("");
-  const [proposte, setProposte] = useState<PropostaAggiornamentoPiano[]>([]);
-  const [suggerisciAggiornamento, setSuggerisciAggiornamento] = useState(false);
+  const [blocchi, setBlocchi] = useState<BloccoPiano[]>([]);
+  const [riepilogo, setRiepilogo] = useState<RiepilogoBlocco[]>([]);
   const [caricamento, setCaricamento] = useState(true);
   const [generando, setGenerando] = useState(false);
   const [percentuale, setPercentuale] = useState(0);
-  const [salvando, setSalvando] = useState(false);
-  const [inModifica, setInModifica] = useState(false);
+  const [bloccoInModifica, setBloccoInModifica] = useState<BloccoPiano | "nuovo" | null>(null);
+  const [bozza, setBozza] = useState<InputBlocco>(bozzaVuota());
+
+  function bozzaVuota(): InputBlocco {
+    return {
+      nome: "", tipo: "preparazione_generale", data_inizio: oggiIso(), data_fine: fraMesi(1),
+      obiettivi_tecnici: "", obiettivi_fisici: "", obiettivi_tattici: "", note: "",
+    };
+  }
 
   const carica = useCallback(async () => {
     if (!team) return;
     setCaricamento(true);
     try {
-      const p = await leggiPianoAnnuale(team.id, stagioneAttiva?.id ?? null);
+      let p = await leggiPianoAnnuale(team.id, stagioneAttiva?.id ?? null);
+      // Il piano è il contenitore dei blocchi: se non esiste ancora lo
+      // si crea vuoto, così l'allenatore può partire subito ad
+      // aggiungere blocchi senza un passaggio preliminare a vuoto.
+      if (!p) p = await creaPianoAnnuale(team.id, stagioneAttiva?.id ?? null, `Piano ${stagioneAttiva?.nome ?? ""}`.trim(), "", false);
       setPiano(p);
-      if (p) {
-        setTitolo(p.titolo);
-        setContenuto(p.contenuto);
-        setProposte(await elencaPropostePendentiPiano(p.id));
-        setSuggerisciAggiornamento(await serveProporreAggiornamento(p, team.id));
-      }
+      setBlocchi(await elencaBlocchi(p.id));
+      setRiepilogo(await riepilogoBlocchi(p.id).catch(() => []));
+    } catch (e) {
+      avvisa("Errore", (e as Error).message);
     } finally {
       setCaricamento(false);
     }
@@ -58,143 +72,161 @@ export default function PianificazioneAnnuale() {
 
   useFocusEffect(useCallback(() => { carica(); }, [carica]));
 
-  async function costruisciContestoSquadra(): Promise<string> {
-    if (!team) return "";
-    const atlete = await elencaAtlete(team.id);
-    const perRuolo = atlete.reduce<Record<string, number>>((acc, a) => {
-      const r = a.ruolo_campo ?? "senza ruolo assegnato";
-      acc[r] = (acc[r] ?? 0) + 1;
-      return acc;
-    }, {});
-    const composizione = Object.entries(perRuolo).map(([r, n]) => `${n} ${r}`).join(", ");
-    return `Squadra di ${atlete.length} atlete (${composizione}). Stagione: ${stagioneAttiva?.nome ?? "non specificata"}.`;
+  function apriNuovo() {
+    // Il nuovo blocco parte dal giorno dopo la fine dell'ultimo:
+    // costruire la stagione in sequenza è il caso normale.
+    const ultimo = blocchi[blocchi.length - 1];
+    const inizio = ultimo ? new Date(new Date(ultimo.data_fine).getTime() + 86400000).toISOString().slice(0, 10) : oggiIso();
+    const fine = new Date(new Date(inizio).getTime() + 28 * 86400000).toISOString().slice(0, 10);
+    setBozza({ ...bozzaVuota(), data_inizio: inizio, data_fine: fine });
+    setBloccoInModifica("nuovo");
   }
 
-  async function onGenera() {
-    if (!team) return;
-    setGenerando(true);
-    setPercentuale(5);
-    const intervallo = setInterval(() => setPercentuale((p) => (p < 90 ? p + Math.max(1, Math.round((90 - p) * 0.15)) : p)), 400);
-    try {
-      const contesto = await costruisciContestoSquadra();
-      const r = await generaPianoAnnualeAI(team.id, contesto, piano?.contenuto);
-      if (r.errore || !r.contenuto) { avvisa("Generazione non riuscita", r.messaggio ?? "Errore sconosciuto"); return; }
-      setPercentuale(100);
-
-      if (!piano) {
-        const nuovo = await creaPianoAnnuale(team.id, stagioneAttiva?.id ?? null, titolo, r.contenuto, true);
-        setPiano(nuovo);
-        setContenuto(r.contenuto);
-      } else {
-        await creaPropostaAggiornamento(piano.id, r.contenuto, "Generata su richiesta");
-        avvisa("Proposta generata", "Trovi la proposta di aggiornamento qui sotto: puoi accettarla o rifiutarla.");
-        carica();
-      }
-    } catch (e) {
-      avvisa("Errore", (e as Error).message);
-    } finally {
-      clearInterval(intervallo);
-      setGenerando(false);
-      setTimeout(() => setPercentuale(0), 600);
-    }
-  }
-
-  async function onSalva() {
-    if (!team) return;
-    setSalvando(true);
-    try {
-      if (piano) {
-        await aggiornaPianoAnnuale(piano.id, titolo, contenuto);
-      } else {
-        const nuovo = await creaPianoAnnuale(team.id, stagioneAttiva?.id ?? null, titolo, contenuto, false);
-        setPiano(nuovo);
-      }
-      setInModifica(false);
-      carica();
-    } catch (e) {
-      avvisa("Errore", (e as Error).message);
-    } finally {
-      setSalvando(false);
-    }
-  }
-
-  async function onAccettaProposta(p: PropostaAggiornamentoPiano) {
-    confermaAzione("Applicare questo aggiornamento?", "Il contenuto attuale del piano verrà sostituito con questa proposta.", "Applica", async () => {
-      try {
-        await accettaPropostaPiano(p.id);
-        carica();
-      } catch (e) { avvisa("Errore", (e as Error).message); }
+  function apriModifica(b: BloccoPiano) {
+    setBozza({
+      nome: b.nome, tipo: b.tipo, data_inizio: b.data_inizio, data_fine: b.data_fine,
+      obiettivi_tecnici: b.obiettivi_tecnici, obiettivi_fisici: b.obiettivi_fisici,
+      obiettivi_tattici: b.obiettivi_tattici, note: b.note,
     });
+    setBloccoInModifica(b);
   }
 
-  async function onRifiutaProposta(p: PropostaAggiornamentoPiano) {
+  async function salvaBlocco() {
+    if (!piano || !bozza.nome.trim()) return;
     try {
-      await rifiutaPropostaPiano(p.id);
+      if (bloccoInModifica === "nuovo") await creaBlocco(piano.id, bozza);
+      else if (bloccoInModifica) await aggiornaBlocco(bloccoInModifica.id, bozza);
+      setBloccoInModifica(null);
       carica();
     } catch (e) { avvisa("Errore", (e as Error).message); }
   }
+
+  function chiediEliminazione(b: BloccoPiano) {
+    confermaAzione("Eliminare il blocco?", `"${b.nome}" verrà rimosso dalla pianificazione.`, "Elimina", async () => {
+      try { await eliminaBlocco(b.id); carica(); } catch (e) { avvisa("Errore", (e as Error).message); }
+    }, true);
+  }
+
+  async function onGeneraAI() {
+    if (!team || !piano) return;
+    if (blocchi.length > 0) {
+      confermaAzione("Ci sono già dei blocchi", "La proposta AI verrà AGGIUNTA a quelli esistenti, non li sostituisce. Potresti ritrovarti periodi sovrapposti da sistemare a mano.", "Genera comunque", eseguiGenerazione);
+    } else {
+      eseguiGenerazione();
+    }
+
+    async function eseguiGenerazione() {
+      setGenerando(true);
+      setPercentuale(5);
+      const intervallo = setInterval(() => setPercentuale((p) => (p < 90 ? p + Math.max(1, Math.round((90 - p) * 0.15)) : p)), 400);
+      try {
+        const atlete = await elencaAtlete(team!.id);
+        const contesto = `Squadra di ${atlete.length} atlete. Stagione: ${stagioneAttiva?.nome ?? "non specificata"}.`;
+        const inizio = stagioneAttiva?.data_apertura?.slice(0, 10) || oggiIso();
+        const r = await generaBlocchiAI(team!.id, inizio, fraMesi(9), contesto);
+        if (r.errore || !r.blocchi) { avvisa("Generazione non riuscita", r.messaggio ?? "Errore sconosciuto"); return; }
+        setPercentuale(100);
+        for (const b of r.blocchi) await creaBlocco(piano!.id, b);
+        carica();
+        avvisa("Proposta creata", `${r.blocchi.length} blocchi aggiunti. Rivedili e modificali: restano tutti editabili.`);
+      } catch (e) {
+        avvisa("Errore", (e as Error).message);
+      } finally {
+        clearInterval(intervallo);
+        setGenerando(false);
+        setTimeout(() => setPercentuale(0), 600);
+      }
+    }
+  }
+
+  function durataGiorni(b: BloccoPiano | InputBlocco): number {
+    return Math.max(1, Math.round((new Date(b.data_fine).getTime() - new Date(b.data_inizio).getTime()) / 86400000) + 1);
+  }
+
+  const oggi = oggiIso();
 
   if (caricamento) return <View style={styles.container}><ActivityIndicator color={brand.colors.brand} style={{ marginTop: 40 }} /></View>;
 
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Pressable onPress={() => router.back()} hitSlop={12}><Text style={styles.indietro}>← Impostazioni</Text></Pressable>
+        <Pressable onPress={() => router.back()} hitSlop={12}><Text style={styles.indietro}>← Profilo</Text></Pressable>
+        <Text style={styles.titolo}>Pianificazione annuale</Text>
       </View>
 
-      <ScrollView contentContainerStyle={{ padding: 16, gap: 14 }}>
-        {suggerisciAggiornamento && piano && (
-          <View style={styles.bannerSuggerimento}>
-            <Text style={styles.bannerSuggerimentoTesto}>
-              È passato un po' dall'ultimo controllo (30+ giorni) o ci sono valutazioni nuove: potrebbe convenire generare una proposta di aggiornamento del piano.
-            </Text>
-          </View>
-        )}
-
-        <View style={styles.rigaGenerazione}>
-          <Pressable style={styles.bottoneAI} onPress={onGenera} disabled={generando}>
-            {generando ? <Text style={styles.bottoneAITesto}>{percentuale}%</Text> : <Text style={styles.bottoneAITesto}>✨ {piano ? "Genera proposta di aggiornamento" : "Genera con AI"}</Text>}
+      <ScrollView contentContainerStyle={{ padding: 16, gap: 14, paddingBottom: 40 }}>
+        <View style={styles.rigaComandi}>
+          <Pressable style={styles.bottoneAI} onPress={onGeneraAI} disabled={generando}>
+            {generando ? <Text style={styles.bottoneAITesto}>{percentuale}%</Text> : <Text style={styles.bottoneAITesto}>✨ Proponi con AI</Text>}
+          </Pressable>
+          <Pressable style={styles.bottoneNuovo} onPress={apriNuovo}>
+            <Text style={styles.bottoneNuovoTesto}>+ Blocco</Text>
           </Pressable>
         </View>
-        {generando && (
-          <View style={styles.barraSfondo}><View style={[styles.barraRiempimento, { width: `${percentuale}%` }]} /></View>
-        )}
-        <Text style={styles.nota}>La proposta usa la composizione attuale della rosa e (se presente) il piano già in uso — resta sempre da confermare prima di sostituire quello attuale.</Text>
+        {generando && <View style={styles.barraSfondo}><View style={[styles.barraRiempimento, { width: `${percentuale}%` }]} /></View>}
 
-        {proposte.length > 0 && (
-          <View style={styles.card}>
-            <Text style={styles.sottotitolo}>Proposte in attesa</Text>
-            {proposte.map((p) => (
-              <View key={p.id} style={styles.proposta}>
-                <Text style={styles.propostaMotivo}>{p.motivo} — {new Date(p.creato_il).toLocaleDateString("it-IT")}</Text>
-                <Text style={styles.propostaContenuto} numberOfLines={6}>{p.contenuto_proposto}</Text>
-                <View style={styles.propostaAzioni}>
-                  <Pressable onPress={() => onRifiutaProposta(p)}><Text style={styles.linkRifiuta}>Rifiuta</Text></Pressable>
-                  <Pressable style={styles.bottoneAccetta} onPress={() => onAccettaProposta(p)}><Text style={styles.bottoneAccettaTesto}>Applica</Text></Pressable>
+        {blocchi.length === 0 ? (
+          <Text style={styles.nota}>Nessun blocco ancora. Costruisci la stagione come sequenza di periodi (preparazione, competitiva, scarico…), oppure parti da una proposta AI e correggila.</Text>
+        ) : (
+          blocchi.map((b) => {
+            const r = riepilogo.find((x) => x.blocco_id === b.id);
+            const inCorso = oggi >= b.data_inizio && oggi <= b.data_fine;
+            return (
+              <View key={b.id} style={[styles.blocco, inCorso && styles.bloccoInCorso]}>
+                <View style={[styles.barraTipo, { backgroundColor: COLORI_TIPO_BLOCCO[b.tipo] }]} />
+                <View style={{ flex: 1, gap: 4 }}>
+                  <View style={styles.rigaTitoloBlocco}>
+                    <Text style={styles.nomeBlocco}>{b.nome}</Text>
+                    {inCorso && <Text style={styles.badgeInCorso}>IN CORSO</Text>}
+                  </View>
+                  <Text style={styles.tipoBlocco}>{ETICHETTE_TIPO_BLOCCO[b.tipo]}</Text>
+                  <Text style={styles.periodoBlocco}>
+                    {new Date(b.data_inizio).toLocaleDateString("it-IT")} → {new Date(b.data_fine).toLocaleDateString("it-IT")} · {durataGiorni(b)} giorni
+                  </Text>
+                  {r && (
+                    <Text style={styles.carico}>
+                      {r.allenamenti_nel_periodo} allenamenti · {r.partite_nel_periodo} partite
+                      {b.tipo === "competitiva" && r.partite_nel_periodo === 0 ? "  ⚠ periodo competitivo senza gare in calendario" : ""}
+                      {(b.tipo === "preparazione_generale" || b.tipo === "scarico") && r.partite_nel_periodo > 2 ? "  ⚠ molte gare in un periodo a carico ridotto" : ""}
+                    </Text>
+                  )}
+                  {!!b.obiettivi_tecnici && <Text style={styles.obiettivo}><Text style={styles.etichettaObiettivo}>Tecnici: </Text>{b.obiettivi_tecnici}</Text>}
+                  {!!b.obiettivi_fisici && <Text style={styles.obiettivo}><Text style={styles.etichettaObiettivo}>Fisici: </Text>{b.obiettivi_fisici}</Text>}
+                  {!!b.obiettivi_tattici && <Text style={styles.obiettivo}><Text style={styles.etichettaObiettivo}>Tattici: </Text>{b.obiettivi_tattici}</Text>}
+                  <View style={styles.rigaAzioni}>
+                    <Pressable onPress={() => apriModifica(b)}><Text style={styles.azione}>Modifica</Text></Pressable>
+                    <Pressable onPress={() => chiediEliminazione(b)}><Text style={styles.azioneDistruttiva}>Elimina</Text></Pressable>
+                  </View>
                 </View>
               </View>
-            ))}
-          </View>
+            );
+          })
         )}
 
-        <View style={styles.card}>
-          <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-            <Text style={styles.sottotitolo}>{piano ? "Piano attuale" : "Nessun piano ancora"}</Text>
-            {piano && !inModifica && <Pressable onPress={() => setInModifica(true)}><Text style={styles.linkModifica}>Modifica</Text></Pressable>}
+        {bloccoInModifica && (
+          <View style={styles.form}>
+            <Text style={styles.titoloForm}>{bloccoInModifica === "nuovo" ? "Nuovo blocco" : "Modifica blocco"}</Text>
+            <TextInput style={styles.input} placeholder="Nome (es. Preparazione pre-campionato)" placeholderTextColor={brand.colors.muted} value={bozza.nome} onChangeText={(t) => setBozza({ ...bozza, nome: t })} />
+            <View style={styles.selettoreTipi}>
+              {TIPI.map((t) => (
+                <Pressable key={t} onPress={() => setBozza({ ...bozza, tipo: t })} style={[styles.chipTipo, bozza.tipo === t && { backgroundColor: COLORI_TIPO_BLOCCO[t] }]}>
+                  <Text style={[styles.chipTipoTesto, bozza.tipo === t && { color: "#fff", fontWeight: "700" }]}>{ETICHETTE_TIPO_BLOCCO[t]}</Text>
+                </Pressable>
+              ))}
+            </View>
+            <View style={{ flexDirection: "row", gap: 8 }}>
+              <TextInput style={[styles.input, { flex: 1 }]} placeholder="Inizio AAAA-MM-GG" placeholderTextColor={brand.colors.muted} value={bozza.data_inizio} onChangeText={(t) => setBozza({ ...bozza, data_inizio: t })} />
+              <TextInput style={[styles.input, { flex: 1 }]} placeholder="Fine AAAA-MM-GG" placeholderTextColor={brand.colors.muted} value={bozza.data_fine} onChangeText={(t) => setBozza({ ...bozza, data_fine: t })} />
+            </View>
+            <TextInput style={[styles.input, styles.inputAlto]} multiline placeholder="Obiettivi tecnici" placeholderTextColor={brand.colors.muted} value={bozza.obiettivi_tecnici} onChangeText={(t) => setBozza({ ...bozza, obiettivi_tecnici: t })} />
+            <TextInput style={[styles.input, styles.inputAlto]} multiline placeholder="Obiettivi fisici" placeholderTextColor={brand.colors.muted} value={bozza.obiettivi_fisici} onChangeText={(t) => setBozza({ ...bozza, obiettivi_fisici: t })} />
+            <TextInput style={[styles.input, styles.inputAlto]} multiline placeholder="Obiettivi tattici" placeholderTextColor={brand.colors.muted} value={bozza.obiettivi_tattici} onChangeText={(t) => setBozza({ ...bozza, obiettivi_tattici: t })} />
+            <View style={{ flexDirection: "row", gap: 8 }}>
+              <Pressable style={styles.bottoneAnnulla} onPress={() => setBloccoInModifica(null)}><Text style={styles.bottoneAnnullaTesto}>Annulla</Text></Pressable>
+              <Pressable style={styles.bottoneSalva} onPress={salvaBlocco} disabled={!bozza.nome.trim()}><Text style={styles.bottoneSalvaTesto}>Salva</Text></Pressable>
+            </View>
           </View>
-
-          {inModifica || !piano ? (
-            <>
-              <TextInput style={styles.input} placeholder="Titolo" placeholderTextColor={brand.colors.muted} value={titolo} onChangeText={setTitolo} />
-              <TextInput style={[styles.input, { minHeight: 220, textAlignVertical: "top" }]} multiline placeholder="Descrivi qui i macrocicli/mesocicli/microcicli della stagione, oppure genera con AI qui sopra." placeholderTextColor={brand.colors.muted} value={contenuto} onChangeText={setContenuto} />
-              <Pressable style={styles.bottone} onPress={onSalva} disabled={salvando || !contenuto.trim()}>
-                {salvando ? <ActivityIndicator color="#000" /> : <Text style={styles.bottoneTesto}>Salva</Text>}
-              </Pressable>
-            </>
-          ) : (
-            <Text style={styles.contenutoTesto}>{piano.contenuto}</Text>
-          )}
-        </View>
+        )}
       </ScrollView>
     </View>
   );
@@ -202,28 +234,40 @@ export default function PianificazioneAnnuale() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: brand.colors.surface },
-  header: { padding: 16, borderBottomWidth: 1, borderBottomColor: brand.colors.border },
+  header: { flexDirection: "row", alignItems: "center", gap: 16, padding: 16, borderBottomWidth: 1, borderBottomColor: brand.colors.border },
   indietro: { color: brand.colors.brand, fontWeight: "700", fontSize: 15 },
-  bannerSuggerimento: { backgroundColor: brand.colors.surfaceSecondary, borderWidth: 1, borderColor: brand.colors.brandSecondary, borderRadius: 10, padding: 12 },
-  bannerSuggerimentoTesto: { color: brand.colors.onSurface, fontSize: 13 },
-  rigaGenerazione: { flexDirection: "row" },
-  bottoneAI: { flex: 1, borderWidth: 1, borderColor: brand.colors.brandSecondary, borderRadius: 10, paddingVertical: 14, alignItems: "center" },
+  titolo: { color: brand.colors.onSurface, fontSize: 17, fontWeight: "700" },
+  nota: { color: brand.colors.muted, fontSize: 13, lineHeight: 19 },
+  rigaComandi: { flexDirection: "row", gap: 8 },
+  bottoneAI: { flex: 1, borderWidth: 1, borderColor: brand.colors.brandSecondary, borderRadius: 10, paddingVertical: 12, alignItems: "center" },
   bottoneAITesto: { color: brand.colors.brandSecondary, fontWeight: "700" },
+  bottoneNuovo: { backgroundColor: brand.colors.brand, borderRadius: 10, paddingVertical: 12, paddingHorizontal: 18, alignItems: "center" },
+  bottoneNuovoTesto: { color: "#000", fontWeight: "700" },
   barraSfondo: { height: 4, backgroundColor: brand.colors.surfaceTertiary, borderRadius: 2, overflow: "hidden" },
   barraRiempimento: { height: "100%", backgroundColor: brand.colors.brandSecondary },
-  nota: { color: brand.colors.muted, fontSize: 12 },
-  card: { backgroundColor: brand.colors.surfaceSecondary, borderRadius: 12, padding: 14, gap: 10 },
-  sottotitolo: { color: brand.colors.onSurface, fontSize: 15, fontWeight: "700" },
-  linkModifica: { color: brand.colors.brand, fontWeight: "600", fontSize: 13 },
+  blocco: { flexDirection: "row", backgroundColor: brand.colors.surfaceSecondary, borderRadius: 12, overflow: "hidden", borderWidth: 1, borderColor: "transparent" },
+  bloccoInCorso: { borderColor: brand.colors.brand },
+  barraTipo: { width: 6 },
+  rigaTitoloBlocco: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingRight: 12, paddingTop: 12 },
+  nomeBlocco: { color: brand.colors.onSurface, fontSize: 15, fontWeight: "700", paddingLeft: 12 },
+  badgeInCorso: { color: brand.colors.brand, fontSize: 10, fontWeight: "800" },
+  tipoBlocco: { color: brand.colors.brandSecondary, fontSize: 12, fontWeight: "600", paddingLeft: 12 },
+  periodoBlocco: { color: brand.colors.muted, fontSize: 12, paddingLeft: 12 },
+  carico: { color: brand.colors.onSurfaceSecondary, fontSize: 11, paddingLeft: 12 },
+  obiettivo: { color: brand.colors.onSurfaceSecondary, fontSize: 12, paddingLeft: 12, paddingRight: 12 },
+  etichettaObiettivo: { color: brand.colors.muted, fontWeight: "700" },
+  rigaAzioni: { flexDirection: "row", gap: 16, padding: 12 },
+  azione: { color: brand.colors.brand, fontSize: 12, fontWeight: "600" },
+  azioneDistruttiva: { color: brand.colors.error, fontSize: 12, fontWeight: "600" },
+  form: { backgroundColor: brand.colors.surfaceSecondary, borderRadius: 12, padding: 14, gap: 8 },
+  titoloForm: { color: brand.colors.onSurface, fontSize: 15, fontWeight: "700" },
   input: { backgroundColor: brand.colors.surfaceTertiary, color: brand.colors.onSurface, borderRadius: 8, padding: 10 },
-  bottone: { backgroundColor: brand.colors.brand, padding: 12, borderRadius: 8, alignItems: "center" },
-  bottoneTesto: { color: "#000", fontWeight: "700" },
-  contenutoTesto: { color: brand.colors.onSurfaceSecondary, fontSize: 14, lineHeight: 20 },
-  proposta: { borderTopWidth: 1, borderTopColor: brand.colors.border, paddingTop: 10, gap: 6 },
-  propostaMotivo: { color: brand.colors.muted, fontSize: 11 },
-  propostaContenuto: { color: brand.colors.onSurfaceSecondary, fontSize: 13 },
-  propostaAzioni: { flexDirection: "row", justifyContent: "flex-end", gap: 16, alignItems: "center" },
-  linkRifiuta: { color: brand.colors.error, fontSize: 13, fontWeight: "600" },
-  bottoneAccetta: { backgroundColor: brand.colors.success, paddingVertical: 6, paddingHorizontal: 14, borderRadius: 8 },
-  bottoneAccettaTesto: { color: "#000", fontWeight: "700", fontSize: 13 },
+  inputAlto: { minHeight: 60, textAlignVertical: "top" },
+  selettoreTipi: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
+  chipTipo: { paddingVertical: 5, paddingHorizontal: 10, borderRadius: 14, backgroundColor: brand.colors.surfaceTertiary },
+  chipTipoTesto: { color: brand.colors.onSurfaceSecondary, fontSize: 11 },
+  bottoneAnnulla: { flex: 1, borderWidth: 1, borderColor: brand.colors.muted, borderRadius: 8, paddingVertical: 10, alignItems: "center" },
+  bottoneAnnullaTesto: { color: brand.colors.muted, fontWeight: "600" },
+  bottoneSalva: { flex: 2, backgroundColor: brand.colors.brand, borderRadius: 8, paddingVertical: 10, alignItems: "center" },
+  bottoneSalvaTesto: { color: "#000", fontWeight: "700" },
 });

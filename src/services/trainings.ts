@@ -1,10 +1,36 @@
 import { supabaseClient } from "@/src/lib/supabase";
 import type { Athlete, Attendance, Rpe, Training, TrainingExercise } from "@/src/types/database";
 
-export async function elencaAllenamenti(teamId: string): Promise<Training[]> {
-  const { data, error } = await supabaseClient.from("trainings").select("*").eq("team_id", teamId).order("data", { ascending: false });
+export interface FiltroAllenamenti {
+  /** Estremi del periodo da mostrare (ISO). Senza, prende tutto. */
+  daData?: string;
+  aData?: string;
+  /** false (default) = solo attivi; true = solo archiviati. */
+  archiviato?: boolean;
+}
+
+/** Ordinati dal più VECCHIO al più recente (ordine cronologico di svolgimento) e filtrati per periodo, così l'elenco resta leggibile anche con centinaia di sedute importate. */
+export async function elencaAllenamenti(teamId: string, filtro: FiltroAllenamenti = {}): Promise<Training[]> {
+  let query = supabaseClient.from("trainings").select("*").eq("team_id", teamId)
+    .eq("archiviato", filtro.archiviato ?? false)
+    .order("data", { ascending: true });
+  if (filtro.daData) query = query.gte("data", filtro.daData);
+  if (filtro.aData) query = query.lte("data", filtro.aData);
+  const { data, error } = await query;
   if (error) throw error;
   return data ?? [];
+}
+
+export async function archiviaAllenamento(id: string, archiviato = true): Promise<void> {
+  const { error } = await supabaseClient.from("trainings").update({ archiviato }).eq("id", id);
+  if (error) throw error;
+}
+
+/** Archivia in un colpo solo tutte le sedute già passate. */
+export async function archiviaAllenamentiPassati(teamId: string): Promise<number> {
+  const { data, error } = await supabaseClient.rpc("archivia_allenamenti_passati", { p_team_id: teamId });
+  if (error) throw error;
+  return (data as number) ?? 0;
 }
 
 export async function creaAllenamento(teamId: string, input: Pick<Training, "data" | "titolo" | "note">): Promise<Training> {
