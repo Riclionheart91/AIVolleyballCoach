@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
-import { View, Text, TextInput, Pressable, StyleSheet, ScrollView, Alert } from "react-native";
+import { View, Text, TextInput, Pressable, StyleSheet, ScrollView } from "react-native";
 import { router } from "expo-router";
 import { useAuth } from "@/src/context/AuthContext";
 import { elencaAtlete, aggiornaMioContatto } from "@/src/services/athletes";
 import { brand, etichetteRuolo } from "@/src/config";
 import type { Athlete } from "@/src/types/database";
+import { avvisa } from "@/src/lib/confermaAzione";
 
 export default function Profilo() {
   const { session, team, ruolo, atletaId, puoScrivere, isSuperuser, esci } = useAuth();
@@ -30,9 +31,9 @@ export default function Profilo() {
     setSalvataggio(true);
     try {
       await aggiornaMioContatto(team.id, telefono.trim(), emailContatto.trim(), notePersonali.trim());
-      Alert.alert("Salvato", "I tuoi dati di contatto sono stati aggiornati.");
+      avvisa("Salvato", "I tuoi dati di contatto sono stati aggiornati.");
     } catch (e) {
-      Alert.alert("Errore", (e as Error).message);
+      avvisa("Errore", (e as Error).message);
     } finally {
       setSalvataggio(false);
     }

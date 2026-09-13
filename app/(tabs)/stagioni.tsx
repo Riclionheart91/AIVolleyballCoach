@@ -1,9 +1,9 @@
 import { useCallback, useState } from "react";
-import { View, Text, FlatList, TextInput, Pressable, StyleSheet, Alert, RefreshControl } from "react-native";
+import { View, Text, FlatList, TextInput, Pressable, StyleSheet, RefreshControl } from "react-native";
 import { useFocusEffect } from "expo-router";
 import { useAuth } from "@/src/context/AuthContext";
 import { attivaStagione, concludiStagione, creaStagione, elencaStagioni, generaBaselineStagione } from "@/src/services/seasons";
-import { confermaAzione } from "@/src/lib/confermaAzione";
+import { confermaAzione, avvisa } from "@/src/lib/confermaAzione";
 import { FabAggiungi } from "@/src/components/Fab";
 import { PopupForm } from "@/src/components/PopupForm";
 import { brand } from "@/src/config";
@@ -36,7 +36,7 @@ export default function Stagioni() {
       setPopupAperto(false);
       carica();
     } catch (e) {
-      Alert.alert("Errore nella creazione della stagione", (e as Error).message);
+      avvisa("Errore nella creazione della stagione", (e as Error).message);
     }
   }
 
@@ -46,7 +46,7 @@ export default function Stagioni() {
       carica();
       await ricaricaContesto();
     } catch (e) {
-      Alert.alert("Errore", (e as Error).message);
+      avvisa("Errore", (e as Error).message);
     }
   }
 
@@ -54,15 +54,15 @@ export default function Stagioni() {
     try {
       const n = await generaBaselineStagione(id);
       if (n === 0) {
-        Alert.alert(
+        avvisa(
           "Nessuna valutazione da usare come punto di partenza",
           "\"Genera baseline\" prende l'ultima valutazione già registrata per ogni atleta/fondamentale (fino alla data di apertura di questa stagione) e la fissa come punto di riferimento iniziale della stagione, per poter poi misurare i progressi nel tempo. Non ha trovato nessuna valutazione precedente da usare: è normale se è la prima stagione della squadra o se non hai ancora registrato valutazioni. Puoi rilanciarla più avanti, appena avrai le prime valutazioni.",
         );
       } else {
-        Alert.alert("Baseline generata", `${n} valori di riferimento creati (uno per atleta/fondamentale), presi dall'ultima valutazione disponibile prima dell'apertura della stagione.`);
+        avvisa("Baseline generata", `${n} valori di riferimento creati (uno per atleta/fondamentale), presi dall'ultima valutazione disponibile prima dell'apertura della stagione.`);
       }
     } catch (e) {
-      Alert.alert("Errore", (e as Error).message);
+      avvisa("Errore", (e as Error).message);
     }
   }
 
@@ -71,7 +71,7 @@ export default function Stagioni() {
       "Terminare la stagione?",
       `"${nomeStagione}" verrà segnata come conclusa. Resta consultabile in sola lettura, ma per registrare nuovi allenamenti/valutazioni dovrai aprirne un'altra.`,
       "Termina",
-      async () => { try { await concludiStagione(id); carica(); await ricaricaContesto(); } catch (e) { Alert.alert("Errore", (e as Error).message); } },
+      async () => { try { await concludiStagione(id); carica(); await ricaricaContesto(); } catch (e) { avvisa("Errore", (e as Error).message); } },
       true,
     );
   }

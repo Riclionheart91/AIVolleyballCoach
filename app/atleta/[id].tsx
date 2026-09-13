@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
-import { View, Text, TextInput, Pressable, StyleSheet, ScrollView, Alert, ActivityIndicator } from "react-native";
+import { View, Text, TextInput, Pressable, StyleSheet, ScrollView, ActivityIndicator } from "react-native";
 import { useLocalSearchParams, router } from "expo-router";
 import { useAuth } from "@/src/context/AuthContext";
 import { aggiornaAtleta, archiviaAtleta, eliminaAtletaDefinitivamente, leggiAtleta, ripristinaAtleta } from "@/src/services/athletes";
-import { confermaAzione } from "@/src/lib/confermaAzione";
+import { confermaAzione, avvisa } from "@/src/lib/confermaAzione";
 import { brand, ruoliCampo } from "@/src/config";
 import type { Athlete, RuoloCampo } from "@/src/types/database";
 
@@ -31,7 +31,7 @@ export default function SchedaAtleta() {
     leggiAtleta(id).then((a) => {
       setAtleta(a);
       caricaCampi(a);
-    }).catch((err) => Alert.alert("Errore", err.message));
+    }).catch((err) => avvisa("Errore", err.message));
   }, [id]);
 
   function caricaCampi(a: Athlete) {
@@ -72,7 +72,7 @@ export default function SchedaAtleta() {
       setAtleta(aggiornato);
       setInModifica(false);
     } catch (e) {
-      Alert.alert("Errore", (e as Error).message);
+      avvisa("Errore", (e as Error).message);
     } finally {
       setSalvataggio(false);
     }
@@ -81,13 +81,13 @@ export default function SchedaAtleta() {
   function chiediArchiviazione() {
     if (!atleta) return;
     confermaAzione("Archiviare l'atleta?", `"${atleta.nome} ${atleta.cognome}" non comparirà più negli elenchi attivi. Puoi ripristinarla in qualunque momento dalla sezione "Atlete archiviate".`, "Archivia", async () => {
-      try { await archiviaAtleta(atleta.id); router.back(); } catch (e) { Alert.alert("Errore", (e as Error).message); }
+      try { await archiviaAtleta(atleta.id); router.back(); } catch (e) { avvisa("Errore", (e as Error).message); }
     }, true);
   }
 
   function chiediRipristino() {
     if (!atleta) return;
-    ripristinaAtleta(atleta.id).then(() => setAtleta({ ...atleta, status: "attiva" })).catch((e) => Alert.alert("Errore", e.message));
+    ripristinaAtleta(atleta.id).then(() => setAtleta({ ...atleta, status: "attiva" })).catch((e) => avvisa("Errore", e.message));
   }
 
   function chiediEliminazione() {
@@ -97,7 +97,7 @@ export default function SchedaAtleta() {
       `"${atleta.nome} ${atleta.cognome}" e TUTTO il suo storico (valutazioni, presenze, RPE, scout) verranno cancellati per sempre. Nella maggior parte dei casi è meglio archiviare invece di eliminare. Procedere comunque?`,
       "Elimina definitivamente",
       async () => {
-        try { await eliminaAtletaDefinitivamente(atleta.id); router.back(); } catch (e) { Alert.alert("Errore", (e as Error).message); }
+        try { await eliminaAtletaDefinitivamente(atleta.id); router.back(); } catch (e) { avvisa("Errore", (e as Error).message); }
       },
       true,
     );

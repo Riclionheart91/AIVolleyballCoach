@@ -1,10 +1,11 @@
 import { useCallback, useState } from "react";
-import { View, Text, TextInput, Pressable, StyleSheet, ScrollView, Alert } from "react-native";
+import { View, Text, TextInput, Pressable, StyleSheet, ScrollView } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { useAuth } from "@/src/context/AuthContext";
 import { DEFAULT_CAMPIONATO, creaCampionato, disattivaCampionato, elencaCampionati } from "@/src/services/championships";
 import { brand } from "@/src/config";
 import type { Campionato } from "@/src/types/database";
+import { avvisa } from "@/src/lib/confermaAzione";
 
 export default function Campionati() {
   const { team } = useAuth();
@@ -27,11 +28,11 @@ export default function Campionati() {
       await creaCampionato(team.id, { ...DEFAULT_CAMPIONATO, nome: nome.trim(), federazione, data_inizio: dataInizio || null, data_fine: dataFine || null });
       setNome(""); setDataInizio(""); setDataFine("");
       carica();
-    } catch (e) { Alert.alert("Errore", (e as Error).message); }
+    } catch (e) { avvisa("Errore", (e as Error).message); }
   }
 
   async function rimuovi(id: string) {
-    try { await disattivaCampionato(id); carica(); } catch (e) { Alert.alert("Errore", (e as Error).message); }
+    try { await disattivaCampionato(id); carica(); } catch (e) { avvisa("Errore", (e as Error).message); }
   }
 
   return (

@@ -1,8 +1,9 @@
 import { useState } from "react";
-import { View, Text, TextInput, Pressable, StyleSheet, Alert } from "react-native";
+import { View, Text, TextInput, Pressable, StyleSheet } from "react-native";
 import { router } from "expo-router";
 import { useAuth } from "@/src/context/AuthContext";
 import { brand, uiStrings } from "@/src/config";
+import { avvisa } from "@/src/lib/confermaAzione";
 
 export default function CreaSquadra() {
   const { session, creaPrimaSquadra, squadreDisponibili } = useAuth();
@@ -16,7 +17,7 @@ export default function CreaSquadra() {
       await creaPrimaSquadra(nome.trim());
       router.replace("/");
     } catch (e) {
-      Alert.alert("Errore", (e as Error).message);
+      avvisa("Errore", (e as Error).message);
     } finally {
       setInCorso(false);
     }

@@ -1,9 +1,9 @@
 import { useCallback, useState } from "react";
-import { View, Text, TextInput, Pressable, StyleSheet, FlatList, Alert } from "react-native";
+import { View, Text, TextInput, Pressable, StyleSheet, FlatList } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { useAuth } from "@/src/context/AuthContext";
 import { attivaStagione, creaStagione, elencaStagioni } from "@/src/services/seasons";
-import { confermaAzione } from "@/src/lib/confermaAzione";
+import { confermaAzione, avvisa } from "@/src/lib/confermaAzione";
 import { brand } from "@/src/config";
 import type { Season } from "@/src/types/database";
 
@@ -41,7 +41,7 @@ export default function ApriStagione() {
       await ricaricaContesto();
       router.replace("/(tabs)");
     } catch (e) {
-      Alert.alert("Errore", (e as Error).message);
+      avvisa("Errore", (e as Error).message);
     } finally {
       setInCorso(false);
     }
@@ -59,7 +59,7 @@ export default function ApriStagione() {
           await ricaricaContesto();
           router.replace("/(tabs)");
         } catch (e) {
-          Alert.alert("Errore", (e as Error).message);
+          avvisa("Errore", (e as Error).message);
         } finally {
           setInCorso(false);
         }

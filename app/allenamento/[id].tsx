@@ -1,10 +1,10 @@
 import { useCallback, useState } from "react";
-import { View, Text, TextInput, Pressable, StyleSheet, ScrollView, Alert, ActivityIndicator, Modal, FlatList } from "react-native";
+import { View, Text, TextInput, Pressable, StyleSheet, ScrollView, ActivityIndicator, Modal, FlatList } from "react-native";
 import { useLocalSearchParams, useFocusEffect, router } from "expo-router";
 import { useAuth } from "@/src/context/AuthContext";
 import { elencaEsercizi } from "@/src/services/exercises";
 import { elencaPianoAllenamento, generaPianoAllenamentoAI, impostaPianoAllenamento, type VoceRiepilogoPiano } from "@/src/services/trainingPlan";
-import { confermaAzione } from "@/src/lib/confermaAzione";
+import { confermaAzione, avvisa } from "@/src/lib/confermaAzione";
 import { brand } from "@/src/config";
 import { supabaseClient } from "@/src/lib/supabase";
 import type { Exercise, Training } from "@/src/types/database";
@@ -100,7 +100,7 @@ export default function PianoAllenamento() {
         if (r.errore || !r.esercizi) {
           const messaggio = r.messaggio ?? "Errore sconosciuto";
           setErroreGenerazione(messaggio);
-          Alert.alert("Generazione non riuscita", messaggio);
+          avvisa("Generazione non riuscita", messaggio);
           return;
         }
         setPercentualeGenerazione(100);
@@ -110,7 +110,7 @@ export default function PianoAllenamento() {
         const messaggio = (e as Error).message;
         console.error("Errore generazione piano AI:", e);
         setErroreGenerazione(messaggio);
-        Alert.alert("Errore", messaggio);
+        avvisa("Errore", messaggio);
       } finally {
         clearInterval(intervallo);
         setGenerando(false);
@@ -124,10 +124,10 @@ export default function PianoAllenamento() {
     setSalvando(true);
     try {
       await impostaPianoAllenamento(id, argomento, esercizi);
-      Alert.alert("Salvato", "Piano allenamento aggiornato.");
+      avvisa("Salvato", "Piano allenamento aggiornato.");
       router.back();
     } catch (e) {
-      Alert.alert("Errore", (e as Error).message);
+      avvisa("Errore", (e as Error).message);
     } finally {
       setSalvando(false);
     }

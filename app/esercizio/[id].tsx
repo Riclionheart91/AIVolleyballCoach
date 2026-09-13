@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
-import { View, Text, TextInput, Pressable, StyleSheet, ScrollView, Alert, ActivityIndicator } from "react-native";
+import { View, Text, TextInput, Pressable, StyleSheet, ScrollView, ActivityIndicator } from "react-native";
 import { useLocalSearchParams, router } from "expo-router";
 import { useAuth } from "@/src/context/AuthContext";
 import { aggiornaEsercizio, eliminaEsercizio, leggiEsercizio } from "@/src/services/exercises";
-import { confermaAzione } from "@/src/lib/confermaAzione";
+import { confermaAzione, avvisa } from "@/src/lib/confermaAzione";
 import { brand } from "@/src/config";
 import type { Exercise } from "@/src/types/database";
 
@@ -22,7 +22,7 @@ export default function SchedaEsercizio() {
     leggiEsercizio(id).then((e) => {
       setEsercizio(e);
       setNome(e.nome); setCategoria(e.categoria ?? ""); setDescrizione(e.descrizione ?? "");
-    }).catch((err) => Alert.alert("Errore", err.message));
+    }).catch((err) => avvisa("Errore", err.message));
   }, [id]);
 
   const haModifiche = !!esercizio && (nome !== esercizio.nome || categoria !== (esercizio.categoria ?? "") || descrizione !== (esercizio.descrizione ?? ""));
@@ -43,7 +43,7 @@ export default function SchedaEsercizio() {
       setEsercizio(aggiornato);
       setInModifica(false);
     } catch (e) {
-      Alert.alert("Errore", (e as Error).message);
+      avvisa("Errore", (e as Error).message);
     } finally {
       setSalvataggio(false);
     }
@@ -60,7 +60,7 @@ export default function SchedaEsercizio() {
           await eliminaEsercizio(esercizio.id);
           router.back();
         } catch (e) {
-          Alert.alert("Impossibile eliminare", "Questo esercizio è probabilmente già usato in uno o più allenamenti — rimuovilo prima da lì, oppure lascialo nel catalogo senza usarlo più.");
+          avvisa("Impossibile eliminare", "Questo esercizio è probabilmente già usato in uno o più allenamenti — rimuovilo prima da lì, oppure lascialo nel catalogo senza usarlo più.");
         }
       },
       true,

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { View, Text, Pressable, StyleSheet, ScrollView, ActivityIndicator, Alert, Platform } from "react-native";
+import { View, Text, Pressable, StyleSheet, ScrollView, ActivityIndicator, Platform } from "react-native";
 import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system";
 import { router } from "expo-router";
@@ -17,6 +17,7 @@ import {
   type RigaAnalizzata,
 } from "@/src/services/importWizard";
 import { brand } from "@/src/config";
+import { avvisa } from "@/src/lib/confermaAzione";
 
 type Passo = "scelta_file" | "abbinamento" | "revisione" | "completato";
 
@@ -53,7 +54,7 @@ export default function ImportaAtlete() {
       }
 
       if (letto.intestazioni.length === 0) {
-        Alert.alert("File vuoto", "Non ho trovato intestazioni di colonna nel file selezionato.");
+        avvisa("File vuoto", "Non ho trovato intestazioni di colonna nel file selezionato.");
         setCaricamento(false);
         return;
       }
@@ -62,7 +63,7 @@ export default function ImportaAtlete() {
       setMappatura(abbinaColonneAutomaticamente(letto.intestazioni));
       setPasso("abbinamento");
     } catch (e) {
-      Alert.alert("Errore nella lettura del file", (e as Error).message);
+      avvisa("Errore nella lettura del file", (e as Error).message);
     } finally {
       setCaricamento(false);
     }
@@ -77,7 +78,7 @@ export default function ImportaAtlete() {
       setRigheAnalizzate(analizzaRighe(fileLetto.righe, mappatura, atlete, colonnaFiltro));
       setPasso("revisione");
     } catch (e) {
-      Alert.alert("Errore", (e as Error).message);
+      avvisa("Errore", (e as Error).message);
     } finally {
       setCaricamento(false);
     }
@@ -94,11 +95,11 @@ export default function ImportaAtlete() {
       const risultato = await eseguiImportWizard(team.id, righeAnalizzate);
       setEsito({ create: risultato.create, aggiornate: risultato.aggiornate, errori: risultato.errori.length });
       if (risultato.errori.length > 0) {
-        Alert.alert("Alcune righe non sono state importate", risultato.errori.map((e) => `${e.riga.datiFile.nome} ${e.riga.datiFile.cognome}: ${e.messaggio}`).join("\n"));
+        avvisa("Alcune righe non sono state importate", risultato.errori.map((e) => `${e.riga.datiFile.nome} ${e.riga.datiFile.cognome}: ${e.messaggio}`).join("\n"));
       }
       setPasso("completato");
     } catch (e) {
-      Alert.alert("Errore", (e as Error).message);
+      avvisa("Errore", (e as Error).message);
     } finally {
       setCaricamento(false);
     }

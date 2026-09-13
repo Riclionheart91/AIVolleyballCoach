@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from "react";
-import { View, Text, Pressable, StyleSheet, FlatList, Switch, Alert, Modal } from "react-native";
+import { View, Text, Pressable, StyleSheet, FlatList, Switch, Modal } from "react-native";
 import { useLocalSearchParams, useFocusEffect, router } from "expo-router";
 import { useAuth } from "@/src/context/AuthContext";
 import { elencaAtlete } from "@/src/services/athletes";
@@ -19,7 +19,7 @@ import {
 import { brand, skillsScouting, skillsScoutingEssenziali } from "@/src/config";
 import type { Athlete, Esito, Match, MatchEvent, MatchSet, MatchSetLineup, Skill } from "@/src/types/database";
 import { supabaseClient } from "@/src/lib/supabase";
-import { confermaAzione } from "@/src/lib/confermaAzione";
+import { confermaAzione, avvisa } from "@/src/lib/confermaAzione";
 import { Campo9x9, type OccupanteCampo } from "@/src/components/Campo9x9";
 
 interface CambioInSospeso {
@@ -118,7 +118,7 @@ export default function PartitaLive() {
             await nuovoSet(m.id);
             router.replace(`/partita/${m.id}/prepara`);
           }
-        } catch (e) { Alert.alert("Errore", (e as Error).message); }
+        } catch (e) { avvisa("Errore", (e as Error).message); }
       },
     );
   }
@@ -182,7 +182,7 @@ export default function PartitaLive() {
       setEventi((prev) => prev.filter((ev) => ev.id !== eventoOttimistico.id));
       applicaDeltaLocale(skill, esito, -1);
       setErroreVisibile(messaggio);
-      Alert.alert("Evento non salvato", messaggio);
+      avvisa("Evento non salvato", messaggio);
     }
   }
 
@@ -200,7 +200,7 @@ export default function PartitaLive() {
       carica();
     } catch (e) {
       carica();
-      Alert.alert("Errore nell'annullamento", (e as Error).message);
+      avvisa("Errore nell'annullamento", (e as Error).message);
     }
   }
 
@@ -209,13 +209,13 @@ export default function PartitaLive() {
     try {
       await nuovoSet(match.id);
       router.replace(`/partita/${match.id}/prepara`);
-    } catch (e) { Alert.alert("Errore", (e as Error).message); }
+    } catch (e) { avvisa("Errore", (e as Error).message); }
   }
 
   async function onChiudiPartita() {
     if (!match) return;
     confermaAzione("Chiudere la partita?", "Non potrai più registrare eventi dopo la chiusura.", "Chiudi", async () => {
-      try { await chiudiMatch(match.id); router.back(); } catch (e) { Alert.alert("Errore", (e as Error).message); }
+      try { await chiudiMatch(match.id); router.back(); } catch (e) { avvisa("Errore", (e as Error).message); }
     }, true);
   }
 
@@ -236,7 +236,7 @@ export default function PartitaLive() {
       setAtletaSelId(null);
       carica();
     } catch (e) {
-      Alert.alert("Cambio non riuscito", (e as Error).message);
+      avvisa("Cambio non riuscito", (e as Error).message);
     }
   }
 

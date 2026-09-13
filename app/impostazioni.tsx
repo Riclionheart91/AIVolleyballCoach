@@ -1,10 +1,11 @@
 import { useCallback, useState } from "react";
-import { View, Text, TextInput, Pressable, StyleSheet, ScrollView, Alert, Switch } from "react-native";
+import { View, Text, TextInput, Pressable, StyleSheet, ScrollView, Switch } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { useAuth } from "@/src/context/AuthContext";
 import { impostaLinkSporteasy, leggiIntegrazione } from "@/src/services/sporteasy";
 import { elencaProvider, salvaProvider, type AiProviderConfig } from "@/src/services/aiProviders";
 import { brand } from "@/src/config";
+import { avvisa } from "@/src/lib/confermaAzione";
 
 const PROVIDER_CODICI = ["GEMINI", "GROQ", "OPENROUTER"] as const;
 
@@ -28,8 +29,8 @@ export default function Impostazioni() {
     if (!team || !linkSporteasy.trim()) return;
     try {
       await impostaLinkSporteasy(team.id, linkSporteasy.trim());
-      Alert.alert("Salvato", "Link calendario aggiornato.");
-    } catch (e) { Alert.alert("Errore", (e as Error).message); }
+      avvisa("Salvato", "Link calendario aggiornato.");
+    } catch (e) { avvisa("Errore", (e as Error).message); }
   }
 
   function rigaProvider(config: AiProviderConfig | undefined, codice: (typeof PROVIDER_CODICI)[number], teamId: string | null, lista: AiProviderConfig[], setLista: (l: AiProviderConfig[]) => void) {
@@ -40,7 +41,7 @@ export default function Impostazioni() {
       try {
         await salvaProvider({ team_id: teamId, provider_code: codice, enabled: nuovo.enabled, priority: nuovo.priority, modello: nuovo.modello });
         setLista(lista.some((p) => p.provider_code === codice) ? lista.map((p) => (p.provider_code === codice ? { ...p, ...patch } : p)) : [...lista, nuovo]);
-      } catch (e) { Alert.alert("Errore", (e as Error).message); }
+      } catch (e) { avvisa("Errore", (e as Error).message); }
     }
 
     return (

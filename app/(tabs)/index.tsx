@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import { View, Text, FlatList, TextInput, Pressable, StyleSheet, RefreshControl, Alert } from "react-native";
+import { View, Text, FlatList, TextInput, Pressable, StyleSheet, RefreshControl } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { useAuth } from "@/src/context/AuthContext";
 import { creaAtleta, elencaAtlete, elencaAtleteArchiviate, ripristinaAtleta } from "@/src/services/athletes";
@@ -8,6 +8,7 @@ import { FabAggiungi } from "@/src/components/Fab";
 import { PopupForm } from "@/src/components/PopupForm";
 import { brand, etichetteRuolo, ruoliCampo } from "@/src/config";
 import type { Athlete, Ruolo, RuoloCampo } from "@/src/types/database";
+import { avvisa } from "@/src/lib/confermaAzione";
 
 export default function Atlete() {
   const { team, puoScrivere } = useAuth();
@@ -48,22 +49,22 @@ export default function Atlete() {
   }
 
   async function ripristina(id: string) {
-    try { await ripristinaAtleta(id); carica(); } catch (e) { Alert.alert("Errore", (e as Error).message); }
+    try { await ripristinaAtleta(id); carica(); } catch (e) { avvisa("Errore", (e as Error).message); }
   }
 
   async function invita() {
     if (!team || !emailInvito.trim()) return;
     if (ruoloInvito === "atleta" && !atletaInvito) {
-      Alert.alert("Manca la scheda", "Per invitare un'atleta seleziona prima a quale scheda anagrafica collegare l'invito.");
+      avvisa("Manca la scheda", "Per invitare un'atleta seleziona prima a quale scheda anagrafica collegare l'invito.");
       return;
     }
     try {
       await invitaMembro(team.id, emailInvito.trim(), ruoloInvito, ruoloInvito === "atleta" ? atletaInvito : null);
       setEmailInvito(""); setAtletaInvito(null);
       carica();
-      Alert.alert("Invito creato", "Quando questa persona farà login con Google per la prima volta, entrerà automaticamente nella squadra con il ruolo scelto.");
+      avvisa("Invito creato", "Quando questa persona farà login con Google per la prima volta, entrerà automaticamente nella squadra con il ruolo scelto.");
     } catch (e) {
-      Alert.alert("Errore", (e as Error).message);
+      avvisa("Errore", (e as Error).message);
     }
   }
 

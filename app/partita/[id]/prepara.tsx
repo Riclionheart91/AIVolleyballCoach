@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import { View, Text, Pressable, StyleSheet, ScrollView, Alert, ActivityIndicator, Modal, FlatList } from "react-native";
+import { View, Text, Pressable, StyleSheet, ScrollView, ActivityIndicator, Modal, FlatList } from "react-native";
 import { useLocalSearchParams, useFocusEffect, router } from "expo-router";
 import { useAuth } from "@/src/context/AuthContext";
 import { elencaAtlete } from "@/src/services/athletes";
@@ -13,7 +13,7 @@ import {
   impostaConvocati,
   impostaFormazioneIniziale,
 } from "@/src/services/matches";
-import { confermaAzione } from "@/src/lib/confermaAzione";
+import { confermaAzione, avvisa } from "@/src/lib/confermaAzione";
 import { Campo9x9, type OccupanteCampo } from "@/src/components/Campo9x9";
 import { brand } from "@/src/config";
 import { supabaseClient } from "@/src/lib/supabase";
@@ -81,7 +81,7 @@ export default function PreparaPartita() {
       // gara, si salta direttamente alla formazione.
       if (numero > 1 && convocati.length > 0) setMostraFormazione(true);
     } catch (e) {
-      Alert.alert("Errore", (e as Error).message);
+      avvisa("Errore", (e as Error).message);
     } finally {
       setCaricamento(false);
     }
@@ -113,9 +113,9 @@ export default function PreparaPartita() {
     setSalvandoConvocati(true);
     try {
       await impostaConvocati(id, Array.from(convocateIds), Array.from(liberoIds));
-      Alert.alert("Salvato", "Convocati aggiornati.");
+      avvisa("Salvato", "Convocati aggiornati.");
     } catch (e) {
-      Alert.alert("Errore convocati", (e as Error).message);
+      avvisa("Errore convocati", (e as Error).message);
     } finally {
       setSalvandoConvocati(false);
     }
@@ -182,7 +182,7 @@ export default function PreparaPartita() {
       await impostaFormazioneIniziale(setId, payload, chiServe);
       return true;
     } catch (e) {
-      Alert.alert("Errore formazione", (e as Error).message);
+      avvisa("Errore formazione", (e as Error).message);
       return false;
     }
   }
@@ -196,7 +196,7 @@ export default function PreparaPartita() {
       await avviaMatchConfermato(id);
       router.replace(`/partita/${id}`);
     } catch (e) {
-      Alert.alert("Impossibile avviare", (e as Error).message);
+      avvisa("Impossibile avviare", (e as Error).message);
     } finally {
       setAvviando(false);
     }
@@ -212,7 +212,7 @@ export default function PreparaPartita() {
         try {
           await chiudiMatch(id!);
           router.replace("/(tabs)/partite");
-        } catch (e) { Alert.alert("Errore", (e as Error).message); }
+        } catch (e) { avvisa("Errore", (e as Error).message); }
       }, true);
       return;
     }
@@ -222,7 +222,7 @@ export default function PreparaPartita() {
         const { error } = await supabaseClient.from("matches").delete().eq("id", id);
         if (error) throw error;
         router.replace("/(tabs)/partite");
-      } catch (e) { Alert.alert("Errore", (e as Error).message); }
+      } catch (e) { avvisa("Errore", (e as Error).message); }
     }, true);
   }
 

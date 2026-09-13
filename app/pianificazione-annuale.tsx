@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import { View, Text, TextInput, Pressable, StyleSheet, ScrollView, Alert, ActivityIndicator } from "react-native";
+import { View, Text, TextInput, Pressable, StyleSheet, ScrollView, ActivityIndicator } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { useAuth } from "@/src/context/AuthContext";
 import {
@@ -14,7 +14,7 @@ import {
   serveProporreAggiornamento,
 } from "@/src/services/pianoAnnuale";
 import { elencaAtlete } from "@/src/services/athletes";
-import { confermaAzione } from "@/src/lib/confermaAzione";
+import { confermaAzione, avvisa } from "@/src/lib/confermaAzione";
 import { brand } from "@/src/config";
 import type { PianoAnnuale, PropostaAggiornamentoPiano } from "@/src/types/database";
 
@@ -78,7 +78,7 @@ export default function PianificazioneAnnuale() {
     try {
       const contesto = await costruisciContestoSquadra();
       const r = await generaPianoAnnualeAI(team.id, contesto, piano?.contenuto);
-      if (r.errore || !r.contenuto) { Alert.alert("Generazione non riuscita", r.messaggio ?? "Errore sconosciuto"); return; }
+      if (r.errore || !r.contenuto) { avvisa("Generazione non riuscita", r.messaggio ?? "Errore sconosciuto"); return; }
       setPercentuale(100);
 
       if (!piano) {
@@ -87,11 +87,11 @@ export default function PianificazioneAnnuale() {
         setContenuto(r.contenuto);
       } else {
         await creaPropostaAggiornamento(piano.id, r.contenuto, "Generata su richiesta");
-        Alert.alert("Proposta generata", "Trovi la proposta di aggiornamento qui sotto: puoi accettarla o rifiutarla.");
+        avvisa("Proposta generata", "Trovi la proposta di aggiornamento qui sotto: puoi accettarla o rifiutarla.");
         carica();
       }
     } catch (e) {
-      Alert.alert("Errore", (e as Error).message);
+      avvisa("Errore", (e as Error).message);
     } finally {
       clearInterval(intervallo);
       setGenerando(false);
@@ -112,7 +112,7 @@ export default function PianificazioneAnnuale() {
       setInModifica(false);
       carica();
     } catch (e) {
-      Alert.alert("Errore", (e as Error).message);
+      avvisa("Errore", (e as Error).message);
     } finally {
       setSalvando(false);
     }
@@ -123,7 +123,7 @@ export default function PianificazioneAnnuale() {
       try {
         await accettaPropostaPiano(p.id);
         carica();
-      } catch (e) { Alert.alert("Errore", (e as Error).message); }
+      } catch (e) { avvisa("Errore", (e as Error).message); }
     });
   }
 
@@ -131,7 +131,7 @@ export default function PianificazioneAnnuale() {
     try {
       await rifiutaPropostaPiano(p.id);
       carica();
-    } catch (e) { Alert.alert("Errore", (e as Error).message); }
+    } catch (e) { avvisa("Errore", (e as Error).message); }
   }
 
   if (caricamento) return <View style={styles.container}><ActivityIndicator color={brand.colors.brand} style={{ marginTop: 40 }} /></View>;

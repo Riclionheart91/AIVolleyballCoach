@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { View, Text, TextInput, Pressable, StyleSheet, FlatList, ActivityIndicator, Alert } from "react-native";
+import { View, Text, TextInput, Pressable, StyleSheet, FlatList, ActivityIndicator } from "react-native";
 import { useFocusEffect } from "expo-router";
 import { useAuth } from "@/src/context/AuthContext";
 import { elencaAtlete } from "@/src/services/athletes";
@@ -19,6 +19,7 @@ import {
 } from "@/src/services/evaluations";
 import { brand, fondamentali, uiStrings } from "@/src/config";
 import type { Athlete, Evaluation, EvaluationProposal, Fondamentale } from "@/src/types/database";
+import { avvisa } from "@/src/lib/confermaAzione";
 
 export default function Valutazioni() {
   const { team, puoScrivere, ruolo, atletaId } = useAuth();
@@ -76,12 +77,12 @@ function SezioneCicloValutazione({ teamId }: { teamId: string }) {
 
   async function salvaCadenza() {
     const giorni = Number(cadenza);
-    if (!giorni || giorni < 7 || giorni > 365) { Alert.alert("Cadenza non valida", "Indica un valore tra 7 e 365 giorni."); return; }
+    if (!giorni || giorni < 7 || giorni > 365) { avvisa("Cadenza non valida", "Indica un valore tra 7 e 365 giorni."); return; }
     try {
       await impostaCadenzaValutazione(teamId, giorni);
       setCadenzaInModifica(false);
       carica();
-    } catch (e) { Alert.alert("Errore", (e as Error).message); }
+    } catch (e) { avvisa("Errore", (e as Error).message); }
   }
 
   const daMostrare = mostraTutte ? daValutare : daValutare.slice(0, 5);
@@ -156,7 +157,7 @@ function SezioneValutazioneCoach({ teamId }: { teamId: string }) {
   async function onRegistra() {
     if (!atletaSelId || !punteggio) return;
     const valore = Number(punteggio);
-    if (Number.isNaN(valore) || valore < 1 || valore > 10) { Alert.alert("Punteggio non valido", "Inserisci un valore tra 1 e 10."); return; }
+    if (Number.isNaN(valore) || valore < 1 || valore > 10) { avvisa("Punteggio non valido", "Inserisci un valore tra 1 e 10."); return; }
     try {
       if (!propostaPendente) {
         await registraValutazione(teamId, atletaSelId, fondamentale, valore);
@@ -196,10 +197,10 @@ function SezioneValutazioneCoach({ teamId }: { teamId: string }) {
   }
 
   async function onDecidiDallaLista(p: EvaluationProposal) {
-    try { await decidiProposta(p.id, p.valore_proposto); carica(); } catch (e) { Alert.alert("Errore", (e as Error).message); }
+    try { await decidiProposta(p.id, p.valore_proposto); carica(); } catch (e) { avvisa("Errore", (e as Error).message); }
   }
   async function onRigettaDallaLista(p: EvaluationProposal) {
-    try { await rigettaProposta(p.id); carica(); } catch (e) { Alert.alert("Errore", (e as Error).message); }
+    try { await rigettaProposta(p.id); carica(); } catch (e) { avvisa("Errore", (e as Error).message); }
   }
 
   return (

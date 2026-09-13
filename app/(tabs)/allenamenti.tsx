@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import { View, Text, FlatList, TextInput, Pressable, StyleSheet, RefreshControl, Alert } from "react-native";
+import { View, Text, FlatList, TextInput, Pressable, StyleSheet, RefreshControl } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { useAuth } from "@/src/context/AuthContext";
 import { elencaAtlete } from "@/src/services/athletes";
@@ -7,7 +7,7 @@ import {
   aggiornaAllenamento, creaAllenamento, eliminaAllenamento, elencaAllenamenti,
   elencaPresenzeAllenamento, elencaRpeAllenamento, registraPresenza, registraRpe,
 } from "@/src/services/trainings";
-import { confermaAzione } from "@/src/lib/confermaAzione";
+import { confermaAzione, avvisa } from "@/src/lib/confermaAzione";
 import { FabAggiungi } from "@/src/components/Fab";
 import { PannelloSporteasy } from "@/src/components/PannelloSporteasy";
 import { PopupForm } from "@/src/components/PopupForm";
@@ -62,7 +62,7 @@ export default function Allenamenti() {
   async function salva() {
     if (!team) return;
     const dataIso = testoADataIso(dataTesto);
-    if (!dataIso) { Alert.alert("Data non valida", "Usa il formato AAAA-MM-GG oppure AAAA-MM-GG OO:MM (es. 2026-09-15 18:30). Puoi anche indicare una data futura."); return; }
+    if (!dataIso) { avvisa("Data non valida", "Usa il formato AAAA-MM-GG oppure AAAA-MM-GG OO:MM (es. 2026-09-15 18:30). Puoi anche indicare una data futura."); return; }
     try {
       if (allenamentoInModifica) {
         await aggiornaAllenamento(allenamentoInModifica.id, { titolo: titolo.trim() || "Allenamento", data: dataIso });
@@ -72,13 +72,13 @@ export default function Allenamenti() {
       setPopupAperto(false);
       carica();
     } catch (e) {
-      Alert.alert("Errore", (e as Error).message);
+      avvisa("Errore", (e as Error).message);
     }
   }
 
   function chiediEliminazione(t: Training) {
     confermaAzione("Eliminare l'allenamento?", `"${t.titolo}" e le presenze/RPE già registrate per questa sessione verranno eliminati.`, "Elimina", async () => {
-      try { await eliminaAllenamento(t.id); carica(); } catch (e) { Alert.alert("Errore", (e as Error).message); }
+      try { await eliminaAllenamento(t.id); carica(); } catch (e) { avvisa("Errore", (e as Error).message); }
     }, true);
   }
 

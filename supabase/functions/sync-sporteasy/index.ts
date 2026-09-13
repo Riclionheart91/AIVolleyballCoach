@@ -58,6 +58,9 @@ Deno.serve(async (req) => {
       return jsonResponse({ errore: true, messaggio: "Utente non autorizzato su questo team." }, 403);
     }
 
+    const { data: squadra } = await admin.from("teams").select("nome").eq("id", team_id).maybeSingle();
+    const nomeSquadra = squadra?.nome ?? null;
+
     const { data: integrazione } = await admin.from("team_integrations").select("*").eq("team_id", team_id).maybeSingle();
     if (!integrazione?.sporteasy_ical_url) {
       return jsonResponse({ errore: true, messaggio: "Nessun link calendario SportEasy configurato per questa squadra." }, 400);
@@ -65,12 +68,34 @@ Deno.serve(async (req) => {
 
     const url = integrazione.sporteasy_ical_url.replace(/^webcal:\/\//i, "https://");
 
-    const resp = await fetch(url);
+    // Alcuni servizi (SportEasy compreso, a seconda della
+    // configurazione) rifiutano richieste che non sembrano provenire
+    // da un browser: senza queste intestazioni il calendario può
+    // tornare 403/406 pur essendo scaricabile a mano dal browser.
+    const resp = await fetch(url, {
+      redirect: "follow",
+      headers: {
+        "User-Agent": "Mozilla/5.0 (compatible; AIVolleyballCoach/1.0; +https://github.com/)",
+        "Accept": "text/calendar, text/plain, */*",
+      },
+    });
     if (!resp.ok) {
-      await registraEsito(admin, team_id, `Errore HTTP ${resp.status} nello scaricare il calendario`);
-      return jsonResponse({ errore: true, messaggio: `Impossibile scaricare il calendario (HTTP ${resp.status}). Verifica che il link sia corretto e ancora valido.` }, 400);
+      const anteprima = (await resp.text().catch(() => "")).slice(0, 200);
+      const messaggio = `Errore HTTP ${resp.status} nello scaricare il calendario${anteprima ? ` — risposta: ${anteprima}` : ""}`;
+      await registraEsito(admin, team_id, messaggio);
+      return jsonResponse({ errore: true, messaggio: `${messaggio}. Verifica che il link sia ancora valido (SportEasy → Impostazioni squadra → Esporta calendario).` }, 400);
     }
     const testoIcs = await resp.text();
+
+    // Il calendario è stato scaricato ma non contiene eventi: meglio
+    // dirlo subito e con chiarezza, invece di riportare "0 creati" che
+    // sembra un problema dell'app.
+    if (!testoIcs.includes("BEGIN:VCALENDAR")) {
+      const messaggio = `Il contenuto scaricato non è un calendario iCal (${testoIcs.length} byte). Probabilmente il link è scaduto e restituisce una pagina web.`;
+      await registraEsito(admin, team_id, messaggio);
+      return jsonResponse({ errore: true, messaggio }, 400);
+    }
+
     const eventi = analizzaIcs(testoIcs);
 
     let allenamentiCreati = 0, allenamentiAggiornati = 0, partiteCreate = 0, partiteAggiornate = 0;
@@ -78,20 +103,20 @@ Deno.serve(async (req) => {
     const erroriScrittura: string[] = [];
 
     for (const ev of eventi) {
-      const eAllenamento = !sembraPartita(ev.summary);
+      const eAllenamento = !sembraPartita(ev.summary, nomeSquadra);
       dettaglioClassificazione.push({ titolo: ev.summary, tipo: eAllenamento ? "allenamento" : "partita" });
 
       if (eAllenamento) {
         const { data: esistente } = await admin.from("trainings").select("id").eq("team_id", team_id).eq("sporteasy_uid", ev.uid).maybeSingle();
         if (esistente) {
-          const { error } = await admin.from("trainings").update({ titolo: ev.summary, data: ev.dataInizio }).eq("id", esistente.id);
+          const { error } = await admin.from("trainings").update({ titolo: titoloAllenamento(ev.summary, nomeSquadra), data: ev.dataInizio }).eq("id", esistente.id);
           if (error) erroriScrittura.push(`"${ev.summary}": ${error.message}`); else allenamentiAggiornati++;
         } else {
-          const { error } = await admin.from("trainings").insert({ team_id, titolo: ev.summary, data: ev.dataInizio, note: "", sporteasy_uid: ev.uid });
+          const { error } = await admin.from("trainings").insert({ team_id, titolo: titoloAllenamento(ev.summary, nomeSquadra), data: ev.dataInizio, note: "", sporteasy_uid: ev.uid });
           if (error) erroriScrittura.push(`"${ev.summary}": ${error.message}`); else allenamentiCreati++;
         }
       } else {
-        const avversario = estraiAvversario(ev.summary);
+        const avversario = estraiAvversario(ev.summary, nomeSquadra);
         const { data: esistente } = await admin.from("matches").select("id").eq("team_id", team_id).eq("sporteasy_uid", ev.uid).maybeSingle();
         if (esistente) {
           // Aggiorna solo avversario/data: il campionato, se già
@@ -144,13 +169,46 @@ async function registraEsito(admin: ReturnType<typeof createClient>, teamId: str
   await admin.from("team_integrations").update({ ultima_sincronizzazione: new Date().toISOString(), ultimo_esito: esito }).eq("team_id", teamId);
 }
 
-/** Un evento è una PARTITA solo se il titolo somiglia esplicitamente a un incontro; il default è "allenamento" — riflette meglio un calendario club reale, dove le sedute di allenamento sono la maggioranza e non sempre riportano la parola "allenamento" nel titolo. */
-function sembraPartita(summary: string): boolean {
-  return /\b(vs\.?|contro|partita|campionato|match|gara)\b/i.test(summary);
+/**
+ * SportEasy nomina gli eventi "NomeSquadra - Qualcosa", dove
+ * "Qualcosa" è il tipo di seduta ("Allenamento", "Sitting Volley") per
+ * gli allenamenti e il nome dell'avversario per le partite. Quindi:
+ * si toglie il prefisso con il nome della squadra e si guarda cosa
+ * resta — se somiglia a un tipo di seduta è un allenamento, altrimenti
+ * è una partita contro quella squadra. Restano riconosciute anche le
+ * diciture esplicite ("vs", "contro", "partita"...) per i calendari
+ * che non seguono quel formato.
+ */
+const PAROLE_ALLENAMENTO = /(allenamento|training|riscaldamento|preparazione|atletica|palestra|sitting|tecnica|seduta|raduno)/i;
+const PAROLE_PARTITA = /\b(vs\.?|contro|partita|campionato|match|gara|torneo|amichevole)\b/i;
+
+function separaPrefissoSquadra(summary: string, nomeSquadra?: string | null): string {
+  if (nomeSquadra) {
+    const prefisso = new RegExp(`^\\s*${nomeSquadra.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*[-–]\\s*`, "i");
+    if (prefisso.test(summary)) return summary.replace(prefisso, "").trim();
+  }
+  return summary;
 }
 
-function estraiAvversario(summary: string): string {
-  return summary.replace(/^(partita|match|gara)?\s*(vs\.?|contro)\s*/i, "").trim() || summary;
+function sembraPartita(summary: string, nomeSquadra?: string | null): boolean {
+  if (PAROLE_PARTITA.test(summary)) return true;
+  const resto = separaPrefissoSquadra(summary, nomeSquadra);
+  // Nessun prefisso rimosso: senza altri indizi si assume allenamento
+  // (in un calendario di squadra sono la maggioranza).
+  if (resto === summary) return false;
+  // Prefisso rimosso: se ciò che resta non è un tipo di seduta, è il
+  // nome dell'avversario.
+  return !PAROLE_ALLENAMENTO.test(resto);
+}
+
+function estraiAvversario(summary: string, nomeSquadra?: string | null): string {
+  const resto = separaPrefissoSquadra(summary, nomeSquadra);
+  return resto.replace(/^(partita|match|gara)?\s*(vs\.?|contro)\s*/i, "").trim() || summary;
+}
+
+/** Titolo più leggibile per l'allenamento: "Peach Gate - Allenamento" diventa "Allenamento". */
+function titoloAllenamento(summary: string, nomeSquadra?: string | null): string {
+  return separaPrefissoSquadra(summary, nomeSquadra) || summary;
 }
 
 /** Unfolding + parsing minimale di un feed ICS, con espansione delle occorrenze ricorrenti (RRULE FREQ=WEEKLY). */

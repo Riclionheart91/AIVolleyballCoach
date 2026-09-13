@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import { View, Text, FlatList, TextInput, Pressable, StyleSheet, RefreshControl, Alert, ActivityIndicator } from "react-native";
+import { View, Text, FlatList, TextInput, Pressable, StyleSheet, RefreshControl, ActivityIndicator } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { useAuth } from "@/src/context/AuthContext";
 import { andamentoSquadraPartite, creaMatch, elencaPartite, type AndamentoSquadraPartiteVoce } from "@/src/services/matches";
@@ -7,6 +7,7 @@ import { elencaCampionati, riassegnaCampionatoPartita } from "@/src/services/cha
 import { PannelloSporteasy } from "@/src/components/PannelloSporteasy";
 import { brand } from "@/src/config";
 import type { Campionato, Match } from "@/src/types/database";
+import { avvisa } from "@/src/lib/confermaAzione";
 
 export default function Partite() {
   const { team, puoScrivere } = useAuth();
@@ -46,13 +47,13 @@ export default function Partite() {
       setAvversario("");
       router.push(`/partita/${matchId}/prepara`);
     } catch (e) {
-      Alert.alert("Errore", (e as Error).message);
+      avvisa("Errore", (e as Error).message);
     }
   }
 
   function apriPartita(m: Match) {
     if (m.stato === "programmata") {
-      if (!puoScrivere) { Alert.alert("Partita non ancora iniziata", "L'allenatore non ha ancora preparato questa partita."); return; }
+      if (!puoScrivere) { avvisa("Partita non ancora iniziata", "L'allenatore non ha ancora preparato questa partita."); return; }
       router.push(`/partita/${m.id}/prepara`);
       return;
     }
@@ -65,7 +66,7 @@ export default function Partite() {
       setPickerCampionatoMatchId(null);
       carica();
     } catch (e) {
-      Alert.alert("Errore", (e as Error).message);
+      avvisa("Errore", (e as Error).message);
     }
   }
 

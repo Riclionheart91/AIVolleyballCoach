@@ -1,9 +1,10 @@
 import { useCallback, useState } from "react";
-import { View, Text, TextInput, Pressable, StyleSheet, Alert, ActivityIndicator } from "react-native";
+import { View, Text, TextInput, Pressable, StyleSheet, ActivityIndicator } from "react-native";
 import { useFocusEffect } from "expo-router";
 import { impostaLinkSporteasy, leggiIntegrazione, sincronizzaSporteasy } from "@/src/services/sporteasy";
 import { brand } from "@/src/config";
 import type { TeamIntegration } from "@/src/types/database";
+import { avvisa } from "@/src/lib/confermaAzione";
 
 /**
  * Pannello di sincronizzazione SportEasy, condiviso tra la tab
@@ -34,18 +35,18 @@ export function PannelloSporteasy({ teamId, onSincronizzato }: { teamId: string;
     try {
       await impostaLinkSporteasy(teamId, link.trim());
       carica();
-      Alert.alert("Salvato", "Link calendario salvato. Ora premi \"Sincronizza ora\".");
-    } catch (e) { Alert.alert("Errore", (e as Error).message); }
+      avvisa("Salvato", "Link calendario salvato. Ora premi \"Sincronizza ora\".");
+    } catch (e) { avvisa("Errore", (e as Error).message); }
   }
 
   async function sincronizza() {
     setSincronizzando(true);
     try {
       const r = await sincronizzaSporteasy(teamId);
-      if (r.errore) { Alert.alert("Sincronizzazione fallita", r.messaggio ?? "Errore sconosciuto"); return; }
+      if (r.errore) { avvisa("Sincronizzazione fallita", r.messaggio ?? "Errore sconosciuto"); return; }
       setDettaglio(r.dettaglioClassificazione ?? []);
       const righeErrore = r.erroriScrittura ?? [];
-      Alert.alert(
+      avvisa(
         righeErrore.length > 0 ? "Sincronizzazione con errori" : "Sincronizzazione completata",
         `Calendario scaricato: ${r.byteScaricati ?? 0} byte, ${r.blocchiVeventTrovati ?? 0} eventi grezzi trovati.\n` +
         `Eventi interpretati: ${r.totaleEventiNelCalendario}.\n` +
@@ -56,7 +57,7 @@ export function PannelloSporteasy({ teamId, onSincronizzato }: { teamId: string;
       carica();
       onSincronizzato?.();
     } catch (e) {
-      Alert.alert("Errore", (e as Error).message);
+      avvisa("Errore", (e as Error).message);
     } finally {
       setSincronizzando(false);
     }
