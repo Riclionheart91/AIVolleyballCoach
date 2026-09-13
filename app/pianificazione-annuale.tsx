@@ -11,13 +11,14 @@ import {
   elencaBlocchi,
   eliminaBlocco,
   generaBlocchiAI,
+  generaBlocchiGuidatoAI,
   leggiPianoAnnuale,
   riepilogoBlocchi,
   type InputBlocco,
 } from "@/src/services/pianoAnnuale";
 import { elencaAtlete } from "@/src/services/athletes";
 import { confermaAzione, avvisa } from "@/src/lib/confermaAzione";
-import { brand } from "@/src/config";
+import { brand, obiettiviFisici, obiettiviTattici, obiettiviTecnici } from "@/src/config";
 import type { BloccoPiano, PianoAnnuale, RiepilogoBlocco, TipoBlocco } from "@/src/types/database";
 
 const TIPI: TipoBlocco[] = ["preparazione_generale", "preparazione_specifica", "pre_competitiva", "competitiva", "scarico", "transizione"];
@@ -43,6 +44,10 @@ export default function PianificazioneAnnuale() {
   const [percentuale, setPercentuale] = useState(0);
   const [bloccoInModifica, setBloccoInModifica] = useState<BloccoPiano | "nuovo" | null>(null);
   const [bozza, setBozza] = useState<InputBlocco>(bozzaVuota());
+  const [guidaAperta, setGuidaAperta] = useState(false);
+  const [livello, setLivello] = useState("amatoriale");
+  const [seduteSettimana, setSeduteSettimana] = useState("2");
+  const [obiettivoStagione, setObiettivoStagione] = useState("crescita tecnica del gruppo");
 
   function bozzaVuota(): InputBlocco {
     return {
@@ -139,6 +144,41 @@ export default function PianificazioneAnnuale() {
     }
   }
 
+  async function onGeneraGuidato() {
+    if (!team || !piano) return;
+    setGuidaAperta(false);
+    setGenerando(true);
+    setPercentuale(5);
+    const intervallo = setInterval(() => setPercentuale((p) => (p < 90 ? p + Math.max(1, Math.round((90 - p) * 0.15)) : p)), 400);
+    try {
+      const atlete = await elencaAtlete(team.id);
+      const inizio = stagioneAttiva?.data_apertura?.slice(0, 10) || oggiIso();
+      const r = await generaBlocchiGuidatoAI(team.id, inizio, fraMesi(9), { livello, seduteSettimana, obiettivoStagione }, atlete.length);
+      if (r.errore || !r.blocchi) { avvisa("Generazione non riuscita", r.messaggio ?? "Errore sconosciuto"); return; }
+      setPercentuale(100);
+      for (const b of r.blocchi) await creaBlocco(piano.id, b);
+      carica();
+      avvisa("Piano creato", `${r.blocchi.length} blocchi generati. Rivedili: sono tutti modificabili.`);
+    } catch (e) {
+      avvisa("Errore", (e as Error).message);
+    } finally {
+      clearInterval(intervallo);
+      setGenerando(false);
+      setTimeout(() => setPercentuale(0), 600);
+    }
+  }
+
+  /** Gli obiettivi sono salvati come elenco separato da virgole: qui si passa da/verso l'array per i menù a scelta multipla. */
+  function commutaObiettivo(campo: "obiettivi_tecnici" | "obiettivi_fisici" | "obiettivi_tattici", voce: string) {
+    const attuali = bozza[campo] ? bozza[campo].split(",").map((v) => v.trim()).filter(Boolean) : [];
+    const nuovi = attuali.includes(voce) ? attuali.filter((v) => v !== voce) : [...attuali, voce];
+    setBozza({ ...bozza, [campo]: nuovi.join(", ") });
+  }
+
+  function eSelezionato(campo: "obiettivi_tecnici" | "obiettivi_fisici" | "obiettivi_tattici", voce: string) {
+    return (bozza[campo] ?? "").split(",").map((v) => v.trim()).includes(voce);
+  }
+
   function durataGiorni(b: BloccoPiano | InputBlocco): number {
     return Math.max(1, Math.round((new Date(b.data_fine).getTime() - new Date(b.data_inizio).getTime()) / 86400000) + 1);
   }
@@ -156,14 +196,53 @@ export default function PianificazioneAnnuale() {
 
       <ScrollView contentContainerStyle={{ padding: 16, gap: 14, paddingBottom: 40 }}>
         <View style={styles.rigaComandi}>
-          <Pressable style={styles.bottoneAI} onPress={onGeneraAI} disabled={generando}>
-            {generando ? <Text style={styles.bottoneAITesto}>{percentuale}%</Text> : <Text style={styles.bottoneAITesto}>✨ Proponi con AI</Text>}
+          <Pressable style={styles.bottoneAI} onPress={() => setGuidaAperta(!guidaAperta)} disabled={generando}>
+            {generando ? <Text style={styles.bottoneAITesto}>{percentuale}%</Text> : <Text style={styles.bottoneAITesto}>✨ Guidami nel piano</Text>}
           </Pressable>
           <Pressable style={styles.bottoneNuovo} onPress={apriNuovo}>
             <Text style={styles.bottoneNuovoTesto}>+ Blocco</Text>
           </Pressable>
         </View>
         {generando && <View style={styles.barraSfondo}><View style={[styles.barraRiempimento, { width: `${percentuale}%` }]} /></View>}
+
+        {guidaAperta && (
+          <View style={styles.form}>
+            <Text style={styles.titoloForm}>Tre domande e costruisco il piano</Text>
+            <Text style={styles.nota}>Gli obiettivi verranno scelti dagli elenchi standard, così restano confrontabili tra stagioni. Tutto resta poi modificabile.</Text>
+
+            <Text style={styles.etichettaGuida}>Livello della squadra</Text>
+            <View style={styles.selettoreTipi}>
+              {["giovanile", "amatoriale", "agonistico"].map((v) => (
+                <Pressable key={v} onPress={() => setLivello(v)} style={[styles.chipTipo, livello === v && styles.chipTipoAttivo]}>
+                  <Text style={[styles.chipTipoTesto, livello === v && styles.chipTipoTestoAttivo]}>{v}</Text>
+                </Pressable>
+              ))}
+            </View>
+
+            <Text style={styles.etichettaGuida}>Sedute a settimana</Text>
+            <View style={styles.selettoreTipi}>
+              {["1", "2", "3", "4+"].map((v) => (
+                <Pressable key={v} onPress={() => setSeduteSettimana(v)} style={[styles.chipTipo, seduteSettimana === v && styles.chipTipoAttivo]}>
+                  <Text style={[styles.chipTipoTesto, seduteSettimana === v && styles.chipTipoTestoAttivo]}>{v}</Text>
+                </Pressable>
+              ))}
+            </View>
+
+            <Text style={styles.etichettaGuida}>Obiettivo principale della stagione</Text>
+            <View style={styles.selettoreTipi}>
+              {["crescita tecnica del gruppo", "risultato in campionato", "inserimento giovani", "tenuta fisica e continuità"].map((v) => (
+                <Pressable key={v} onPress={() => setObiettivoStagione(v)} style={[styles.chipTipo, obiettivoStagione === v && styles.chipTipoAttivo]}>
+                  <Text style={[styles.chipTipoTesto, obiettivoStagione === v && styles.chipTipoTestoAttivo]}>{v}</Text>
+                </Pressable>
+              ))}
+            </View>
+
+            <View style={{ flexDirection: "row", gap: 8 }}>
+              <Pressable style={styles.bottoneAnnulla} onPress={() => setGuidaAperta(false)}><Text style={styles.bottoneAnnullaTesto}>Annulla</Text></Pressable>
+              <Pressable style={styles.bottoneSalva} onPress={onGeneraGuidato}><Text style={styles.bottoneSalvaTesto}>Costruisci il piano</Text></Pressable>
+            </View>
+          </View>
+        )}
 
         {blocchi.length === 0 ? (
           <Text style={styles.nota}>Nessun blocco ancora. Costruisci la stagione come sequenza di periodi (preparazione, competitiva, scarico…), oppure parti da una proposta AI e correggila.</Text>
@@ -218,9 +297,9 @@ export default function PianificazioneAnnuale() {
               <TextInput style={[styles.input, { flex: 1 }]} placeholder="Inizio AAAA-MM-GG" placeholderTextColor={brand.colors.muted} value={bozza.data_inizio} onChangeText={(t) => setBozza({ ...bozza, data_inizio: t })} />
               <TextInput style={[styles.input, { flex: 1 }]} placeholder="Fine AAAA-MM-GG" placeholderTextColor={brand.colors.muted} value={bozza.data_fine} onChangeText={(t) => setBozza({ ...bozza, data_fine: t })} />
             </View>
-            <TextInput style={[styles.input, styles.inputAlto]} multiline placeholder="Obiettivi tecnici" placeholderTextColor={brand.colors.muted} value={bozza.obiettivi_tecnici} onChangeText={(t) => setBozza({ ...bozza, obiettivi_tecnici: t })} />
-            <TextInput style={[styles.input, styles.inputAlto]} multiline placeholder="Obiettivi fisici" placeholderTextColor={brand.colors.muted} value={bozza.obiettivi_fisici} onChangeText={(t) => setBozza({ ...bozza, obiettivi_fisici: t })} />
-            <TextInput style={[styles.input, styles.inputAlto]} multiline placeholder="Obiettivi tattici" placeholderTextColor={brand.colors.muted} value={bozza.obiettivi_tattici} onChangeText={(t) => setBozza({ ...bozza, obiettivi_tattici: t })} />
+            <SelettoreObiettivi titolo="Obiettivi tecnici" voci={obiettiviTecnici} campo="obiettivi_tecnici" selezionato={eSelezionato} commuta={commutaObiettivo} />
+            <SelettoreObiettivi titolo="Obiettivi fisici" voci={obiettiviFisici} campo="obiettivi_fisici" selezionato={eSelezionato} commuta={commutaObiettivo} />
+            <SelettoreObiettivi titolo="Obiettivi tattici" voci={obiettiviTattici} campo="obiettivi_tattici" selezionato={eSelezionato} commuta={commutaObiettivo} />
             <View style={{ flexDirection: "row", gap: 8 }}>
               <Pressable style={styles.bottoneAnnulla} onPress={() => setBloccoInModifica(null)}><Text style={styles.bottoneAnnullaTesto}>Annulla</Text></Pressable>
               <Pressable style={styles.bottoneSalva} onPress={salvaBlocco} disabled={!bozza.nome.trim()}><Text style={styles.bottoneSalvaTesto}>Salva</Text></Pressable>
@@ -228,6 +307,40 @@ export default function PianificazioneAnnuale() {
           </View>
         )}
       </ScrollView>
+    </View>
+  );
+}
+
+/** Menù a scelta multipla su elenco chiuso: sostituisce i campi a testo libero, più rapidi da sbagliare che da compilare. */
+function SelettoreObiettivi({ titolo, voci, campo, selezionato, commuta }: {
+  titolo: string;
+  voci: readonly string[];
+  campo: "obiettivi_tecnici" | "obiettivi_fisici" | "obiettivi_tattici";
+  selezionato: (campo: "obiettivi_tecnici" | "obiettivi_fisici" | "obiettivi_tattici", voce: string) => boolean;
+  commuta: (campo: "obiettivi_tecnici" | "obiettivi_fisici" | "obiettivi_tattici", voce: string) => void;
+}) {
+  const [aperto, setAperto] = useState(false);
+  const scelti = voci.filter((v) => selezionato(campo, v));
+
+  return (
+    <View style={{ gap: 6 }}>
+      <Pressable onPress={() => setAperto(!aperto)} style={styles.intestazioneSelettore}>
+        <Text style={styles.titoloSelettore}>{titolo}{scelti.length > 0 ? ` (${scelti.length})` : ""}</Text>
+        <Text style={styles.frecciaSelettore}>{aperto ? "▾" : "▸"}</Text>
+      </Pressable>
+      {!aperto && scelti.length > 0 && <Text style={styles.riepilogoScelti}>{scelti.join(" · ")}</Text>}
+      {aperto && (
+        <View style={styles.selettoreTipi}>
+          {voci.map((v) => {
+            const attivo = selezionato(campo, v);
+            return (
+              <Pressable key={v} onPress={() => commuta(campo, v)} style={[styles.chipObiettivo, attivo && styles.chipObiettivoAttivo]}>
+                <Text style={[styles.chipTipoTesto, attivo && styles.chipTipoTestoAttivo]}>{attivo ? "✓ " : ""}{v}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      )}
     </View>
   );
 }
@@ -266,6 +379,15 @@ const styles = StyleSheet.create({
   selettoreTipi: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
   chipTipo: { paddingVertical: 5, paddingHorizontal: 10, borderRadius: 14, backgroundColor: brand.colors.surfaceTertiary },
   chipTipoTesto: { color: brand.colors.onSurfaceSecondary, fontSize: 11 },
+  chipTipoAttivo: { backgroundColor: brand.colors.brand },
+  chipTipoTestoAttivo: { color: "#000", fontWeight: "700" },
+  chipObiettivo: { paddingVertical: 5, paddingHorizontal: 10, borderRadius: 14, backgroundColor: brand.colors.surfaceTertiary },
+  chipObiettivoAttivo: { backgroundColor: brand.colors.brandSecondary },
+  intestazioneSelettore: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: 4 },
+  titoloSelettore: { color: brand.colors.onSurface, fontSize: 13, fontWeight: "600" },
+  frecciaSelettore: { color: brand.colors.muted, fontSize: 13 },
+  riepilogoScelti: { color: brand.colors.onSurfaceSecondary, fontSize: 11 },
+  etichettaGuida: { color: brand.colors.muted, fontSize: 12, marginTop: 4 },
   bottoneAnnulla: { flex: 1, borderWidth: 1, borderColor: brand.colors.muted, borderRadius: 8, paddingVertical: 10, alignItems: "center" },
   bottoneAnnullaTesto: { color: brand.colors.muted, fontWeight: "600" },
   bottoneSalva: { flex: 2, backgroundColor: brand.colors.brand, borderRadius: 8, paddingVertical: 10, alignItems: "center" },

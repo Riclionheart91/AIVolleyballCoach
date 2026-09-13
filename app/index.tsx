@@ -5,7 +5,7 @@ import { useAuth } from "@/src/context/AuthContext";
 import { brand } from "@/src/config";
 
 export default function Index() {
-  const { session, caricamento, team, caricamentoContesto, erroreTeam, stagioneAttiva, ricaricaContesto } = useAuth();
+  const { session, caricamento, caricamentoContesto, erroreTeam, stagioneAttiva, squadreDisponibili, ricaricaContesto } = useAuth();
 
   useEffect(() => {
     // caricamentoContesto copre SIA squadra SIA stagione in un colpo
@@ -17,10 +17,20 @@ export default function Index() {
     if (caricamento || caricamentoContesto) return;
     if (!session) { router.replace("/login"); return; }
     if (erroreTeam) return; // errore vero, distinto da "nessuna squadra": si mostra sotto, non si reindirizza alla cieca
-    if (!team) { router.replace("/crea-squadra"); return; }
+
+    // Instradamento:
+    //  - nessuna squadra          -> creazione squadra (unico caso in cui va mostrata)
+    //  - stagione non attiva      -> apertura stagione
+    //  - più squadre              -> scelta della squadra
+    //  - una sola squadra, tutto a posto -> dritti agli allenamenti
+    // La schermata "crea o scegli una squadra" non deve comparire
+    // quando l'utente ha già tutto pronto: era il passaggio a vuoto
+    // segnalato.
+    if (squadreDisponibili.length === 0) { router.replace("/crea-squadra"); return; }
     if (!stagioneAttiva) { router.replace("/apri-stagione"); return; }
-    router.replace("/(tabs)");
-  }, [session, caricamento, team, caricamentoContesto, erroreTeam, stagioneAttiva]);
+    if (squadreDisponibili.length > 1) { router.replace("/seleziona-squadra"); return; }
+    router.replace("/(tabs)/allenamenti");
+  }, [session, caricamento, caricamentoContesto, erroreTeam, stagioneAttiva, squadreDisponibili]);
 
   if (!caricamento && !caricamentoContesto && erroreTeam) {
     return (

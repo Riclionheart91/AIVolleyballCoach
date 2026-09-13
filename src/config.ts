@@ -67,3 +67,47 @@ export const uiStrings = {
     pendingSection: "Proposte AI in attesa di decisione",
   },
 };
+
+/**
+ * Obiettivi predefiniti per i blocchi di periodizzazione. Scriverli a
+ * mano ogni volta era la parte più faticosa della pianificazione: qui
+ * si scelgono da un elenco chiuso, così il piano resta anche
+ * confrontabile tra stagioni diverse (stessi nomi, stessi concetti).
+ * Restano comunque componibili: se ne possono selezionare più d'uno.
+ */
+export const obiettiviTecnici = [
+  "Battuta: precisione",
+  "Battuta: potenza e rischio",
+  "Ricezione: postura e spostamenti",
+  "Ricezione: lettura della traiettoria",
+  "Palleggio: precisione alzata",
+  "Palleggio: velocità di gioco",
+  "Attacco: tempi e rincorsa",
+  "Attacco: colpi e direzioni",
+  "Muro: lettura e tempi",
+  "Muro: posizionamento mani",
+  "Difesa: posizione e tuffi",
+  "Difesa: copertura attacco",
+] as const;
+
+export const obiettiviFisici = [
+  "Condizionamento aerobico di base",
+  "Forza generale",
+  "Forza esplosiva / salto",
+  "Rapidità e cambi di direzione",
+  "Mobilità articolare",
+  "Prevenzione infortuni (spalla/ginocchio)",
+  "Core stability",
+  "Recupero e scarico",
+] as const;
+
+export const obiettiviTattici = [
+  "Sistema di ricezione (a 2 / a 3)",
+  "Rotazioni e cambi d'ala",
+  "Distribuzione del gioco",
+  "Correlazione muro-difesa",
+  "Gestione del cambio palla",
+  "Break point e turni di battuta",
+  "Lettura dell'avversario",
+  "Gestione dei momenti critici",
+] as const;

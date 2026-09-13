@@ -1,5 +1,5 @@
 import { supabaseClient } from "@/src/lib/supabase";
-import { supabase as cfg } from "@/src/config";
+import { supabase as cfg, obiettiviFisici, obiettiviTattici, obiettiviTecnici } from "@/src/config";
 import { andamentoSquadra } from "@/src/services/evaluations";
 import type { BloccoPiano, PianoAnnuale, PropostaAggiornamentoPiano, RiepilogoBlocco, TipoBlocco } from "@/src/types/database";
 
@@ -205,6 +205,81 @@ export async function generaBlocchiAI(
         obiettivi_tattici: String(b.obiettivi_tattici ?? ""),
         note: "",
       }));
+    if (blocchi.length === 0) return { errore: true, messaggio: "L'AI non ha proposto blocchi utilizzabili. Puoi comunque costruirli a mano." };
+    return { errore: false, blocchi };
+  } catch {
+    return { errore: true, messaggio: "Risposta AI non nel formato atteso. Puoi comunque costruire i blocchi a mano." };
+  }
+}
+
+
+export interface RisposteGuida {
+  livello: string;
+  seduteSettimana: string;
+  obiettivoStagione: string;
+}
+
+/**
+ * Versione "guidata" della generazione: invece di chiedere all'AI un
+ * piano libero, le si passano tre risposte dell'allenatore e la si
+ * vincola a scegliere gli obiettivi SOLO dagli elenchi predefiniti.
+ * Il risultato è più prevedibile, coerente tra stagioni e già pronto
+ * per i menù a tendina, senza testo libero da ripulire a mano.
+ */
+export async function generaBlocchiGuidatoAI(
+  teamId: string,
+  dataInizio: string,
+  dataFine: string,
+  risposte: RisposteGuida,
+  numeroAtlete: number,
+): Promise<RisultatoGenerazioneBlocchi> {
+  const prompt =
+    `Sei un preparatore di pallavolo. Costruisci la periodizzazione dal ${dataInizio} al ${dataFine}.\n` +
+    `Squadra: ${numeroAtlete} atlete, livello "${risposte.livello}", ${risposte.seduteSettimana} sedute a settimana. ` +
+    `Obiettivo principale della stagione: "${risposte.obiettivoStagione}".\n\n` +
+    `Gli obiettivi di ogni blocco devono essere scelti ESCLUSIVAMENTE da questi elenchi, copiati alla lettera:\n` +
+    `TECNICI: ${obiettiviTecnici.join(" | ")}\n` +
+    `FISICI: ${obiettiviFisici.join(" | ")}\n` +
+    `TATTICI: ${obiettiviTattici.join(" | ")}\n\n` +
+    `Rispondi SOLO con JSON, senza altro testo:\n` +
+    `{"blocchi":[{"nome":"...","tipo":"preparazione_generale","data_inizio":"AAAA-MM-GG","data_fine":"AAAA-MM-GG","obiettivi_tecnici":["voce esatta","voce esatta"],"obiettivi_fisici":["..."],"obiettivi_tattici":["..."]}]}\n` +
+    `Valori ammessi per "tipo": preparazione_generale, preparazione_specifica, pre_competitiva, competitiva, scarico, transizione. ` +
+    `Massimo 3 obiettivi per categoria per blocco. Inserisci blocchi di scarico periodici. I blocchi coprono tutto il periodo senza sovrapporsi.`;
+
+  const { data: sessione } = await supabaseClient.auth.getSession();
+  if (!sessione.session) return { errore: true, messaggio: "Sessione scaduta, effettua di nuovo l'accesso." };
+
+  const { data, error } = await supabaseClient.functions.invoke(cfg.aiRouterFunction, { body: { team_id: teamId, prompt } });
+  if (error) return { errore: true, messaggio: error.message };
+  if (data.errore) return { errore: true, messaggio: data.messaggio };
+
+  try {
+    const pulito = String(data.testo).trim().replace(/^```json\s*|```$/g, "");
+    const parsed = JSON.parse(pulito);
+    const tipiAmmessi = Object.keys(ETICHETTE_TIPO_BLOCCO);
+
+    // Le voci proposte vengono filtrate contro gli elenchi ufficiali:
+    // se l'AI ne inventa una che non esiste viene scartata, così i
+    // menù a tendina restano coerenti e non si popolano di varianti.
+    const soloAmmessi = (valori: unknown, ammessi: readonly string[]) =>
+      (Array.isArray(valori) ? valori : [])
+        .map(String)
+        .filter((v) => ammessi.includes(v))
+        .join(", ");
+
+    const blocchi: InputBlocco[] = (parsed.blocchi ?? [])
+      .filter((b: Record<string, unknown>) => b.data_inizio && b.data_fine && b.nome)
+      .map((b: Record<string, unknown>) => ({
+        nome: String(b.nome),
+        tipo: (tipiAmmessi.includes(String(b.tipo)) ? String(b.tipo) : "preparazione_generale") as TipoBlocco,
+        data_inizio: String(b.data_inizio).slice(0, 10),
+        data_fine: String(b.data_fine).slice(0, 10),
+        obiettivi_tecnici: soloAmmessi(b.obiettivi_tecnici, obiettiviTecnici),
+        obiettivi_fisici: soloAmmessi(b.obiettivi_fisici, obiettiviFisici),
+        obiettivi_tattici: soloAmmessi(b.obiettivi_tattici, obiettiviTattici),
+        note: "",
+      }));
+
     if (blocchi.length === 0) return { errore: true, messaggio: "L'AI non ha proposto blocchi utilizzabili. Puoi comunque costruirli a mano." };
     return { errore: false, blocchi };
   } catch {
