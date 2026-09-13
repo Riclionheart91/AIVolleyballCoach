@@ -1,20 +1,34 @@
-import { useCallback, useState } from "react";
-import { View, Text, FlatList, TextInput, Pressable, StyleSheet, RefreshControl } from "react-native";
+import { useCallback, useMemo, useState } from "react";
+import { View, Text, SectionList, TextInput, Pressable, StyleSheet, RefreshControl, Modal, ActivityIndicator } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { useAuth } from "@/src/context/AuthContext";
-import { creaEsercizio, elencaEsercizi } from "@/src/services/exercises";
+import { creaEsercizio, elencaEsercizi, generaEserciziAI, type EsercizioProposto } from "@/src/services/exercises";
 import { FabAggiungi } from "@/src/components/Fab";
 import { PopupForm } from "@/src/components/PopupForm";
+import { avvisa } from "@/src/lib/confermaAzione";
 import { brand } from "@/src/config";
 import type { Exercise } from "@/src/types/database";
+
+const SENZA_CATEGORIA = "Senza categoria";
 
 export default function Esercizi() {
   const { team, puoScrivere } = useAuth();
   const [esercizi, setEsercizi] = useState<Exercise[]>([]);
   const [caricamento, setCaricamento] = useState(true);
+  const [ricerca, setRicerca] = useState("");
+  const [categorieChiuse, setCategorieChiuse] = useState<Set<string>>(new Set());
+
   const [popupAperto, setPopupAperto] = useState(false);
   const [nome, setNome] = useState("");
   const [categoria, setCategoria] = useState("");
+
+  const [popupAiAperto, setPopupAiAperto] = useState(false);
+  const [categoriaAi, setCategoriaAi] = useState("");
+  const [quantiAi, setQuantiAi] = useState("5");
+  const [istruzioniAi, setIstruzioniAi] = useState("");
+  const [generando, setGenerando] = useState(false);
+  const [proposte, setProposte] = useState<EsercizioProposto[]>([]);
+  const [scartate, setScartate] = useState<Set<number>>(new Set());
 
   const carica = useCallback(async () => {
     if (!team) return;
@@ -28,6 +42,42 @@ export default function Esercizi() {
 
   useFocusEffect(useCallback(() => { carica(); }, [carica]));
 
+  /** Raggruppa per categoria: con un catalogo di decine di voci l'elenco piatto diventa illeggibile, che è il problema segnalato. */
+  const sezioni = useMemo(() => {
+    const filtro = ricerca.trim().toLowerCase();
+    const visibili = filtro
+      ? esercizi.filter((e) => e.nome.toLowerCase().includes(filtro) || (e.categoria ?? "").toLowerCase().includes(filtro))
+      : esercizi;
+
+    const gruppi = visibili.reduce<Record<string, Exercise[]>>((acc, e) => {
+      const chiave = e.categoria?.trim() || SENZA_CATEGORIA;
+      (acc[chiave] ??= []).push(e);
+      return acc;
+    }, {});
+
+    return Object.keys(gruppi).sort((a, b) => a.localeCompare(b)).map((titolo) => ({
+      titolo,
+      totale: gruppi[titolo].length,
+      // Durante una ricerca le categorie restano sempre aperte: chiuderle
+      // nasconderebbe proprio i risultati cercati.
+      data: (!filtro && categorieChiuse.has(titolo)) ? [] : gruppi[titolo].sort((a, b) => a.nome.localeCompare(b.nome)),
+    }));
+  }, [esercizi, ricerca, categorieChiuse]);
+
+  const categorieEsistenti = useMemo(
+    () => [...new Set(esercizi.map((e) => e.categoria?.trim()).filter(Boolean) as string[])].sort(),
+    [esercizi],
+  );
+
+  function commutaCategoria(titolo: string) {
+    setCategorieChiuse((prev) => {
+      const nuovo = new Set(prev);
+      if (nuovo.has(titolo)) nuovo.delete(titolo);
+      else nuovo.add(titolo);
+      return nuovo;
+    });
+  }
+
   async function aggiungi() {
     if (!team || !nome.trim()) return;
     await creaEsercizio(team.id, { nome: nome.trim(), categoria: categoria.trim() || null, descrizione: "" });
@@ -35,42 +85,212 @@ export default function Esercizi() {
     carica();
   }
 
+  async function onGeneraAi() {
+    if (!team || !categoriaAi.trim()) return;
+    setGenerando(true);
+    setProposte([]);
+    setScartate(new Set());
+    try {
+      const r = await generaEserciziAI(team.id, categoriaAi.trim(), Number(quantiAi) || 5, esercizi, istruzioniAi);
+      if (r.errore || !r.esercizi) { avvisa("Generazione non riuscita", r.messaggio ?? "Errore sconosciuto"); return; }
+      setProposte(r.esercizi);
+    } catch (e) {
+      avvisa("Errore", (e as Error).message);
+    } finally {
+      setGenerando(false);
+    }
+  }
+
+  async function salvaProposte() {
+    if (!team) return;
+    const daSalvare = proposte.filter((_, i) => !scartate.has(i));
+    if (daSalvare.length === 0) return;
+    try {
+      for (const p of daSalvare) {
+        await creaEsercizio(team.id, { nome: p.nome, categoria: p.categoria || null, descrizione: p.descrizione });
+      }
+      setProposte([]);
+      setPopupAiAperto(false);
+      carica();
+      avvisa("Aggiunti", `${daSalvare.length} esercizi inseriti nel catalogo.`);
+    } catch (e) {
+      avvisa("Errore", (e as Error).message);
+    }
+  }
+
+  function commutaScarto(indice: number) {
+    setScartate((prev) => {
+      const nuovo = new Set(prev);
+      if (nuovo.has(indice)) nuovo.delete(indice);
+      else nuovo.add(indice);
+      return nuovo;
+    });
+  }
+
   return (
     <View style={styles.container}>
-      <FlatList
-        data={esercizi}
+      <View style={styles.barraRicerca}>
+        <TextInput
+          style={styles.inputRicerca}
+          placeholder={`Cerca tra ${esercizi.length} esercizi…`}
+          placeholderTextColor={brand.colors.muted}
+          value={ricerca}
+          onChangeText={setRicerca}
+        />
+        {!!ricerca && <Pressable onPress={() => setRicerca("")} hitSlop={10}><Text style={styles.pulisci}>✕</Text></Pressable>}
+      </View>
+
+      <SectionList
+        sections={sezioni}
         keyExtractor={(e) => e.id}
-        contentContainerStyle={{ padding: 16, paddingBottom: 90 }}
+        stickySectionHeadersEnabled
+        contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 100 }}
         refreshControl={<RefreshControl refreshing={caricamento} onRefresh={carica} tintColor={brand.colors.brand} />}
-        ListEmptyComponent={!caricamento ? <Text style={styles.vuoto}>Nessun esercizio ancora. Usa il pulsante + qui sotto.</Text> : null}
+        ListEmptyComponent={!caricamento ? <Text style={styles.vuoto}>{ricerca ? "Nessun esercizio trovato." : "Nessun esercizio ancora. Usa il + qui sotto, oppure ✨ per farli proporre all'AI."}</Text> : null}
+        renderSectionHeader={({ section }) => (
+          <Pressable style={styles.intestazioneCategoria} onPress={() => commutaCategoria(section.titolo)}>
+            <Text style={styles.titoloCategoria}>
+              {(!ricerca && categorieChiuse.has(section.titolo)) ? "▸" : "▾"} {section.titolo}
+            </Text>
+            <Text style={styles.conteggioCategoria}>{section.totale}</Text>
+          </Pressable>
+        )}
         renderItem={({ item }) => (
           <Pressable style={styles.riga} onPress={() => router.push(`/esercizio/${item.id}`)}>
             <Text style={styles.rigaNome}>{item.nome}</Text>
-            {!!item.categoria && <Text style={styles.rigaSotto}>{item.categoria}</Text>}
+            {!!item.descrizione && <Text style={styles.rigaDescrizione} numberOfLines={1}>{item.descrizione}</Text>}
           </Pressable>
         )}
       />
 
-      {puoScrivere && <FabAggiungi onPress={() => setPopupAperto(true)} />}
+      {puoScrivere && (
+        <>
+          <FabAggiungi onPress={() => setPopupAiAperto(true)} posizione="secondaria" icona="✨" />
+          <FabAggiungi onPress={() => setPopupAperto(true)} />
+        </>
+      )}
 
       <PopupForm visibile={popupAperto} titolo="Nuovo esercizio" haModifiche={!!(nome.trim() || categoria.trim())} onChiudi={() => { setPopupAperto(false); setNome(""); setCategoria(""); }}>
         <TextInput style={styles.input} placeholder="Nome esercizio" placeholderTextColor={brand.colors.muted} value={nome} onChangeText={setNome} autoFocus />
-        <TextInput style={styles.input} placeholder="Categoria (es. tecnica, atletica, tattica)" placeholderTextColor={brand.colors.muted} value={categoria} onChangeText={setCategoria} />
+        <TextInput style={styles.input} placeholder="Categoria" placeholderTextColor={brand.colors.muted} value={categoria} onChangeText={setCategoria} />
+        {categorieEsistenti.length > 0 && (
+          <View style={styles.chipRiga}>
+            {categorieEsistenti.map((c) => (
+              <Pressable key={c} onPress={() => setCategoria(c)} style={[styles.chip, categoria === c && styles.chipAttivo]}>
+                <Text style={[styles.chipTesto, categoria === c && styles.chipTestoAttivo]}>{c}</Text>
+              </Pressable>
+            ))}
+          </View>
+        )}
         <Pressable style={styles.bottone} onPress={aggiungi} disabled={!nome.trim()}>
           <Text style={styles.bottoneTesto}>Aggiungi esercizio</Text>
         </Pressable>
       </PopupForm>
+
+      <Modal visible={popupAiAperto} animationType="slide" transparent onRequestClose={() => setPopupAiAperto(false)}>
+        <View style={styles.sfondoPopup}>
+          <View style={styles.cartaPopup}>
+            <View style={styles.intestazionePopup}>
+              <Text style={styles.titoloPopup}>Genera esercizi con AI</Text>
+              <Pressable onPress={() => { setPopupAiAperto(false); setProposte([]); }}><Text style={styles.chiudiPopup}>✕</Text></Pressable>
+            </View>
+
+            {proposte.length === 0 ? (
+              <>
+                <Text style={styles.nota}>Gli esercizi già in catalogo vengono passati all'AI, che eviterà di riproporli.</Text>
+                <TextInput style={styles.input} placeholder="Categoria (es. Ricezione)" placeholderTextColor={brand.colors.muted} value={categoriaAi} onChangeText={setCategoriaAi} />
+                {categorieEsistenti.length > 0 && (
+                  <View style={styles.chipRiga}>
+                    {categorieEsistenti.map((c) => (
+                      <Pressable key={c} onPress={() => setCategoriaAi(c)} style={[styles.chip, categoriaAi === c && styles.chipAttivo]}>
+                        <Text style={[styles.chipTesto, categoriaAi === c && styles.chipTestoAttivo]}>{c}</Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                )}
+                <View style={styles.chipRiga}>
+                  {["3", "5", "8"].map((n) => (
+                    <Pressable key={n} onPress={() => setQuantiAi(n)} style={[styles.chip, quantiAi === n && styles.chipAttivo]}>
+                      <Text style={[styles.chipTesto, quantiAi === n && styles.chipTestoAttivo]}>{n} esercizi</Text>
+                    </Pressable>
+                  ))}
+                </View>
+                <TextInput
+                  style={[styles.input, { minHeight: 56, textAlignVertical: "top" }]}
+                  multiline
+                  placeholder="Indicazioni particolari (facoltativo): es. per under 14, con poco spazio, senza salti"
+                  placeholderTextColor={brand.colors.muted}
+                  value={istruzioniAi}
+                  onChangeText={setIstruzioniAi}
+                />
+                <Pressable style={styles.bottone} onPress={onGeneraAi} disabled={generando || !categoriaAi.trim()}>
+                  {generando ? <ActivityIndicator color="#000" /> : <Text style={styles.bottoneTesto}>Genera proposte</Text>}
+                </Pressable>
+              </>
+            ) : (
+              <>
+                <Text style={styles.nota}>Tocca una proposta per escluderla. Verranno aggiunte solo quelle selezionate.</Text>
+                <View style={{ maxHeight: 360 }}>
+                  <SectionList
+                    sections={[{ titolo: "", totale: 0, data: proposte }]}
+                    keyExtractor={(_, i) => String(i)}
+                    renderSectionHeader={() => null}
+                    renderItem={({ item, index }) => (
+                      <Pressable style={[styles.proposta, scartate.has(index) && styles.propostaScartata]} onPress={() => commutaScarto(index)}>
+                        <Text style={[styles.propostaNome, scartate.has(index) && styles.testoScartato]}>
+                          {scartate.has(index) ? "✕ " : "✓ "}{item.nome}
+                        </Text>
+                        {!!item.descrizione && <Text style={styles.propostaDescrizione}>{item.descrizione}</Text>}
+                      </Pressable>
+                    )}
+                  />
+                </View>
+                <View style={{ flexDirection: "row", gap: 8 }}>
+                  <Pressable style={styles.bottoneSecondario} onPress={() => setProposte([])}><Text style={styles.bottoneSecondarioTesto}>Rigenera</Text></Pressable>
+                  <Pressable style={[styles.bottone, { flex: 2 }]} onPress={salvaProposte}>
+                    <Text style={styles.bottoneTesto}>Aggiungi {proposte.length - scartate.size} esercizi</Text>
+                  </Pressable>
+                </View>
+              </>
+            )}
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: brand.colors.surface },
-  input: { backgroundColor: brand.colors.surfaceTertiary, color: brand.colors.onSurface, borderRadius: 8, padding: 12 },
-  bottone: { backgroundColor: brand.colors.brand, padding: 12, borderRadius: 8, alignItems: "center" },
-  bottoneTesto: { color: "#000", fontWeight: "700" },
-  riga: { paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: brand.colors.border },
-  rigaNome: { color: brand.colors.onSurface, fontSize: 16, fontWeight: "600" },
-  rigaSotto: { color: brand.colors.muted, fontSize: 13 },
+  barraRicerca: { flexDirection: "row", alignItems: "center", gap: 8, margin: 16, marginBottom: 8, backgroundColor: brand.colors.surfaceSecondary, borderRadius: 10, paddingHorizontal: 12 },
+  inputRicerca: { flex: 1, color: brand.colors.onSurface, paddingVertical: 10 },
+  pulisci: { color: brand.colors.muted, fontSize: 16 },
+  intestazioneCategoria: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", backgroundColor: brand.colors.surface, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: brand.colors.border },
+  titoloCategoria: { color: brand.colors.brandSecondary, fontSize: 13, fontWeight: "800", textTransform: "uppercase" },
+  conteggioCategoria: { color: brand.colors.muted, fontSize: 12, fontWeight: "700" },
+  riga: { paddingVertical: 10, paddingLeft: 14, borderBottomWidth: 1, borderBottomColor: brand.colors.border },
+  rigaNome: { color: brand.colors.onSurface, fontSize: 15 },
+  rigaDescrizione: { color: brand.colors.muted, fontSize: 12, marginTop: 2 },
   vuoto: { color: brand.colors.muted, textAlign: "center", marginTop: 32 },
+  input: { backgroundColor: brand.colors.surfaceTertiary, color: brand.colors.onSurface, borderRadius: 8, padding: 10 },
+  bottone: { backgroundColor: brand.colors.brand, padding: 12, borderRadius: 8, alignItems: "center", flex: 1 },
+  bottoneTesto: { color: "#000", fontWeight: "700" },
+  bottoneSecondario: { flex: 1, borderColor: brand.colors.brand, borderWidth: 1, padding: 12, borderRadius: 8, alignItems: "center" },
+  bottoneSecondarioTesto: { color: brand.colors.brand, fontWeight: "600" },
+  nota: { color: brand.colors.muted, fontSize: 12 },
+  chipRiga: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
+  chip: { paddingVertical: 5, paddingHorizontal: 10, borderRadius: 14, backgroundColor: brand.colors.surfaceTertiary },
+  chipAttivo: { backgroundColor: brand.colors.brand },
+  chipTesto: { color: brand.colors.onSurfaceSecondary, fontSize: 12 },
+  chipTestoAttivo: { color: "#000", fontWeight: "700" },
+  sfondoPopup: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "flex-end" },
+  cartaPopup: { backgroundColor: brand.colors.surfaceSecondary, borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, gap: 10, maxHeight: "88%" },
+  intestazionePopup: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  titoloPopup: { color: brand.colors.onSurface, fontSize: 16, fontWeight: "700" },
+  chiudiPopup: { color: brand.colors.muted, fontSize: 18 },
+  proposta: { paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: brand.colors.border },
+  propostaScartata: { opacity: 0.4 },
+  propostaNome: { color: brand.colors.onSurface, fontSize: 14, fontWeight: "600" },
+  testoScartato: { textDecorationLine: "line-through" },
+  propostaDescrizione: { color: brand.colors.muted, fontSize: 12, marginTop: 2 },
 });
