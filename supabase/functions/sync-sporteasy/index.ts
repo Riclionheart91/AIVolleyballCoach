@@ -27,8 +27,27 @@ const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  // Lista ampia: le versioni recenti della libreria Supabase inviano
+  // intestazioni aggiuntive (x-supabase-api-version, x-region...). Se
+  // anche una sola non è dichiarata qui, il browser blocca la
+  // richiesta PRIMA che parta, e l'app riceve solo un generico
+  // "Failed to send a request to the Edge Function" senza altri
+  // dettagli.
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-api-version, x-region, accept, accept-profile, content-profile, prefer",
+  "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
+  "Access-Control-Max-Age": "86400",
 };
+
+/** Risposta al preflight CORS: rimanda indietro esattamente le intestazioni che il browser ha chiesto, così nessuna resta fuori qualunque versione di libreria le invii. */
+function rispostaPreflight(req: Request): Response {
+  const richieste = req.headers.get("Access-Control-Request-Headers");
+  return new Response("ok", {
+    headers: {
+      ...CORS_HEADERS,
+      ...(richieste ? { "Access-Control-Allow-Headers": richieste } : {}),
+    },
+  });
+}
 
 const GIORNI_ICS: Record<string, number> = { SU: 0, MO: 1, TU: 2, WE: 3, TH: 4, FR: 5, SA: 6 };
 const FINESTRA_ESPANSIONE_GIORNI = 180; // ~6 mesi di occorrenze future/passate generate per gli eventi ricorrenti
@@ -40,7 +59,7 @@ interface VEvent {
 }
 
 Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response("ok", { headers: CORS_HEADERS });
+  if (req.method === "OPTIONS") return rispostaPreflight(req);
 
   try {
     const authHeader = req.headers.get("Authorization") ?? "";

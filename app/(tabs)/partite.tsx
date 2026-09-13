@@ -2,12 +2,12 @@ import { useCallback, useState } from "react";
 import { View, Text, FlatList, TextInput, Pressable, StyleSheet, RefreshControl, ActivityIndicator } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { useAuth } from "@/src/context/AuthContext";
-import { andamentoSquadraPartite, creaMatch, elencaPartite, type AndamentoSquadraPartiteVoce } from "@/src/services/matches";
+import { andamentoSquadraPartite, convertiPartitaInAllenamento, creaMatch, elencaPartite, type AndamentoSquadraPartiteVoce } from "@/src/services/matches";
 import { elencaCampionati, riassegnaCampionatoPartita } from "@/src/services/championships";
 import { PannelloSporteasy } from "@/src/components/PannelloSporteasy";
 import { brand } from "@/src/config";
 import type { Campionato, Match } from "@/src/types/database";
-import { avvisa } from "@/src/lib/confermaAzione";
+import { avvisa, confermaAzione } from "@/src/lib/confermaAzione";
 
 export default function Partite() {
   const { team, puoScrivere } = useAuth();
@@ -58,6 +58,21 @@ export default function Partite() {
       return;
     }
     router.push(`/partita/${m.id}`);
+  }
+
+  function chiediConversioneInAllenamento(m: Match) {
+    confermaAzione(
+      "Convertire in allenamento?",
+      `"${m.avversario}" del ${new Date(m.data).toLocaleDateString("it-IT")} verrà spostato tra gli allenamenti. Usalo quando la lettura automatica del calendario SportEasy ha sbagliato categoria.`,
+      "Sposta tra gli allenamenti",
+      async () => {
+        try {
+          await convertiPartitaInAllenamento(m.id);
+          carica();
+          avvisa("Convertito", "Lo trovi ora nella tab Allenamenti.");
+        } catch (e) { avvisa("Impossibile convertire", (e as Error).message); }
+      },
+    );
   }
 
   async function onScegliCampionato(matchId: string, campionatoId: string | null) {
@@ -156,6 +171,11 @@ export default function Partite() {
                 ))}
               </View>
             )}
+            {puoScrivere && (
+              <Pressable onPress={() => chiediConversioneInAllenamento(item)}>
+                <Text style={styles.linkConverti}>È un allenamento — spostalo</Text>
+              </Pressable>
+            )}
             {item.stato === "conclusa" && <Text style={styles.cardRisultato}>Set: {item.set_vinti_noi} - {item.set_vinti_avversario}</Text>}
           </Pressable>
         )}
@@ -193,6 +213,7 @@ const styles = StyleSheet.create({
   cardTitolo: { color: brand.colors.onSurface, fontSize: 16, fontWeight: "700" },
   cardSotto: { color: brand.colors.muted, fontSize: 13 },
   linkCampionato: { color: brand.colors.brandSecondary, fontSize: 12, fontWeight: "600", marginTop: 4 },
+  linkConverti: { color: brand.colors.muted, fontSize: 11, marginTop: 4 },
   cardRisultato: { color: brand.colors.brand, fontWeight: "700", marginTop: 4 },
   badge: { color: brand.colors.muted, fontSize: 12, textTransform: "uppercase" },
   badgeInCorso: { color: brand.colors.warning, fontWeight: "700" },

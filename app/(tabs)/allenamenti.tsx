@@ -4,7 +4,7 @@ import { router, useFocusEffect } from "expo-router";
 import { useAuth } from "@/src/context/AuthContext";
 import { elencaAtlete } from "@/src/services/athletes";
 import {
-  aggiornaAllenamento, creaAllenamento, eliminaAllenamento, elencaAllenamenti,
+  aggiornaAllenamento, convertiAllenamentoInPartita, creaAllenamento, eliminaAllenamento, elencaAllenamenti,
   elencaPresenzeAllenamento, elencaRpeAllenamento, registraPresenza, registraRpe,
 } from "@/src/services/trainings";
 import { confermaAzione, avvisa } from "@/src/lib/confermaAzione";
@@ -76,6 +76,21 @@ export default function Allenamenti() {
     }
   }
 
+  function chiediConversione(t: Training) {
+    confermaAzione(
+      "Convertire in partita?",
+      `"${t.titolo}" del ${new Date(t.data).toLocaleDateString("it-IT")} verrà spostato tra le partite. Usalo quando la lettura automatica del calendario SportEasy ha sbagliato categoria.`,
+      "Sposta tra le partite",
+      async () => {
+        try {
+          await convertiAllenamentoInPartita(t.id);
+          carica();
+          avvisa("Convertito", "Lo trovi ora nella tab Partite.");
+        } catch (e) { avvisa("Impossibile convertire", (e as Error).message); }
+      },
+    );
+  }
+
   function chiediEliminazione(t: Training) {
     confermaAzione("Eliminare l'allenamento?", `"${t.titolo}" e le presenze/RPE già registrate per questa sessione verranno eliminati.`, "Elimina", async () => {
       try { await eliminaAllenamento(t.id); carica(); } catch (e) { avvisa("Errore", (e as Error).message); }
@@ -109,6 +124,7 @@ export default function Allenamenti() {
               <View style={styles.rigaAzioniCard}>
                 <Pressable onPress={() => router.push(`/allenamento/${item.id}`)}><Text style={styles.azioneCard}>Piano allenamento{item.durata_totale_minuti ? ` (${item.durata_totale_minuti} min)` : ""}</Text></Pressable>
                 <Pressable onPress={() => apriModifica(item)}><Text style={styles.azioneCard}>Modifica</Text></Pressable>
+                <Pressable onPress={() => chiediConversione(item)}><Text style={styles.azioneCard}>È una partita</Text></Pressable>
                 <Pressable onPress={() => chiediEliminazione(item)}><Text style={styles.azioneCardDistruttiva}>Elimina</Text></Pressable>
               </View>
             )}

@@ -139,3 +139,10 @@ export async function andamentoSquadraPartite(teamId: string): Promise<Andamento
   if (error) throw error;
   return data ?? [];
 }
+
+/** Correzione manuale opposta: trasforma una partita in allenamento. */
+export async function convertiPartitaInAllenamento(matchId: string, titolo?: string): Promise<string> {
+  const { data, error } = await supabaseClient.rpc("converti_partita_in_allenamento", { p_match_id: matchId, p_titolo: titolo ?? null });
+  if (error) throw error;
+  return data as string;
+}

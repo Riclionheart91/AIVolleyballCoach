@@ -95,3 +95,10 @@ export async function elencaMioStoricoPresenze(athleteId: string, limite = 20): 
 }
 
 export type { Athlete };
+
+/** Correzione manuale quando la classificazione automatica da SportEasy sbaglia: trasforma un allenamento in partita, portandosi dietro l'identificativo SportEasy. */
+export async function convertiAllenamentoInPartita(trainingId: string, avversario?: string): Promise<string> {
+  const { data, error } = await supabaseClient.rpc("converti_allenamento_in_partita", { p_training_id: trainingId, p_avversario: avversario ?? null });
+  if (error) throw error;
+  return data as string;
+}
