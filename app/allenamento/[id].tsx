@@ -3,7 +3,7 @@ import { View, Text, TextInput, Pressable, StyleSheet, ScrollView, ActivityIndic
 import { useLocalSearchParams, useFocusEffect, router } from "expo-router";
 import { useAuth } from "@/src/context/AuthContext";
 import { elencaEsercizi } from "@/src/services/exercises";
-import { elencaPianoAllenamento, generaPianoAllenamentoAI, impostaPianoAllenamento, type VoceRiepilogoPiano } from "@/src/services/trainingPlan";
+import { elencaPianoAllenamento, generaPianoAllenamentoAI, impostaPianoAllenamento, leggiBloccoPerData, type VoceRiepilogoPiano } from "@/src/services/trainingPlan";
 import { confermaAzione, avvisa } from "@/src/lib/confermaAzione";
 import { brand } from "@/src/config";
 import { supabaseClient } from "@/src/lib/supabase";
@@ -22,6 +22,7 @@ export default function PianoAllenamento() {
   const [generando, setGenerando] = useState(false);
   const [percentualeGenerazione, setPercentualeGenerazione] = useState(0);
   const [erroreGenerazione, setErroreGenerazione] = useState<string | null>(null);
+  const [bloccoPeriodo, setBloccoPeriodo] = useState<{ nome: string; tipo: string } | null>(null);
   const [salvando, setSalvando] = useState(false);
 
   const carica = useCallback(async () => {
@@ -31,6 +32,7 @@ export default function PianoAllenamento() {
     setArgomento(t?.argomento ?? "");
     const cat = await elencaEsercizi(team.id);
     setCatalogo(cat);
+    if (t?.data) setBloccoPeriodo(await leggiBloccoPerData(team.id, t.data).catch(() => null));
     const piano = await elencaPianoAllenamento(id);
     setEsercizi(piano.map((p) => ({
       exerciseId: p.exercise_id,
@@ -96,7 +98,7 @@ export default function PianoAllenamento() {
       }, 400);
 
       try {
-        const r = await generaPianoAllenamentoAI(team!.id, argomento || "allenamento generico", Number(durataObiettivo) || 60, catalogo);
+        const r = await generaPianoAllenamentoAI(team!.id, argomento || "allenamento generico", Number(durataObiettivo) || 60, catalogo, training?.data);
         if (r.errore || !r.esercizi) {
           const messaggio = r.messaggio ?? "Errore sconosciuto";
           setErroreGenerazione(messaggio);
@@ -161,6 +163,7 @@ export default function PianoAllenamento() {
             </View>
           )}
           {erroreGenerazione && !generando && <Text style={styles.erroreTesto}>{erroreGenerazione}</Text>}
+          {bloccoPeriodo && <Text style={styles.notaPeriodo}>📋 Periodo del piano annuale: {bloccoPeriodo.nome} ({bloccoPeriodo.tipo.replace(/_/g, " ")}) — la proposta AI ne terrà conto.</Text>}
           <Text style={styles.nota}>La proposta AI usa solo esercizi già nel tuo catalogo, e resta modificabile prima di salvare — se non risponde, costruisci il piano scegliendo qui sotto.</Text>
         </View>
 
@@ -242,6 +245,7 @@ const styles = StyleSheet.create({
   etichetta: { color: brand.colors.onSurface, fontWeight: "700", fontSize: 14 },
   input: { backgroundColor: brand.colors.surfaceTertiary, color: brand.colors.onSurface, borderRadius: 8, padding: 10 },
   nota: { color: brand.colors.muted, fontSize: 12 },
+  notaPeriodo: { color: brand.colors.brandSecondary, fontSize: 12, fontWeight: "600" },
   rigaGenerazione: { flexDirection: "row", gap: 10, alignItems: "flex-end" },
   bottoneAI: { borderWidth: 1, borderColor: brand.colors.brandSecondary, borderRadius: 8, paddingVertical: 10, paddingHorizontal: 14, justifyContent: "center", minWidth: 60, alignItems: "center" },
   barraAvanzamentoSfondo: { height: 4, backgroundColor: brand.colors.surfaceTertiary, borderRadius: 2, overflow: "hidden" },

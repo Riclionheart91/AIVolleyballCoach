@@ -97,7 +97,7 @@ export async function generaPianoAnnualeAI(teamId: string, contestoStagione: str
 
   const { data, error } = await supabaseClient.functions.invoke(cfg.aiRouterFunction, { body: { team_id: teamId, prompt } });
   if (error) return { errore: true, messaggio: error.message };
-  if (data.errore) return { errore: true, messaggio: data.messaggio };
+  if (data.errore) return { errore: true, messaggio: [data.messaggio, data.dettagli, (data.chiaviMancanti ?? []).length ? `Chiavi non configurate: ${(data.chiaviMancanti ?? []).join(", ")}` : ""].filter(Boolean).join("\n\n") };
 
   return { errore: false, contenuto: data.testo };
 }
@@ -185,7 +185,7 @@ export async function generaBlocchiAI(
 
   const { data, error } = await supabaseClient.functions.invoke(cfg.aiRouterFunction, { body: { team_id: teamId, prompt } });
   if (error) return { errore: true, messaggio: error.message };
-  if (data.errore) return { errore: true, messaggio: data.messaggio };
+  if (data.errore) return { errore: true, messaggio: [data.messaggio, data.dettagli, (data.chiaviMancanti ?? []).length ? `Chiavi non configurate: ${(data.chiaviMancanti ?? []).join(", ")}` : ""].filter(Boolean).join("\n\n") };
 
   try {
     const pulito = String(data.testo).trim().replace(/^```json\s*|```$/g, "");
@@ -251,7 +251,7 @@ export async function generaBlocchiGuidatoAI(
 
   const { data, error } = await supabaseClient.functions.invoke(cfg.aiRouterFunction, { body: { team_id: teamId, prompt } });
   if (error) return { errore: true, messaggio: error.message };
-  if (data.errore) return { errore: true, messaggio: data.messaggio };
+  if (data.errore) return { errore: true, messaggio: [data.messaggio, data.dettagli, (data.chiaviMancanti ?? []).length ? `Chiavi non configurate: ${(data.chiaviMancanti ?? []).join(", ")}` : ""].filter(Boolean).join("\n\n") };
 
   try {
     const pulito = String(data.testo).trim().replace(/^```json\s*|```$/g, "");

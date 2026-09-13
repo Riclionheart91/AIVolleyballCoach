@@ -36,13 +36,32 @@ export interface RisultatoGenerazionePiano {
  * principio manual-first delle valutazioni AI: se l'AI non risponde,
  * il piano si costruisce comunque a mano scegliendo dal catalogo.
  */
-export async function generaPianoAllenamentoAI(teamId: string, argomento: string, durataTotaleMinuti: number, catalogo: Exercise[]): Promise<RisultatoGenerazionePiano> {
+/** Blocco di periodizzazione in cui cade una certa data: se il piano annuale esiste, la seduta viene generata coerentemente con gli obiettivi di quel periodo. */
+export async function leggiBloccoPerData(teamId: string, dataIso: string): Promise<{ nome: string; tipo: string; obiettivi_tecnici: string; obiettivi_fisici: string; obiettivi_tattici: string } | null> {
+  const { data, error } = await supabaseClient.rpc("blocco_per_data", { p_team_id: teamId, p_data: dataIso.slice(0, 10) });
+  if (error) return null;
+  return (data && data.length > 0) ? data[0] : null;
+}
+
+export async function generaPianoAllenamentoAI(teamId: string, argomento: string, durataTotaleMinuti: number, catalogo: Exercise[], dataSeduta?: string): Promise<RisultatoGenerazionePiano> {
   if (catalogo.length === 0) {
     return { errore: true, messaggio: "Il catalogo esercizi è vuoto: aggiungi almeno qualche esercizio nella tab Esercizi prima di generare un piano con l'AI." };
   }
 
   const elencoCatalogo = catalogo.map((e) => `- ${e.nome}${e.categoria ? ` (${e.categoria})` : ""}`).join("\n");
-  const prompt =
+
+  // Se la seduta cade dentro un blocco del piano annuale, i suoi
+  // obiettivi entrano nel prompt: è ciò che rende la pianificazione
+  // annuale operativa invece che decorativa — la singola seduta
+  // eredita il periodo in cui si trova.
+  const blocco = dataSeduta ? await leggiBloccoPerData(teamId, dataSeduta) : null;
+  const contestoPeriodo = blocco
+    ? `Questa seduta ricade nel periodo "${blocco.nome}" (${blocco.tipo.replace(/_/g, " ")}) del piano annuale. ` +
+      `Obiettivi del periodo — tecnici: ${blocco.obiettivi_tecnici || "non indicati"}; fisici: ${blocco.obiettivi_fisici || "non indicati"}; tattici: ${blocco.obiettivi_tattici || "non indicati"}. ` +
+      `Scegli gli esercizi coerenti con questi obiettivi e con il tipo di periodo (in un periodo di scarico riduci volume e intensità).\n\n`
+    : "";
+
+  const prompt = contestoPeriodo +
     `Sei un assistente per un allenatore di pallavolo. Proponi un piano per una sessione di allenamento sul tema "${argomento}", ` +
     `della durata totale di circa ${durataTotaleMinuti} minuti. USA SOLO esercizi da questo catalogo (mai inventarne altri, scrivi il nome esattamente come qui):\n${elencoCatalogo}\n\n` +
     `Rispondi SOLO in formato JSON: {"esercizi": [{"nome": "nome esatto dal catalogo", "durata_minuti": numero, "note": "breve indicazione"}], "argomento_suggerito": "eventuale titolo più specifico del tema"}. ` +
@@ -53,7 +72,7 @@ export async function generaPianoAllenamentoAI(teamId: string, argomento: string
 
   const { data, error } = await supabaseClient.functions.invoke(cfg.aiRouterFunction, { body: { team_id: teamId, prompt } });
   if (error) return { errore: true, messaggio: error.message };
-  if (data.errore) return { errore: true, messaggio: data.messaggio };
+  if (data.errore) return { errore: true, messaggio: [data.messaggio, data.dettagli, (data.chiaviMancanti ?? []).length ? `Chiavi non configurate: ${(data.chiaviMancanti ?? []).join(", ")}` : ""].filter(Boolean).join("\n\n") };
 
   try {
     const pulito = data.testo.trim().replace(/^```json\s*|```$/g, "");

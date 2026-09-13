@@ -87,7 +87,7 @@ export async function generaPropostaValutazioneAI(
     body: { team_id: teamId, prompt },
   });
   if (error) return { errore: true, messaggio: error.message };
-  if (data.errore) return { errore: true, messaggio: data.messaggio };
+  if (data.errore) return { errore: true, messaggio: [data.messaggio, data.dettagli, (data.chiaviMancanti ?? []).length ? `Chiavi non configurate: ${(data.chiaviMancanti ?? []).join(", ")}` : ""].filter(Boolean).join("\n\n") };
 
   const suggerimento = interpretaRispostaAI(data.testo);
   const valoreAttuale = storicoRecente[0]?.punteggio ?? null;
