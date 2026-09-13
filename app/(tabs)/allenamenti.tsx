@@ -180,7 +180,8 @@ export default function Allenamenti() {
 
             {puoScrivere && (
               <View style={styles.rigaAzioniCard}>
-                <Pressable onPress={() => router.push(`/allenamento/${item.id}`)}><Text style={styles.azioneCard}>Piano allenamento{item.durata_totale_minuti ? ` (${item.durata_totale_minuti} min)` : ""}</Text></Pressable>
+                <Pressable onPress={() => router.push(`/allenamento/${item.id}`)}><Text style={styles.azioneCard}>Piano{item.durata_totale_minuti ? ` (${item.durata_totale_minuti} min)` : ""}</Text></Pressable>
+                <Pressable onPress={() => router.push(`/sessione/${item.id}`)}><Text style={styles.azioneCardAvvio}>▶ Avvia</Text></Pressable>
                 <Pressable onPress={() => apriModifica(item)}><Text style={styles.azioneCard}>Modifica</Text></Pressable>
                 <Pressable onPress={() => chiediConversione(item)}><Text style={styles.azioneCard}>È una partita</Text></Pressable>
                 <Pressable onPress={() => onArchiviaSingolo(item, true)}><Text style={styles.azioneCard}>Archivia</Text></Pressable>
@@ -322,6 +323,7 @@ const styles = StyleSheet.create({
   badgeFuturo: { color: brand.colors.brandSecondary, fontSize: 11, fontWeight: "700", textTransform: "uppercase" },
   rigaAzioniCard: { flexDirection: "row", gap: 16, marginTop: 8 },
   azioneCard: { color: brand.colors.brand, fontSize: 12, fontWeight: "600" },
+  azioneCardAvvio: { color: brand.colors.success, fontSize: 12, fontWeight: "700" },
   azioneCardDistruttiva: { color: brand.colors.error, fontSize: 12, fontWeight: "600" },
   vuoto: { color: brand.colors.muted, textAlign: "center", marginTop: 32 },
   barraMese: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", backgroundColor: brand.colors.surfaceSecondary, borderRadius: 10, paddingVertical: 8, paddingHorizontal: 16 },

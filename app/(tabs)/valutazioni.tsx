@@ -135,6 +135,7 @@ function SezioneValutazioneCoach({ teamId }: { teamId: string }) {
   const [punteggio, setPunteggio] = useState("");
   const [propostaPendente, setPropostaPendente] = useState<{ proposta: EvaluationProposal; modificatoAMano: boolean } | null>(null);
   const [generandoAI, setGenerandoAI] = useState(false);
+  const [istruzioniExtra, setIstruzioniExtra] = useState("");
   const [messaggioAI, setMessaggioAI] = useState<{ tipo: "ok" | "errore" | "avviso"; testo: string } | null>(null);
   const [proposteInAttesa, setProposteInAttesa] = useState<EvaluationProposal[]>([]);
   const [mostraProposteInAttesa, setMostraProposteInAttesa] = useState(false);
@@ -180,7 +181,7 @@ function SezioneValutazioneCoach({ teamId }: { teamId: string }) {
     setMessaggioAI({ tipo: "avviso", testo: uiStrings.valutazioni.aiGenerating });
     try {
       const storico = (await elencaValutazioni(atletaSelId, fondamentale)).slice(0, 5).map((v) => ({ punteggio: v.punteggio, data: v.data_valutazione }));
-      const risultato = await generaPropostaValutazioneAI(teamId, atletaSelId, `${atleta.nome} ${atleta.cognome}`, fondamentale, storico);
+      const risultato = await generaPropostaValutazioneAI(teamId, atletaSelId, `${atleta.nome} ${atleta.cognome}`, fondamentale, storico, istruzioniExtra);
       if (risultato.errore || !risultato.proposta) {
         setMessaggioAI({ tipo: "errore", testo: `${risultato.messaggio} — ${uiStrings.valutazioni.aiFallback}.` });
         return;
@@ -228,6 +229,15 @@ function SezioneValutazioneCoach({ teamId }: { teamId: string }) {
       </View>
 
       <TextInput style={styles.inputPunteggio} placeholder="Punteggio (1-10)" placeholderTextColor={brand.colors.muted} keyboardType="numeric" value={punteggio} onChangeText={onPunteggioModificato} />
+
+      <TextInput
+        style={[styles.input, { minHeight: 52, textAlignVertical: "top" }]}
+        multiline
+        placeholder="Contesto per l'AI (facoltativo): es. rientra da infortunio, ha cambiato ruolo, ultime settimane con poche presenze"
+        placeholderTextColor={brand.colors.muted}
+        value={istruzioniExtra}
+        onChangeText={setIstruzioniExtra}
+      />
 
       <View style={styles.azioni}>
         <Pressable style={styles.bottonePrimario} onPress={onRegistra} disabled={!punteggio}>

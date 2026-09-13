@@ -60,6 +60,8 @@ export interface Training {
   argomento: string | null;
   durata_totale_minuti: number | null;
   archiviato: boolean;
+  iniziato_il: string | null;
+  concluso_il: string | null;
   sporteasy_uid: string | null;
   creato_il: string;
 }

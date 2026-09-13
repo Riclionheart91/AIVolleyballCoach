@@ -23,6 +23,7 @@ export default function PianoAllenamento() {
   const [percentualeGenerazione, setPercentualeGenerazione] = useState(0);
   const [erroreGenerazione, setErroreGenerazione] = useState<string | null>(null);
   const [bloccoPeriodo, setBloccoPeriodo] = useState<{ nome: string; tipo: string } | null>(null);
+  const [istruzioniExtra, setIstruzioniExtra] = useState("");
   const [salvando, setSalvando] = useState(false);
 
   const carica = useCallback(async () => {
@@ -98,7 +99,7 @@ export default function PianoAllenamento() {
       }, 400);
 
       try {
-        const r = await generaPianoAllenamentoAI(team!.id, argomento || "allenamento generico", Number(durataObiettivo) || 60, catalogo, training?.data);
+        const r = await generaPianoAllenamentoAI(team!.id, argomento || "allenamento generico", Number(durataObiettivo) || 60, catalogo, training?.data, istruzioniExtra);
         if (r.errore || !r.esercizi) {
           const messaggio = r.messaggio ?? "Errore sconosciuto";
           setErroreGenerazione(messaggio);
@@ -164,6 +165,14 @@ export default function PianoAllenamento() {
           )}
           {erroreGenerazione && !generando && <Text style={styles.erroreTesto}>{erroreGenerazione}</Text>}
           {bloccoPeriodo && <Text style={styles.notaPeriodo}>📋 Periodo del piano annuale: {bloccoPeriodo.nome} ({bloccoPeriodo.tipo.replace(/_/g, " ")}) — la proposta AI ne terrà conto.</Text>}
+          <TextInput
+            style={[styles.input, { minHeight: 56, textAlignVertical: "top" }]}
+            multiline
+            placeholder="Indicazioni per questa seduta (facoltativo): es. poche atlete disponibili, lavorare sul muro, niente salti per infortuni"
+            placeholderTextColor={brand.colors.muted}
+            value={istruzioniExtra}
+            onChangeText={setIstruzioniExtra}
+          />
           <Text style={styles.nota}>La proposta AI usa solo esercizi già nel tuo catalogo, e resta modificabile prima di salvare — se non risponde, costruisci il piano scegliendo qui sotto.</Text>
         </View>
 

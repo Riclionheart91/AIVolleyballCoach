@@ -5,6 +5,18 @@ import type { BloccoPiano, PianoAnnuale, PropostaAggiornamentoPiano, RiepilogoBl
 
 const GIORNI_PRIMA_DI_RIPROPORRE = 30;
 
+/**
+ * Istruzioni libere dell'allenatore, appese in fondo al prompt e
+ * dichiarate come prioritarie: servono per i vincoli che nessun campo
+ * strutturato può prevedere (infortuni in corso, palestra non
+ * disponibile in certe settimane, periodo di esami, un'atleta da
+ * reinserire gradualmente...).
+ */
+export function istruzioniAggiuntive(testo?: string): string {
+  if (!testo || !testo.trim()) return "";
+  return `\n\nISTRUZIONI AGGIUNTIVE DELL'ALLENATORE (hanno la precedenza sulle indicazioni generali qui sopra): ${testo.trim()}`;
+}
+
 export async function leggiPianoAnnuale(teamId: string, seasonId: string | null): Promise<PianoAnnuale | null> {
   let query = supabaseClient.from("piani_annuali").select("*").eq("team_id", teamId).order("creato_il", { ascending: false }).limit(1);
   if (seasonId) query = query.eq("season_id", seasonId);
@@ -171,6 +183,7 @@ export async function generaBlocchiAI(
   dataInizioStagione: string,
   dataFineStagione: string,
   contesto: string,
+  istruzioniExtra?: string,
 ): Promise<RisultatoGenerazioneBlocchi> {
   const prompt =
     `Sei un preparatore di pallavolo. Costruisci la periodizzazione annuale dal ${dataInizioStagione} al ${dataFineStagione}.\n` +
@@ -178,7 +191,8 @@ export async function generaBlocchiAI(
     `Rispondi SOLO con JSON, nessun altro testo, in questo formato:\n` +
     `{"blocchi":[{"nome":"...","tipo":"preparazione_generale","data_inizio":"AAAA-MM-GG","data_fine":"AAAA-MM-GG","obiettivi_tecnici":"...","obiettivi_fisici":"...","obiettivi_tattici":"..."}]}\n` +
     `I valori ammessi per "tipo" sono esattamente: preparazione_generale, preparazione_specifica, pre_competitiva, competitiva, scarico, transizione. ` +
-    `Inserisci blocchi di scarico periodici. I blocchi devono coprire tutto il periodo senza sovrapporsi.`;
+    `Inserisci blocchi di scarico periodici. I blocchi devono coprire tutto il periodo senza sovrapporsi.` +
+    istruzioniAggiuntive(istruzioniExtra);
 
   const { data: sessione } = await supabaseClient.auth.getSession();
   if (!sessione.session) return { errore: true, messaggio: "Sessione scaduta, effettua di nuovo l'accesso." };
@@ -232,6 +246,7 @@ export async function generaBlocchiGuidatoAI(
   dataFine: string,
   risposte: RisposteGuida,
   numeroAtlete: number,
+  istruzioniExtra?: string,
 ): Promise<RisultatoGenerazioneBlocchi> {
   const prompt =
     `Sei un preparatore di pallavolo. Costruisci la periodizzazione dal ${dataInizio} al ${dataFine}.\n` +
@@ -244,7 +259,8 @@ export async function generaBlocchiGuidatoAI(
     `Rispondi SOLO con JSON, senza altro testo:\n` +
     `{"blocchi":[{"nome":"...","tipo":"preparazione_generale","data_inizio":"AAAA-MM-GG","data_fine":"AAAA-MM-GG","obiettivi_tecnici":["voce esatta","voce esatta"],"obiettivi_fisici":["..."],"obiettivi_tattici":["..."]}]}\n` +
     `Valori ammessi per "tipo": preparazione_generale, preparazione_specifica, pre_competitiva, competitiva, scarico, transizione. ` +
-    `Massimo 3 obiettivi per categoria per blocco. Inserisci blocchi di scarico periodici. I blocchi coprono tutto il periodo senza sovrapporsi.`;
+    `Massimo 3 obiettivi per categoria per blocco. Inserisci blocchi di scarico periodici. I blocchi coprono tutto il periodo senza sovrapporsi.` +
+    istruzioniAggiuntive(istruzioniExtra);
 
   const { data: sessione } = await supabaseClient.auth.getSession();
   if (!sessione.session) return { errore: true, messaggio: "Sessione scaduta, effettua di nuovo l'accesso." };

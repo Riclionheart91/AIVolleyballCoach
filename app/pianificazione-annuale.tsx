@@ -48,6 +48,7 @@ export default function PianificazioneAnnuale() {
   const [livello, setLivello] = useState("amatoriale");
   const [seduteSettimana, setSeduteSettimana] = useState("2");
   const [obiettivoStagione, setObiettivoStagione] = useState("crescita tecnica del gruppo");
+  const [istruzioniExtra, setIstruzioniExtra] = useState("");
 
   function bozzaVuota(): InputBlocco {
     return {
@@ -153,7 +154,7 @@ export default function PianificazioneAnnuale() {
     try {
       const atlete = await elencaAtlete(team.id);
       const inizio = stagioneAttiva?.data_apertura?.slice(0, 10) || oggiIso();
-      const r = await generaBlocchiGuidatoAI(team.id, inizio, fraMesi(9), { livello, seduteSettimana, obiettivoStagione }, atlete.length);
+      const r = await generaBlocchiGuidatoAI(team.id, inizio, fraMesi(9), { livello, seduteSettimana, obiettivoStagione }, atlete.length, istruzioniExtra);
       if (r.errore || !r.blocchi) { avvisa("Generazione non riuscita", r.messaggio ?? "Errore sconosciuto"); return; }
       setPercentuale(100);
       for (const b of r.blocchi) await creaBlocco(piano.id, b);
@@ -236,6 +237,16 @@ export default function PianificazioneAnnuale() {
                 </Pressable>
               ))}
             </View>
+
+            <Text style={styles.etichettaGuida}>Indicazioni particolari (facoltativo)</Text>
+            <TextInput
+              style={[styles.input, styles.inputAlto]}
+              multiline
+              placeholder="Es. due atlete rientrano da infortunio al ginocchio; a dicembre la palestra è indisponibile per due settimane; vogliamo lavorare molto sulla ricezione"
+              placeholderTextColor={brand.colors.muted}
+              value={istruzioniExtra}
+              onChangeText={setIstruzioniExtra}
+            />
 
             <View style={{ flexDirection: "row", gap: 8 }}>
               <Pressable style={styles.bottoneAnnulla} onPress={() => setGuidaAperta(false)}><Text style={styles.bottoneAnnullaTesto}>Annulla</Text></Pressable>

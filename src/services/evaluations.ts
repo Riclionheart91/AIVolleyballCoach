@@ -1,5 +1,6 @@
 import { supabaseClient } from "@/src/lib/supabase";
 import { supabase as cfg } from "@/src/config";
+import { istruzioniAggiuntive } from "@/src/services/pianoAnnuale";
 import type { Evaluation, EvaluationProposal, Fondamentale } from "@/src/types/database";
 
 /** Percorso manuale puro — identico indipendentemente dallo stato dell'AI. */
@@ -77,8 +78,9 @@ export async function generaPropostaValutazioneAI(
   atletaNomeCompleto: string,
   fondamentale: Fondamentale,
   storicoRecente: { punteggio: number; data: string }[],
+  istruzioniExtra?: string,
 ): Promise<RisultatoSuggerimentoAI> {
-  const prompt = costruisciPromptValutazione(atletaNomeCompleto, fondamentale, storicoRecente);
+  const prompt = costruisciPromptValutazione(atletaNomeCompleto, fondamentale, storicoRecente) + istruzioniAggiuntive(istruzioniExtra);
 
   const { data: sessione } = await supabaseClient.auth.getSession();
   if (!sessione.session) return { errore: true, messaggio: "Sessione scaduta, effettua di nuovo l'accesso." };

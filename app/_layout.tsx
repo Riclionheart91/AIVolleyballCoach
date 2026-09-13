@@ -13,6 +13,7 @@ export default function RootLayout() {
         <Stack.Screen name="atleta/[id]" />
         <Stack.Screen name="esercizio/[id]" />
         <Stack.Screen name="allenamento/[id]" />
+        <Stack.Screen name="sessione/[id]" options={{ headerShown: false }} />
         <Stack.Screen name="partita/[id]/index" options={{ headerShown: true, title: "Scouting live" }} />
         <Stack.Screen name="partita/[id]/prepara" options={{ headerShown: true, title: "Prepara partita" }} />
         <Stack.Screen name="profilo" options={{ headerShown: true, title: "Profilo", presentation: "modal" }} />

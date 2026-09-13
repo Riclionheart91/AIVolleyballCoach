@@ -1,5 +1,6 @@
 import { supabaseClient } from "@/src/lib/supabase";
 import { supabase as cfg } from "@/src/config";
+import { istruzioniAggiuntive } from "@/src/services/pianoAnnuale";
 import type { Exercise, TrainingExercise } from "@/src/types/database";
 
 export interface VoceRiepilogoPiano {
@@ -43,7 +44,7 @@ export async function leggiBloccoPerData(teamId: string, dataIso: string): Promi
   return (data && data.length > 0) ? data[0] : null;
 }
 
-export async function generaPianoAllenamentoAI(teamId: string, argomento: string, durataTotaleMinuti: number, catalogo: Exercise[], dataSeduta?: string): Promise<RisultatoGenerazionePiano> {
+export async function generaPianoAllenamentoAI(teamId: string, argomento: string, durataTotaleMinuti: number, catalogo: Exercise[], dataSeduta?: string, istruzioniExtra?: string): Promise<RisultatoGenerazionePiano> {
   if (catalogo.length === 0) {
     return { errore: true, messaggio: "Il catalogo esercizi è vuoto: aggiungi almeno qualche esercizio nella tab Esercizi prima di generare un piano con l'AI." };
   }
@@ -65,7 +66,7 @@ export async function generaPianoAllenamentoAI(teamId: string, argomento: string
     `Sei un assistente per un allenatore di pallavolo. Proponi un piano per una sessione di allenamento sul tema "${argomento}", ` +
     `della durata totale di circa ${durataTotaleMinuti} minuti. USA SOLO esercizi da questo catalogo (mai inventarne altri, scrivi il nome esattamente come qui):\n${elencoCatalogo}\n\n` +
     `Rispondi SOLO in formato JSON: {"esercizi": [{"nome": "nome esatto dal catalogo", "durata_minuti": numero, "note": "breve indicazione"}], "argomento_suggerito": "eventuale titolo più specifico del tema"}. ` +
-    `La somma delle durate deve avvicinarsi a ${durataTotaleMinuti} minuti.`;
+    `La somma delle durate deve avvicinarsi a ${durataTotaleMinuti} minuti.` + istruzioniAggiuntive(istruzioniExtra);
 
   const { data: sessione } = await supabaseClient.auth.getSession();
   if (!sessione.session) return { errore: true, messaggio: "Sessione scaduta, effettua di nuovo l'accesso." };
@@ -98,4 +99,52 @@ export async function generaPianoAllenamentoAI(teamId: string, argomento: string
   } catch {
     return { errore: true, messaggio: "Risposta AI non nel formato atteso — percorso manuale sempre disponibile qui sopra." };
   }
+}
+
+// ─────────── Sessione dal vivo ───────────
+
+export interface VoceSessione {
+  id: string;
+  exercise_id: string;
+  nome: string;
+  durata_minuti: number | null;
+  note: string;
+  ordine: number;
+  iniziato_il: string | null;
+  concluso_il: string | null;
+  durata_effettiva_secondi: number | null;
+}
+
+/** Esercizi del piano con lo stato di esecuzione, per la schermata da bordo campo. */
+export async function elencaSessione(trainingId: string, catalogo: Exercise[]): Promise<VoceSessione[]> {
+  const { data, error } = await supabaseClient
+    .from("training_exercises")
+    .select("id, exercise_id, durata_minuti, note, ordine, iniziato_il, concluso_il, durata_effettiva_secondi")
+    .eq("training_id", trainingId)
+    .order("ordine");
+  if (error) throw error;
+  return (data ?? []).map((r) => ({
+    ...r,
+    nome: catalogo.find((c) => c.id === r.exercise_id)?.nome ?? "Esercizio",
+  })) as VoceSessione[];
+}
+
+export async function avviaSessione(trainingId: string): Promise<void> {
+  const { error } = await supabaseClient.rpc("avvia_sessione_allenamento", { p_training_id: trainingId });
+  if (error) throw error;
+}
+
+export async function avviaEsercizio(trainingExerciseId: string): Promise<void> {
+  const { error } = await supabaseClient.rpc("avvia_esercizio", { p_training_exercise_id: trainingExerciseId });
+  if (error) throw error;
+}
+
+export async function concludiEsercizio(trainingExerciseId: string): Promise<void> {
+  const { error } = await supabaseClient.rpc("concludi_esercizio", { p_training_exercise_id: trainingExerciseId });
+  if (error) throw error;
+}
+
+export async function concludiSessione(trainingId: string): Promise<void> {
+  const { error } = await supabaseClient.rpc("concludi_sessione_allenamento", { p_training_id: trainingId });
+  if (error) throw error;
 }
