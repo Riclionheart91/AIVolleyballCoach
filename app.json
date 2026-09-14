@@ -6,7 +6,6 @@
     "orientation": "default",
     "scheme": "aivolleyballcoach",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.aivolleyballcoach.app",
@@ -14,8 +13,7 @@
     },
     "android": {
       "package": "com.aivolleyballcoach.app",
-      "versionCode": 1,
-      "edgeToEdgeEnabled": true
+      "versionCode": 1
     },
     "web": {
       "bundler": "metro",
@@ -30,10 +28,7 @@
     },
     "plugins": [
       "expo-router",
-      "expo-font",
-      "expo-splash-screen",
-      "expo-status-bar",
-      "expo-web-browser"
+      "expo-font"
     ],
     "experiments": {
       "typedRoutes": true,

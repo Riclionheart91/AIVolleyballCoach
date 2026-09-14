@@ -14,6 +14,29 @@
 
 set -e
 
+# Controllo preliminare: è un errore facile lanciare lo script nella
+# cartella estratta dallo zip invece che nel repository. Senza .git il
+# punto di ripristino non può essere creato, e senza quello un upgrade
+# andato male non è annullabile — quindi ci si ferma subito.
+if [ ! -d ".git" ]; then
+  echo "ERRORE: questa cartella non è un repository git."
+  echo ""
+  echo "Probabilmente stai eseguendo lo script nella cartella estratta dallo zip."
+  echo "Va lanciato nel repository vero, dove risiede il progetto:"
+  echo ""
+  echo "  cd /Users/riccardolilliu/Documents/97.webapp/AIVolleyballCoach"
+  echo "  bash aggiorna_expo.sh $1"
+  echo ""
+  echo "Ricordati anche di aver già pubblicato l'ultimo pacchetto lì dentro con:"
+  echo "  bash pubblica_aggiornamento.sh ."
+  exit 1
+fi
+
+if [ ! -f "package.json" ]; then
+  echo "ERRORE: package.json non trovato: non sembra la cartella del progetto."
+  exit 1
+fi
+
 VERSIONE="$1"
 if [ -z "$VERSIONE" ]; then
   echo "Uso: bash aggiorna_expo.sh <numero-sdk>   (es. 55)"
