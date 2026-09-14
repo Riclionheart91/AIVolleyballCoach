@@ -17,6 +17,7 @@ export default function Esercizi() {
   const [caricamento, setCaricamento] = useState(true);
   const [ricerca, setRicerca] = useState("");
   const [categorieChiuse, setCategorieChiuse] = useState<Set<string>>(new Set());
+  const [descrizioneAperta, setDescrizioneAperta] = useState<string | null>(null);
 
   const [popupAperto, setPopupAperto] = useState(false);
   const [nome, setNome] = useState("");
@@ -155,12 +156,27 @@ export default function Esercizi() {
             <Text style={styles.conteggioCategoria}>{section.totale}</Text>
           </Pressable>
         )}
-        renderItem={({ item }) => (
-          <Pressable style={styles.riga} onPress={() => router.push(`/esercizio/${item.id}`)}>
-            <Text style={styles.rigaNome}>{item.nome}</Text>
-            {!!item.descrizione && <Text style={styles.rigaDescrizione} numberOfLines={1}>{item.descrizione}</Text>}
-          </Pressable>
-        )}
+        renderItem={({ item }) => {
+          const aperta = descrizioneAperta === item.id;
+          return (
+            <View style={styles.riga}>
+              {/* Un tocco apre la descrizione sul posto (serve durante
+                  l'allenamento), la freccia porta alla scheda completa
+                  per modificarla. */}
+              <Pressable style={styles.rigaTesta} onPress={() => setDescrizioneAperta(aperta ? null : item.id)}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.rigaNome}>{item.nome}</Text>
+                  {!!item.descrizione && !aperta && <Text style={styles.rigaDescrizione} numberOfLines={1}>{item.descrizione}</Text>}
+                  {!item.descrizione && <Text style={styles.rigaDescrizione}>nessuna descrizione</Text>}
+                </View>
+                <Pressable onPress={() => router.push(`/esercizio/${item.id}`)} hitSlop={12} style={styles.tastoScheda}>
+                  <Text style={styles.tastoSchedaTesto}>›</Text>
+                </Pressable>
+              </Pressable>
+              {aperta && !!item.descrizione && <Text style={styles.rigaDescrizioneEstesa}>{item.descrizione}</Text>}
+            </View>
+          );
+        }}
       />
 
       {puoScrivere && (
@@ -268,7 +284,11 @@ const styles = StyleSheet.create({
   intestazioneCategoria: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", backgroundColor: brand.colors.surface, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: brand.colors.border },
   titoloCategoria: { color: brand.colors.brandSecondary, fontSize: 13, fontWeight: "800", textTransform: "uppercase" },
   conteggioCategoria: { color: brand.colors.muted, fontSize: 12, fontWeight: "700" },
-  riga: { paddingVertical: 10, paddingLeft: 14, borderBottomWidth: 1, borderBottomColor: brand.colors.border },
+  riga: { paddingLeft: 14, borderBottomWidth: 1, borderBottomColor: brand.colors.border },
+  rigaTesta: { flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 12, minHeight: 56 },
+  rigaDescrizioneEstesa: { color: brand.colors.onSurfaceSecondary, fontSize: 14, lineHeight: 21, paddingBottom: 12, paddingRight: 12 },
+  tastoScheda: { width: 36, height: 36, alignItems: "center", justifyContent: "center" },
+  tastoSchedaTesto: { color: brand.colors.brand, fontSize: 22, fontWeight: "700" },
   rigaNome: { color: brand.colors.onSurface, fontSize: 15 },
   rigaDescrizione: { color: brand.colors.muted, fontSize: 12, marginTop: 2 },
   vuoto: { color: brand.colors.muted, textAlign: "center", marginTop: 32 },

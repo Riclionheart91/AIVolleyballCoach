@@ -233,6 +233,7 @@ export default function PianoAllenamento() {
                     {categorieEspanse.has(categoria) && catalogoPerCategoria[categoria].map((ex) => (
                       <Pressable key={ex.id} style={styles.rigaCatalogo} onPress={() => aggiungiEsercizio(ex)}>
                         <Text style={styles.rigaCatalogoTesto}>{ex.nome}</Text>
+                        {!!ex.descrizione && <Text style={styles.rigaCatalogoDescrizione} numberOfLines={2}>{ex.descrizione}</Text>}
                       </Pressable>
                     ))}
                   </View>
@@ -270,7 +271,8 @@ const styles = StyleSheet.create({
   rigaCategoria: { paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: brand.colors.border },
   rigaCategoriaTesto: { color: brand.colors.onSurface, fontSize: 14, fontWeight: "700" },
   rigaCatalogo: { paddingVertical: 8, paddingLeft: 20, borderBottomWidth: 1, borderBottomColor: brand.colors.border },
-  rigaCatalogoTesto: { color: brand.colors.onSurfaceSecondary, fontSize: 13 },
+  rigaCatalogoTesto: { color: brand.colors.onSurface, fontSize: 14, fontWeight: "600" },
+  rigaCatalogoDescrizione: { color: brand.colors.muted, fontSize: 12, marginTop: 2, lineHeight: 17 },
   etichettaCategoriaPiano: { color: brand.colors.brandSecondary, fontSize: 12, fontWeight: "700", marginTop: 8, textTransform: "uppercase" },
   rigaEsercizio: { flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 6, borderTopWidth: 1, borderTopColor: brand.colors.border },
   rigaEsercizioNome: { color: brand.colors.onSurface, flex: 1, fontSize: 14 },
