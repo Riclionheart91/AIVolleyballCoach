@@ -180,11 +180,21 @@ export default function Allenamenti() {
 
             {puoScrivere && (
               <View style={styles.rigaAzioniCard}>
-                <Pressable onPress={() => router.push(`/allenamento/${item.id}`)}><Text style={styles.azioneCard}>Piano{item.durata_totale_minuti ? ` (${item.durata_totale_minuti} min)` : ""}</Text></Pressable>
-                <Pressable onPress={() => router.push(`/sessione/${item.id}`)}><Text style={styles.azioneCardAvvio}>▶ Avvia</Text></Pressable>
-                <Pressable onPress={() => apriModifica(item)}><Text style={styles.azioneCard}>Modifica</Text></Pressable>
-                <Pressable onPress={() => chiediConversione(item)}><Text style={styles.azioneCard}>È una partita</Text></Pressable>
-                <Pressable onPress={() => onArchiviaSingolo(item, true)}><Text style={styles.azioneCard}>Archivia</Text></Pressable>
+                <Pressable style={styles.bottoneAvvia} onPress={() => router.push(`/sessione/${item.id}`)}>
+                  <Text style={styles.bottoneAvviaTesto}>▶ Avvia</Text>
+                </Pressable>
+                <Pressable style={styles.bottoneAzione} onPress={() => router.push(`/allenamento/${item.id}`)}>
+                  <Text style={styles.bottoneAzioneTesto}>Piano{item.durata_totale_minuti ? ` · ${item.durata_totale_minuti}′` : ""}</Text>
+                </Pressable>
+                <Pressable style={styles.bottoneAzione} onPress={() => apriModifica(item)}>
+                  <Text style={styles.bottoneAzioneTesto}>Modifica</Text>
+                </Pressable>
+                <Pressable style={styles.bottoneAzione} onPress={() => onArchiviaSingolo(item, true)}>
+                  <Text style={styles.bottoneAzioneTesto}>Archivia</Text>
+                </Pressable>
+                <Pressable style={styles.bottoneAzione} onPress={() => chiediConversione(item)}>
+                  <Text style={styles.bottoneAzioneTesto}>È una partita</Text>
+                </Pressable>
                 <Pressable onPress={() => chiediEliminazione(item)}><Text style={styles.azioneCardDistruttiva}>Elimina</Text></Pressable>
               </View>
             )}
@@ -321,7 +331,13 @@ const styles = StyleSheet.create({
   cardTitolo: { color: brand.colors.onSurface, fontSize: 16, fontWeight: "700" },
   cardSotto: { color: brand.colors.muted, fontSize: 13 },
   badgeFuturo: { color: brand.colors.brandSecondary, fontSize: 11, fontWeight: "700", textTransform: "uppercase" },
-  rigaAzioniCard: { flexDirection: "row", gap: 16, marginTop: 8 },
+  // Pulsanti veri con area di tocco adeguata al posto dei link testuali:
+  // su web e su telefono i link piccoli sono scomodi da centrare.
+  rigaAzioniCard: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 10 },
+  bottoneAvvia: { backgroundColor: brand.colors.success, paddingVertical: 10, paddingHorizontal: 16, borderRadius: 10, minHeight: 40, justifyContent: "center" },
+  bottoneAvviaTesto: { color: "#000", fontWeight: "800", fontSize: 13 },
+  bottoneAzione: { borderWidth: 1, borderColor: brand.colors.border, backgroundColor: brand.colors.surfaceTertiary, paddingVertical: 10, paddingHorizontal: 14, borderRadius: 10, minHeight: 40, justifyContent: "center" },
+  bottoneAzioneTesto: { color: brand.colors.onSurface, fontWeight: "600", fontSize: 13 },
   azioneCard: { color: brand.colors.brand, fontSize: 12, fontWeight: "600" },
   azioneCardAvvio: { color: brand.colors.success, fontSize: 12, fontWeight: "700" },
   azioneCardDistruttiva: { color: brand.colors.error, fontSize: 12, fontWeight: "600" },

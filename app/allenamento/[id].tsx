@@ -15,7 +15,7 @@ export default function PianoAllenamento() {
   const [training, setTraining] = useState<Training | null>(null);
   const [catalogo, setCatalogo] = useState<Exercise[]>([]);
   const [argomento, setArgomento] = useState("");
-  const [durataObiettivo, setDurataObiettivo] = useState("60");
+  const [durataObiettivo, setDurataObiettivo] = useState("120");
   const [esercizi, setEsercizi] = useState<VoceRiepilogoPiano[]>([]);
   const [mostraCatalogo, setMostraCatalogo] = useState(false);
   const [categorieEspanse, setCategorieEspanse] = useState<Set<string>>(new Set());
@@ -48,7 +48,7 @@ export default function PianoAllenamento() {
   const totaleMinuti = esercizi.reduce((s, e) => s + (e.durataMinuti || 0), 0);
 
   function aggiungiEsercizio(ex: Exercise) {
-    setEsercizi((prev) => [...prev, { exerciseId: ex.id, nome: ex.nome, durataMinuti: 10, note: "" }]);
+    setEsercizi((prev) => [...prev, { exerciseId: ex.id, nome: ex.nome, durataMinuti: 15, note: "" }]);
     setMostraCatalogo(false);
   }
 
@@ -99,7 +99,7 @@ export default function PianoAllenamento() {
       }, 400);
 
       try {
-        const r = await generaPianoAllenamentoAI(team!.id, argomento || "allenamento generico", Number(durataObiettivo) || 60, catalogo, training?.data, istruzioniExtra);
+        const r = await generaPianoAllenamentoAI(team!.id, argomento || "allenamento generico", Number(durataObiettivo) || 120, catalogo, training?.data, istruzioniExtra);
         if (r.errore || !r.esercizi) {
           const messaggio = r.messaggio ?? "Errore sconosciuto";
           setErroreGenerazione(messaggio);

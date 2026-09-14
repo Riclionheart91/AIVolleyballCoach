@@ -2,7 +2,11 @@ import { useCallback, useMemo, useState } from "react";
 import { View, Text, SectionList, TextInput, Pressable, StyleSheet, RefreshControl, Modal, ActivityIndicator } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { useAuth } from "@/src/context/AuthContext";
-import { creaEsercizio, elencaEsercizi, generaEserciziAI, type EsercizioProposto } from "@/src/services/exercises";
+import { carenzeAtleta, creaEsercizio, elencaEsercizi, generaEserciziAI, type EsercizioProposto } from "@/src/services/exercises";
+import { elencaAtlete } from "@/src/services/athletes";
+import { leggiBloccoPerData } from "@/src/services/trainingPlan";
+import { ruoliCampo } from "@/src/config";
+import type { Athlete } from "@/src/types/database";
 import { FabAggiungi } from "@/src/components/Fab";
 import { PopupForm } from "@/src/components/PopupForm";
 import { avvisa } from "@/src/lib/confermaAzione";
@@ -16,7 +20,9 @@ export default function Esercizi() {
   const [esercizi, setEsercizi] = useState<Exercise[]>([]);
   const [caricamento, setCaricamento] = useState(true);
   const [ricerca, setRicerca] = useState("");
-  const [categorieChiuse, setCategorieChiuse] = useState<Set<string>>(new Set());
+  // Chiuse di default: con decine di esercizi l'elenco tutto aperto è
+  // proprio il problema di leggibilità segnalato. Si aprono a richiesta.
+  const [categorieChiuse, setCategorieChiuse] = useState<Set<string> | null>(null);
   const [descrizioneAperta, setDescrizioneAperta] = useState<string | null>(null);
 
   const [popupAperto, setPopupAperto] = useState(false);
@@ -27,6 +33,11 @@ export default function Esercizi() {
   const [categoriaAi, setCategoriaAi] = useState("");
   const [quantiAi, setQuantiAi] = useState("5");
   const [istruzioniAi, setIstruzioniAi] = useState("");
+  const [faseAi, setFaseAi] = useState<"qualsiasi" | "riscaldamento" | "tecnica">("qualsiasi");
+  const [ruoloAi, setRuoloAi] = useState<string | null>(null);
+  const [atletaAi, setAtletaAi] = useState<Athlete | null>(null);
+  const [atlete, setAtlete] = useState<Athlete[]>([]);
+  const [usaPeriodo, setUsaPeriodo] = useState(true);
   const [generando, setGenerando] = useState(false);
   const [proposte, setProposte] = useState<EsercizioProposto[]>([]);
   const [scartate, setScartate] = useState<Set<number>>(new Set());
@@ -36,6 +47,7 @@ export default function Esercizi() {
     setCaricamento(true);
     try {
       setEsercizi(await elencaEsercizi(team.id));
+      setAtlete(await elencaAtlete(team.id).catch(() => []));
     } finally {
       setCaricamento(false);
     }
@@ -61,7 +73,8 @@ export default function Esercizi() {
       totale: gruppi[titolo].length,
       // Durante una ricerca le categorie restano sempre aperte: chiuderle
       // nasconderebbe proprio i risultati cercati.
-      data: (!filtro && categorieChiuse.has(titolo)) ? [] : gruppi[titolo].sort((a, b) => a.nome.localeCompare(b.nome)),
+      // categorieChiuse === null significa "mai toccate": tutte chiuse.
+      data: (!filtro && (categorieChiuse === null || categorieChiuse.has(titolo))) ? [] : gruppi[titolo].sort((a, b) => a.nome.localeCompare(b.nome)),
     }));
   }, [esercizi, ricerca, categorieChiuse]);
 
@@ -72,6 +85,12 @@ export default function Esercizi() {
 
   function commutaCategoria(titolo: string) {
     setCategorieChiuse((prev) => {
+      // Al primo tocco si parte da "tutte chiuse" e si apre solo questa.
+      if (prev === null) {
+        const tutte = new Set(esercizi.map((e) => e.categoria?.trim() || SENZA_CATEGORIA));
+        tutte.delete(titolo);
+        return tutte;
+      }
       const nuovo = new Set(prev);
       if (nuovo.has(titolo)) nuovo.delete(titolo);
       else nuovo.add(titolo);
@@ -92,7 +111,26 @@ export default function Esercizi() {
     setProposte([]);
     setScartate(new Set());
     try {
-      const r = await generaEserciziAI(team.id, categoriaAi.trim(), Number(quantiAi) || 5, esercizi, istruzioniAi);
+      // Periodo del piano annuale in corso: se c'è, gli esercizi lo seguono.
+      const periodo = usaPeriodo ? await leggiBloccoPerData(team.id, new Date().toISOString()).catch(() => null) : null;
+
+      // Carenze reali dell'atleta scelta, dalle sue valutazioni.
+      let atletaConCarenze = null;
+      if (atletaAi) {
+        const carenze = await carenzeAtleta(atletaAi.id).catch(() => []);
+        atletaConCarenze = {
+          nome: `${atletaAi.nome} ${atletaAi.cognome}`,
+          ruolo: atletaAi.ruolo_campo,
+          carenze: carenze.map((c) => ({ fondamentale: c.fondamentale, media: Number(c.media) })),
+        };
+        if (atletaConCarenze.carenze.length === 0) {
+          avvisa("Nessuna valutazione", `Per ${atletaAi.nome} non ci sono valutazioni recenti: senza quelle non posso individuare le carenze. Procedo con esercizi generici per il suo ruolo.`);
+        }
+      }
+
+      const r = await generaEserciziAI(team.id, categoriaAi.trim(), Number(quantiAi) || 5, esercizi, istruzioniAi, {
+        periodo, ruolo: ruoloAi, atleta: atletaConCarenze, fase: faseAi,
+      });
       if (r.errore || !r.esercizi) { avvisa("Generazione non riuscita", r.messaggio ?? "Errore sconosciuto"); return; }
       setProposte(r.esercizi);
     } catch (e) {
@@ -151,7 +189,7 @@ export default function Esercizi() {
         renderSectionHeader={({ section }) => (
           <Pressable style={styles.intestazioneCategoria} onPress={() => commutaCategoria(section.titolo)}>
             <Text style={styles.titoloCategoria}>
-              {(!ricerca && categorieChiuse.has(section.titolo)) ? "▸" : "▾"} {section.titolo}
+              {(!ricerca && (categorieChiuse === null || categorieChiuse.has(section.titolo))) ? "▸" : "▾"} {section.titolo}
             </Text>
             <Text style={styles.conteggioCategoria}>{section.totale}</Text>
           </Pressable>
@@ -231,6 +269,44 @@ export default function Esercizi() {
                     </Pressable>
                   ))}
                 </View>
+                <Text style={styles.etichettaOpzione}>Momento della seduta</Text>
+                <View style={styles.chipRiga}>
+                  {([["qualsiasi", "Indifferente"], ["riscaldamento", "Riscaldamento"], ["tecnica", "Tecnico specifico"]] as const).map(([v, etichetta]) => (
+                    <Pressable key={v} onPress={() => setFaseAi(v)} style={[styles.chip, faseAi === v && styles.chipAttivo]}>
+                      <Text style={[styles.chipTesto, faseAi === v && styles.chipTestoAttivo]}>{etichetta}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+
+                <Text style={styles.etichettaOpzione}>Per un ruolo specifico (lavoro a gruppi)</Text>
+                <View style={styles.chipRiga}>
+                  <Pressable onPress={() => setRuoloAi(null)} style={[styles.chip, !ruoloAi && styles.chipAttivo]}>
+                    <Text style={[styles.chipTesto, !ruoloAi && styles.chipTestoAttivo]}>Tutti</Text>
+                  </Pressable>
+                  {ruoliCampo.map((r) => (
+                    <Pressable key={r} onPress={() => setRuoloAi(ruoloAi === r ? null : r)} style={[styles.chip, ruoloAi === r && styles.chipAttivo]}>
+                      <Text style={[styles.chipTesto, ruoloAi === r && styles.chipTestoAttivo]}>{r}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+
+                <Text style={styles.etichettaOpzione}>Correttivi per una singola atleta (dalle sue carenze)</Text>
+                <View style={styles.chipRiga}>
+                  <Pressable onPress={() => setAtletaAi(null)} style={[styles.chip, !atletaAi && styles.chipAttivo]}>
+                    <Text style={[styles.chipTesto, !atletaAi && styles.chipTestoAttivo]}>Nessuna</Text>
+                  </Pressable>
+                  {atlete.map((a) => (
+                    <Pressable key={a.id} onPress={() => setAtletaAi(atletaAi?.id === a.id ? null : a)} style={[styles.chip, atletaAi?.id === a.id && styles.chipAttivo]}>
+                      <Text style={[styles.chipTesto, atletaAi?.id === a.id && styles.chipTestoAttivo]}>{a.cognome}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+
+                <Pressable onPress={() => setUsaPeriodo(!usaPeriodo)} style={styles.rigaInterruttore}>
+                  <View style={[styles.quadratino, usaPeriodo && styles.quadratinoAttivo]}>{usaPeriodo && <Text style={styles.spunta}>✓</Text>}</View>
+                  <Text style={styles.testoInterruttore}>Segui il periodo del piano annuale in corso</Text>
+                </Pressable>
+
                 <TextInput
                   style={[styles.input, { minHeight: 56, textAlignVertical: "top" }]}
                   multiline
@@ -303,6 +379,12 @@ const styles = StyleSheet.create({
   chipAttivo: { backgroundColor: brand.colors.brand },
   chipTesto: { color: brand.colors.onSurfaceSecondary, fontSize: 12 },
   chipTestoAttivo: { color: "#000", fontWeight: "700" },
+  etichettaOpzione: { color: brand.colors.muted, fontSize: 11, textTransform: "uppercase", marginTop: 4 },
+  rigaInterruttore: { flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 6 },
+  quadratino: { width: 20, height: 20, borderRadius: 5, borderWidth: 2, borderColor: brand.colors.brand, alignItems: "center", justifyContent: "center" },
+  quadratinoAttivo: { backgroundColor: brand.colors.brand },
+  spunta: { color: "#000", fontWeight: "800", fontSize: 12 },
+  testoInterruttore: { color: brand.colors.onSurface, fontSize: 13, flex: 1 },
   sfondoPopup: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "flex-end" },
   cartaPopup: { backgroundColor: brand.colors.surfaceSecondary, borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, gap: 10, maxHeight: "88%" },
   intestazionePopup: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },

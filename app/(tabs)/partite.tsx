@@ -20,6 +20,8 @@ export default function Partite() {
   const [tipoGara, setTipoGara] = useState<"campionato" | "amichevole">("amichevole");
   const [campionatoId, setCampionatoId] = useState<string | null>(null);
   const [pickerCampionatoMatchId, setPickerCampionatoMatchId] = useState<string | null>(null);
+  // Chiuso di default: occupava spazio in cima anche quando non serviva.
+  const [mostraAndamento, setMostraAndamento] = useState(false);
 
   const carica = useCallback(async () => {
     if (!team) return;
@@ -87,6 +89,13 @@ export default function Partite() {
 
   return (
     <View style={styles.container}>
+      <FlatList
+        data={partite}
+        keyExtractor={(m) => m.id}
+        contentContainerStyle={{ paddingBottom: 60 }}
+        ListHeaderComponent={
+          <View style={{ gap: 16, marginBottom: 12 }}>
+
       {puoScrivere && (
         <>
           <View style={styles.form}>
@@ -128,8 +137,10 @@ export default function Partite() {
 
       {andamento.length > 0 && (
         <View style={styles.cardAndamento}>
-          <Text style={styles.sottotitoloSezione}>Andamento tra le partite</Text>
-          {andamento.slice(0, 8).map((v, i) => (
+          <Pressable onPress={() => setMostraAndamento(!mostraAndamento)}>
+            <Text style={styles.sottotitoloSezione}>{mostraAndamento ? "▾" : "▸"} Andamento tra le partite</Text>
+          </Pressable>
+          {mostraAndamento && andamento.slice(0, 8).map((v, i) => (
             <View key={i} style={styles.rigaAndamento}>
               <Text style={styles.rigaAndamentoTesto}>{v.partita.slice(0, 10)} vs {v.avversario} — {v.fondamentale}</Text>
               <Text style={styles.rigaAndamentoValore}>+{v.punti} / -{v.errori}</Text>
@@ -137,10 +148,8 @@ export default function Partite() {
           ))}
         </View>
       )}
-
-      <FlatList
-        data={partite}
-        keyExtractor={(m) => m.id}
+          </View>
+        }
         refreshControl={<RefreshControl refreshing={caricamento} onRefresh={carica} tintColor={brand.colors.brand} />}
         ListEmptyComponent={!caricamento ? <Text style={styles.vuoto}>Nessuna partita ancora.</Text> : null}
         renderItem={({ item }) => (

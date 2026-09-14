@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { View, Text, TextInput, Pressable, StyleSheet, FlatList, ActivityIndicator } from "react-native";
+import { View, Text, TextInput, Pressable, StyleSheet, FlatList, ScrollView, ActivityIndicator } from "react-native";
 import { useFocusEffect } from "expo-router";
 import { useAuth } from "@/src/context/AuthContext";
 import { elencaAtlete } from "@/src/services/athletes";
@@ -33,7 +33,7 @@ export default function Valutazioni() {
   );
 
   return (
-    <View style={styles.container}>
+    <ScrollView style={styles.container} contentContainerStyle={styles.contenuto}>
       <Text style={styles.titolo}>{uiStrings.valutazioni.title}</Text>
 
       <View style={styles.cardAndamento}>
@@ -54,7 +54,7 @@ export default function Valutazioni() {
       {puoScrivere && <SezioneValutazioneCoach teamId={team!.id} />}
       {ruolo === "atleta" && atletaId && <SezioneValutazionePersonale athleteId={atletaId} />}
       {ruolo === "presidente" && team && <SezioneValutazionePresidente teamId={team.id} />}
-    </View>
+    </ScrollView>
   );
 }
 
@@ -257,14 +257,12 @@ function SezioneValutazioneCoach({ teamId }: { teamId: string }) {
       </Pressable>
 
       {mostraProposteInAttesa && (
-        <FlatList
-          data={proposteInAttesa}
-          keyExtractor={(p) => p.id}
-          ListEmptyComponent={<Text style={styles.vuoto}>Nessuna proposta in attesa.</Text>}
-          renderItem={({ item }) => {
+        <View>
+          {proposteInAttesa.length === 0 && <Text style={styles.vuoto}>Nessuna proposta in attesa.</Text>}
+          {proposteInAttesa.map((item) => {
             const atleta = atlete.find((a) => a.id === item.athlete_id);
             return (
-              <View style={styles.cardProposta}>
+              <View key={item.id} style={styles.cardProposta}>
                 <Text style={styles.cardPropostaTitolo}>{atleta ? `${atleta.nome} ${atleta.cognome}` : "Atleta"} — {item.fondamentale}: {item.valore_proposto}</Text>
                 {!!item.motivazione && <Text style={styles.cardPropostaMotivazione}>{item.motivazione}</Text>}
                 <View style={styles.azioniProposta}>
@@ -273,8 +271,8 @@ function SezioneValutazioneCoach({ teamId }: { teamId: string }) {
                 </View>
               </View>
             );
-          }}
-        />
+          })}
+        </View>
       )}
     </View>
   );
@@ -367,7 +365,8 @@ function SezioneValutazionePresidente({ teamId }: { teamId: string }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: brand.colors.surface, padding: 16, gap: 12 },
+  container: { flex: 1, backgroundColor: brand.colors.surface },
+  contenuto: { padding: 16, gap: 12, paddingBottom: 60 },
   titolo: { color: brand.colors.onSurface, fontSize: 20, fontWeight: "700" },
   sottotitoloSezione: { color: brand.colors.onSurface, fontSize: 14, fontWeight: "700" },
   cardAndamento: { backgroundColor: brand.colors.surfaceSecondary, borderRadius: 12, padding: 12, gap: 6 },
