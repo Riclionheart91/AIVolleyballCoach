@@ -66,6 +66,7 @@ export default function PartitaLive() {
   const [parereAI, setParereAI] = useState<string | null>(null);
   const [chiedendoAI, setChiedendoAI] = useState(false);
   const [popupEventi, setPopupEventi] = useState(false);
+  const [popupAltro, setPopupAltro] = useState(false);
 
   // Adatta la disposizione alla forma dello schermo: in orizzontale il
   // campo sta a sinistra alto quanto lo schermo, in verticale sta in
@@ -74,9 +75,12 @@ export default function PartitaLive() {
   // così è sempre il più grande possibile senza uscire dallo schermo.
   const { width: larghezzaSchermo, height: altezzaSchermo } = useWindowDimensions();
   const orizzontale = larghezzaSchermo >= altezzaSchermo;
+  // Il lato del quadrato è il minore tra lo spazio disponibile in
+  // altezza e quello in larghezza, così il campo entra sempre per
+  // intero senza tagliare i comandi.
   const latoCampo = orizzontale
-    ? Math.min(altezzaSchermo - 24, larghezzaSchermo * 0.55)
-    : Math.min(larghezzaSchermo - 16, altezzaSchermo * 0.45);
+    ? Math.min(altezzaSchermo - 32, larghezzaSchermo * 0.52)
+    : Math.min(larghezzaSchermo - 16, altezzaSchermo * 0.42);
   // I comandi si ridimensionano con lo spazio disponibile invece di
   // avere misure fisse che su schermi piccoli escono e su grandi
   // sprecano spazio.
@@ -317,8 +321,8 @@ export default function PartitaLive() {
 
   return (
     <View style={[styles.contenitore, { flexDirection: orizzontale ? "row" : "column" }]}>
-      <View style={[styles.colonnaCampo, { width: orizzontale ? latoCampo : "100%" }]}>
-        <View style={{ width: orizzontale ? latoCampo : "100%", aspectRatio: 1 }}>
+      <View style={[styles.colonnaCampo, orizzontale ? { width: latoCampo } : { width: "100%", alignItems: "center" }]}>
+        <View style={{ width: latoCampo, height: latoCampo }}>
           <Campo9x9
             occupanti={occupanti}
             onTapPosizione={(pos) => {
@@ -329,15 +333,9 @@ export default function PartitaLive() {
             }}
           />
         </View>
-        <View style={styles.rigaSottoCampo}>
-          <Text style={styles.nota} numberOfLines={1}>
-            servizio: {setCorrente.squadra_al_servizio === "noi" ? (alServizio ? etichettaAtleta(alServizio.athlete_id) : "noi") : "loro"}
-          </Text>
-          <View style={styles.rigaToggle}>
-            <Text style={styles.nota}>Essenziale</Text>
-            <Switch value={modalitaEssenziale} onValueChange={setModalitaEssenziale} trackColor={{ true: brand.colors.brand }} />
-          </View>
-        </View>
+        <Text style={styles.nota} numberOfLines={1}>
+          servizio: {setCorrente.squadra_al_servizio === "noi" ? (alServizio ? etichettaAtleta(alServizio.athlete_id) : "noi") : "loro"}
+        </Text>
       </View>
 
       <View style={[styles.colonnaComandi, orizzontale ? { flex: 1 } : { flex: 1, width: "100%" }]}>
@@ -368,7 +366,8 @@ export default function PartitaLive() {
         )}
 
         {puoScrivere ? (
-          <ScrollView contentContainerStyle={{ gap: 8, paddingBottom: 8 }}>
+          <>
+          <ScrollView style={{ flex: 1 }} contentContainerStyle={{ gap: 8, paddingBottom: 8 }}>
             <Text style={styles.indicazionePasso}>
               {passo === "giocatrice" && "1. Tocca la giocatrice sul campo"}
               {passo === "fondamentale" && `2. ${selezionata ? etichettaAtleta(selezionata.id) : ""} — quale fondamentale?`}
@@ -414,33 +413,31 @@ export default function PartitaLive() {
               </>
             )}
 
-            <View style={styles.rigaComandiSecondari}>
-              <Pressable onPress={onAnnulla} style={styles.tastoPiccolo} disabled={eventi.length === 0}>
-                <Text style={styles.tastoPiccoloTesto}>↺ Annulla</Text>
-              </Pressable>
-              <Pressable onPress={apriSituazione} style={styles.tastoPiccolo}>
-                <Text style={styles.tastoPiccoloTesto}>📊 Situazione</Text>
-              </Pressable>
-              {atletaSelId && !cambioInSospeso && (
-                <Pressable onPress={() => setPopupCambio(true)} style={styles.tastoPiccolo}>
-                  <Text style={styles.tastoPiccoloTesto}>⇄ Cambio</Text>
-                </Pressable>
-              )}
-            </View>
-
-            <View style={styles.rigaComandiSecondari}>
-              <Pressable onPress={async () => { try { await nuovoSet(match.id); router.replace(`/partita/${match.id}/prepara`); } catch (e) { avvisa("Errore", (e as Error).message); } }} style={styles.tastoPiccolo}>
-                <Text style={styles.tastoPiccoloTesto}>Nuovo set</Text>
-              </Pressable>
-              <Pressable onPress={onChiudiPartita} style={styles.tastoPiccoloDistruttivo}>
-                <Text style={styles.tastoPiccoloDistruttivoTesto}>Chiudi partita</Text>
-              </Pressable>
-            </View>
-
-            <Pressable onPress={() => setPopupEventi(true)} style={styles.tastoPiccolo}>
-              <Text style={styles.tastoPiccoloTesto}>🕑 Ultimi eventi ({eventi.length})</Text>
-            </Pressable>
           </ScrollView>
+
+          {/* Barra fissa: questi comandi devono restare sempre
+              raggiungibili, qualunque passo sia attivo e qualunque sia
+              l'orientamento. */}
+          <View style={styles.barraFissa}>
+            <Pressable onPress={onAnnulla} style={styles.tastoPiccolo} disabled={eventi.length === 0}>
+              <Text style={styles.tastoPiccoloTesto}>↺</Text>
+            </Pressable>
+            <Pressable onPress={apriSituazione} style={styles.tastoPiccolo}>
+              <Text style={styles.tastoPiccoloTesto}>📊</Text>
+            </Pressable>
+            <Pressable onPress={() => setPopupEventi(true)} style={styles.tastoPiccolo}>
+              <Text style={styles.tastoPiccoloTesto}>🕑 {eventi.length}</Text>
+            </Pressable>
+            {atletaSelId && !cambioInSospeso && (
+              <Pressable onPress={() => setPopupCambio(true)} style={styles.tastoPiccolo}>
+                <Text style={styles.tastoPiccoloTesto}>⇄</Text>
+              </Pressable>
+            )}
+            <Pressable onPress={() => setPopupAltro(true)} style={styles.tastoPiccolo}>
+              <Text style={styles.tastoPiccoloTesto}>⋯</Text>
+            </Pressable>
+          </View>
+          </>
         ) : (
           <Text style={styles.nota}>Consultazione in sola lettura.</Text>
         )}
@@ -499,6 +496,34 @@ export default function PartitaLive() {
         </View>
       </Modal>
 
+      <Modal visible={popupAltro} animationType="fade" transparent onRequestClose={() => setPopupAltro(false)}>
+        <View style={styles.sfondoPopup}>
+          <View style={styles.cartaPopup}>
+            <View style={styles.intestazionePopup}>
+              <Text style={styles.titoloPopup}>Altre azioni</Text>
+              <Pressable onPress={() => setPopupAltro(false)} hitSlop={12}><Text style={styles.chiudiPopup}>✕</Text></Pressable>
+            </View>
+            <View style={styles.rigaToggle}>
+              <Text style={styles.nota}>Modalità essenziale</Text>
+              <Switch value={modalitaEssenziale} onValueChange={setModalitaEssenziale} trackColor={{ true: brand.colors.brand }} />
+            </View>
+            <Pressable
+              style={styles.bottoneSecondario}
+              onPress={async () => {
+                setPopupAltro(false);
+                try { await nuovoSet(match.id); router.replace(`/partita/${match.id}/prepara`); }
+                catch (e) { avvisa("Errore", (e as Error).message); }
+              }}
+            >
+              <Text style={styles.bottoneSecondarioTesto}>Nuovo set</Text>
+            </Pressable>
+            <Pressable style={styles.bottoneDistruttivo} onPress={() => { setPopupAltro(false); onChiudiPartita(); }}>
+              <Text style={styles.bottoneDistruttivoTesto}>Chiudi partita</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
+
       <ModaleSituazione />
     </View>
   );
@@ -531,6 +556,9 @@ const styles = StyleSheet.create({
   bottonePuntoAvversarioTesto: { color: "#fff", fontWeight: "800" },
 
   rigaComandiSecondari: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
+  barraFissa: { flexDirection: "row", gap: 6, paddingTop: 6, borderTopWidth: 1, borderTopColor: brand.colors.border },
+  bottoneDistruttivo: { borderColor: brand.colors.error, borderWidth: 1, paddingVertical: 12, borderRadius: 8, alignItems: "center" },
+  bottoneDistruttivoTesto: { color: brand.colors.error, fontWeight: "700" },
   tastoPiccolo: { flexGrow: 1, backgroundColor: brand.colors.surfaceSecondary, paddingVertical: 10, paddingHorizontal: 8, borderRadius: 8, alignItems: "center", minHeight: 40, justifyContent: "center" },
   tastoPiccoloTesto: { color: brand.colors.onSurface, fontWeight: "600", fontSize: 12 },
   tastoPiccoloDistruttivo: { flexGrow: 1, borderColor: brand.colors.error, borderWidth: 1, paddingVertical: 10, borderRadius: 8, alignItems: "center", minHeight: 40, justifyContent: "center" },
