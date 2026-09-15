@@ -3,11 +3,10 @@ import { View, Text, FlatList, TextInput, Pressable, StyleSheet, RefreshControl 
 import { router, useFocusEffect } from "expo-router";
 import { useAuth } from "@/src/context/AuthContext";
 import { creaAtleta, elencaAtlete, elencaAtleteArchiviate, ripristinaAtleta } from "@/src/services/athletes";
-import { annullaInvito, elencaInvitiPendenti, invitaMembro, type TeamInvite } from "@/src/services/teamInvites";
 import { FabAggiungi } from "@/src/components/Fab";
 import { PopupForm } from "@/src/components/PopupForm";
-import { brand, etichetteRuolo, ruoliCampo } from "@/src/config";
-import type { Athlete, Ruolo, RuoloCampo } from "@/src/types/database";
+import { brand, ruoliCampo } from "@/src/config";
+import type { Athlete, RuoloCampo } from "@/src/types/database";
 import { avvisa } from "@/src/lib/confermaAzione";
 
 export default function Atlete() {
@@ -20,19 +19,12 @@ export default function Atlete() {
   const [nome, setNome] = useState("");
   const [cognome, setCognome] = useState("");
   const [ruoloCampo, setRuoloCampo] = useState<RuoloCampo | null>(null);
-  const [inviti, setInviti] = useState<TeamInvite[]>([]);
-  const [mostraInviti, setMostraInviti] = useState(false);
-  const [emailInvito, setEmailInvito] = useState("");
-  const [ruoloInvito, setRuoloInvito] = useState<Ruolo>("vice_allenatore");
-  const [atletaInvito, setAtletaInvito] = useState<string | null>(null);
 
   const carica = useCallback(async () => {
     if (!team) return;
     setCaricamento(true);
     try {
-      const [listaAtlete, listaInviti] = await Promise.all([elencaAtlete(team.id), puoScrivere ? elencaInvitiPendenti(team.id) : Promise.resolve([])]);
-      setAtlete(listaAtlete);
-      setInviti(listaInviti);
+      setAtlete(await elencaAtlete(team.id));
       if (mostraArchiviate) setArchiviate(await elencaAtleteArchiviate(team.id));
     } finally {
       setCaricamento(false);
@@ -52,27 +44,6 @@ export default function Atlete() {
     try { await ripristinaAtleta(id); carica(); } catch (e) { avvisa("Errore", (e as Error).message); }
   }
 
-  async function invita() {
-    if (!team || !emailInvito.trim()) return;
-    if (ruoloInvito === "atleta" && !atletaInvito) {
-      avvisa("Manca la scheda", "Per invitare un'atleta seleziona prima a quale scheda anagrafica collegare l'invito.");
-      return;
-    }
-    try {
-      await invitaMembro(team.id, emailInvito.trim(), ruoloInvito, ruoloInvito === "atleta" ? atletaInvito : null);
-      setEmailInvito(""); setAtletaInvito(null);
-      carica();
-      avvisa("Invito creato", "Quando questa persona farà login con Google per la prima volta, entrerà automaticamente nella squadra con il ruolo scelto.");
-    } catch (e) {
-      avvisa("Errore", (e as Error).message);
-    }
-  }
-
-  async function annulla(inviteId: string) {
-    await annullaInvito(inviteId);
-    carica();
-  }
-
   return (
     <View style={styles.container}>
       <FlatList
@@ -82,47 +53,6 @@ export default function Atlete() {
         refreshControl={<RefreshControl refreshing={caricamento} onRefresh={carica} tintColor={brand.colors.brand} />}
         ListHeaderComponent={
           <>
-            {puoScrivere && (
-              <Pressable style={styles.rigaEspandi} onPress={() => setMostraInviti(!mostraInviti)}>
-                <Text style={styles.rigaEspandiTesto}>{mostraInviti ? "▾" : "▸"} Invita un collaboratore ({inviti.length} in attesa)</Text>
-              </Pressable>
-            )}
-
-            {mostraInviti && (
-              <View style={styles.form}>
-                <TextInput style={styles.input} placeholder="Email Google del collaboratore" placeholderTextColor={brand.colors.muted} autoCapitalize="none" keyboardType="email-address" value={emailInvito} onChangeText={setEmailInvito} />
-                <Text style={styles.etichettaCampo}>Ruolo</Text>
-                <View style={styles.selettoreRiga}>
-                  {(["vice_allenatore", "allenatore", "presidente", "atleta"] as Ruolo[]).map((r) => (
-                    <Pressable key={r} onPress={() => { setRuoloInvito(r); setAtletaInvito(null); }} style={[styles.chip, ruoloInvito === r && styles.chipAttivo]}>
-                      <Text style={[styles.chipTesto, ruoloInvito === r && styles.chipTestoAttivo]}>{etichetteRuolo[r]}</Text>
-                    </Pressable>
-                  ))}
-                </View>
-                {ruoloInvito === "atleta" && (
-                  <>
-                    <Text style={styles.etichettaCampo}>Collega alla scheda di:</Text>
-                    <View style={styles.selettoreRiga}>
-                      {atlete.map((a) => (
-                        <Pressable key={a.id} onPress={() => setAtletaInvito(a.id)} style={[styles.chip, atletaInvito === a.id && styles.chipAttivo]}>
-                          <Text style={[styles.chipTesto, atletaInvito === a.id && styles.chipTestoAttivo]}>{a.nome} {a.cognome}</Text>
-                        </Pressable>
-                      ))}
-                    </View>
-                  </>
-                )}
-                <Pressable style={styles.bottone} onPress={invita}>
-                  <Text style={styles.bottoneTesto}>Invia invito</Text>
-                </Pressable>
-                {inviti.map((i) => (
-                  <View key={i.id} style={styles.rigaInvito}>
-                    <Text style={styles.rigaInvitoTesto}>{i.email} — {etichetteRuolo[i.ruolo]}</Text>
-                    <Pressable onPress={() => annulla(i.id)}><Text style={styles.rigaInvitoAnnulla}>Annulla</Text></Pressable>
-                  </View>
-                ))}
-              </View>
-            )}
-
             {puoScrivere && (
               <Pressable style={styles.rigaEspandi} onPress={() => setMostraArchiviate(!mostraArchiviate)}>
                 <Text style={styles.rigaEspandiTesto}>{mostraArchiviate ? "▾" : "▸"} Atlete archiviate ({archiviate.length})</Text>

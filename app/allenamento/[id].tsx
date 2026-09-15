@@ -4,7 +4,7 @@ import { useLocalSearchParams, useFocusEffect, router } from "expo-router";
 import { useAuth } from "@/src/context/AuthContext";
 import { elencaEsercizi } from "@/src/services/exercises";
 import { elencaPianoAllenamento, generaPianoAllenamentoAI, impostaPianoAllenamento, leggiBloccoPerData, type VoceRiepilogoPiano } from "@/src/services/trainingPlan";
-import { confermaAzione, avvisa } from "@/src/lib/confermaAzione";
+import { avvisa } from "@/src/lib/confermaAzione";
 import { brand } from "@/src/config";
 import { supabaseClient } from "@/src/lib/supabase";
 import type { Exercise, Training } from "@/src/types/database";
@@ -24,6 +24,7 @@ export default function PianoAllenamento() {
   const [erroreGenerazione, setErroreGenerazione] = useState<string | null>(null);
   const [bloccoPeriodo, setBloccoPeriodo] = useState<{ nome: string; tipo: string } | null>(null);
   const [istruzioniExtra, setIstruzioniExtra] = useState("");
+  const [sceltaGenerazione, setSceltaGenerazione] = useState(false);
   const [salvando, setSalvando] = useState(false);
 
   const carica = useCallback(async () => {
@@ -77,15 +78,20 @@ export default function PianoAllenamento() {
     setEsercizi((prev) => prev.map((e, i) => (i === indice ? { ...e, durataMinuti: valore } : e)));
   }
 
-  async function onGeneraAI() {
+  function onGeneraAI() {
     if (!team) return;
-    if (esercizi.length > 0) {
-      confermaAzione("Sostituire il piano attuale?", "La proposta AI sostituirà gli esercizi già inseriti. Potrai comunque modificarla prima di salvare.", "Genera comunque", eseguiGenerazione);
-    } else {
-      eseguiGenerazione();
-    }
+    // Con un piano già avviato la scelta non è ovvia: a volte si vuole
+    // ripartire da zero, altre aggiungere una parte (tipicamente il
+    // tecnico specifico dopo aver messo a mano il riscaldamento).
+    // Chiederlo evita di cancellare lavoro già fatto.
+    if (esercizi.length > 0) setSceltaGenerazione(true);
+    else eseguiGenerazione("sostituisci");
+  }
 
-    async function eseguiGenerazione() {
+  async function eseguiGenerazione(modo: "sostituisci" | "aggiungi") {
+    if (!team) return;
+    setSceltaGenerazione(false);
+    {
       setGenerando(true);
       setErroreGenerazione(null);
       setPercentualeGenerazione(5);
@@ -107,8 +113,20 @@ export default function PianoAllenamento() {
           return;
         }
         setPercentualeGenerazione(100);
-        setEsercizi(r.esercizi);
-        if (r.argomentoSuggerito) setArgomento(r.argomentoSuggerito);
+        // In "aggiungi" si scartano le proposte già presenti nel piano:
+        // senza questo controllo l'AI ripropone volentieri esercizi
+        // che ha appena visto nel catalogo.
+        if (modo === "aggiungi") {
+          const giaPresenti = new Set(esercizi.map((e) => e.exerciseId));
+          const nuovi = r.esercizi.filter((e) => !giaPresenti.has(e.exerciseId));
+          setEsercizi((prec) => [...prec, ...nuovi]);
+          if (nuovi.length < r.esercizi.length) {
+            avvisa("Alcune proposte scartate", `${r.esercizi.length - nuovi.length} esercizi proposti erano già nel piano e non sono stati aggiunti.`);
+          }
+        } else {
+          setEsercizi(r.esercizi);
+          if (r.argomentoSuggerito) setArgomento(r.argomentoSuggerito);
+        }
       } catch (e) {
         const messaggio = (e as Error).message;
         console.error("Errore generazione piano AI:", e);
@@ -212,6 +230,29 @@ export default function PianoAllenamento() {
         </Pressable>
       </ScrollView>
 
+      <Modal visible={sceltaGenerazione} animationType="fade" transparent onRequestClose={() => setSceltaGenerazione(false)}>
+        <View style={styles.sfondoPopup}>
+          <View style={[styles.cartaPopup, { maxHeight: undefined }]}>
+            <Text style={styles.titoloPopup}>Il piano contiene già {esercizi.length} esercizi</Text>
+            <Text style={styles.nota}>Cosa vuoi fare con la proposta dell'assistente?</Text>
+
+            <Pressable style={styles.bottoneSceltaPrimaria} onPress={() => eseguiGenerazione("aggiungi")}>
+              <Text style={styles.bottoneSceltaPrimariaTesto}>Aggiungi al piano</Text>
+              <Text style={styles.bottoneSceltaNota}>Gli esercizi già inseriti restano dove sono</Text>
+            </Pressable>
+
+            <Pressable style={styles.bottoneSceltaSecondaria} onPress={() => eseguiGenerazione("sostituisci")}>
+              <Text style={styles.bottoneSceltaSecondariaTesto}>Sostituisci tutto</Text>
+              <Text style={styles.bottoneSceltaNota}>Il piano attuale viene rifatto da zero</Text>
+            </Pressable>
+
+            <Pressable onPress={() => setSceltaGenerazione(false)}>
+              <Text style={styles.annullaScelta}>Annulla</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
+
       <Modal visible={mostraCatalogo} animationType="slide" transparent onRequestClose={() => setMostraCatalogo(false)}>
         <View style={styles.sfondoPopup}>
           <View style={styles.cartaPopup}>
@@ -273,6 +314,12 @@ const styles = StyleSheet.create({
   rigaCatalogo: { paddingVertical: 8, paddingLeft: 20, borderBottomWidth: 1, borderBottomColor: brand.colors.border },
   rigaCatalogoTesto: { color: brand.colors.onSurface, fontSize: 14, fontWeight: "600" },
   rigaCatalogoDescrizione: { color: brand.colors.muted, fontSize: 12, marginTop: 2, lineHeight: 17 },
+  bottoneSceltaPrimaria: { backgroundColor: brand.colors.brand, borderRadius: 10, padding: 14, alignItems: "center", gap: 2 },
+  bottoneSceltaPrimariaTesto: { color: "#000", fontWeight: "800", fontSize: 15 },
+  bottoneSceltaSecondaria: { borderWidth: 1, borderColor: brand.colors.brand, borderRadius: 10, padding: 14, alignItems: "center", gap: 2 },
+  bottoneSceltaSecondariaTesto: { color: brand.colors.brand, fontWeight: "800", fontSize: 15 },
+  bottoneSceltaNota: { color: brand.colors.muted, fontSize: 11 },
+  annullaScelta: { color: brand.colors.muted, fontSize: 13, textAlign: "center", paddingVertical: 8 },
   etichettaCategoriaPiano: { color: brand.colors.brandSecondary, fontSize: 12, fontWeight: "700", marginTop: 8, textTransform: "uppercase" },
   rigaEsercizio: { flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 6, borderTopWidth: 1, borderTopColor: brand.colors.border },
   rigaEsercizioNome: { color: brand.colors.onSurface, flex: 1, fontSize: 14 },

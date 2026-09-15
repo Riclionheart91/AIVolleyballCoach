@@ -35,6 +35,8 @@ interface AuthState {
   atletaId: string | null;
   puoScrivere: boolean;
   soloLettura: boolean;
+  /** Può registrare azioni durante un set (staff tecnico o profilo scout), ma non necessariamente gestire la partita. */
+  puoScoutare: boolean;
   isSuperuser: boolean;
   squadreDisponibili: SquadraDisponibile[];
   cambiaSquadra: (teamId: string) => Promise<void>;
@@ -176,11 +178,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   const puoScrivere = ruolo === "allenatore" || ruolo === "vice_allenatore";
+  const puoScoutare = puoScrivere || ruolo === "scout";
   const soloLettura = ruolo === "presidente";
 
   const value = useMemo<AuthState>(
     () => ({
-      session, caricamento, team, ruolo, atletaId, puoScrivere, soloLettura, isSuperuser,
+      session, caricamento, team, ruolo, atletaId, puoScrivere, soloLettura, puoScoutare, isSuperuser,
       squadreDisponibili, cambiaSquadra, caricamentoContesto, erroreTeam, stagioneAttiva,
       accediConGoogle, esci, creaPrimaSquadra, ricaricaContesto,
     }),

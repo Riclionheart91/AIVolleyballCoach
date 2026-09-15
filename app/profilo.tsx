@@ -90,6 +90,9 @@ export default function Profilo() {
           <Pressable style={styles.bottoneSecondario} onPress={() => router.push("/campionati")}>
             <Text style={styles.bottoneSecondarioTesto}>🏆 Campionati</Text>
           </Pressable>
+          <Pressable style={styles.bottoneSecondario} onPress={() => router.push("/gestione-squadra")}>
+            <Text style={styles.bottoneSecondarioTesto}>👥 Gestione squadra e accessi</Text>
+          </Pressable>
         </>
       )}
 

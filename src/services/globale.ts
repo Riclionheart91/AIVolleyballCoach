@@ -45,8 +45,8 @@ export interface RendimentoRotazione {
 }
 
 /** Fondamentali in evidenza (modalità essenziale) e set completo. */
-export const FONDAMENTALI_ESSENZIALI = ["Battuta", "Ricezione", "Attacco"] as const;
-export const FONDAMENTALI_COMPLETI = ["Battuta", "Ricezione", "Attacco", "Muro", "Difesa"] as const;
+export const FONDAMENTALI_ESSENZIALI = ["Servizio", "Ricezione", "Attacco"] as const;
+export const FONDAMENTALI_COMPLETI = ["Servizio", "Ricezione", "Attacco", "Muro", "Difesa"] as const;
 
 export async function creaGlobale(teamId: string, trainingId: string | null, nomeA = "Squadra A", nomeB = "Squadra B"): Promise<Globale> {
   const { data, error } = await supabaseClient

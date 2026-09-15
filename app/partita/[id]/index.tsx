@@ -43,7 +43,7 @@ type Passo = "giocatrice" | "fondamentale" | "esito";
  */
 export default function PartitaLive() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { team, puoScrivere } = useAuth();
+  const { team, puoScrivere, puoScoutare } = useAuth();
   const [match, setMatch] = useState<Match | null>(null);
   const [setCorrente, setSetCorrente] = useState<MatchSet | null>(null);
   const [eventi, setEventi] = useState<MatchEvent[]>([]);
@@ -80,7 +80,7 @@ export default function PartitaLive() {
   // intero senza tagliare i comandi.
   const latoCampo = orizzontale
     ? Math.min(altezzaSchermo - 32, larghezzaSchermo * 0.52)
-    : Math.min(larghezzaSchermo - 16, altezzaSchermo * 0.42);
+    : Math.min(larghezzaSchermo - 16, altezzaSchermo * 0.40);
   // I comandi si ridimensionano con lo spazio disponibile invece di
   // avere misure fisse che su schermi piccoli escono e su grandi
   // sprecano spazio.
@@ -166,7 +166,7 @@ export default function PartitaLive() {
     setSetCorrente((prev) => {
       if (!prev) return prev;
       const avv = skill === "Punto_avversario" || esito === "errore";
-      const nostro = esito === "punto";
+      const nostro = skill === "Punto_nostro" || esito === "punto";
       return {
         ...prev,
         punti_avversario: avv ? Math.max(0, prev.punti_avversario + segno) : prev.punti_avversario,
@@ -365,7 +365,7 @@ export default function PartitaLive() {
           </View>
         )}
 
-        {puoScrivere ? (
+        {puoScoutare ? (
           <>
           <ScrollView style={{ flex: 1 }} contentContainerStyle={{ gap: 8, paddingBottom: 8 }}>
             <Text style={styles.indicazionePasso}>
@@ -374,14 +374,20 @@ export default function PartitaLive() {
               {passo === "esito" && `3. ${skillSel} — com'è andata?`}
             </Text>
 
-            {passo === "giocatrice" && (
-              <>
-                <Pressable style={[styles.bottonePuntoAvversario, { paddingVertical: d(16) }]} onPress={() => registra("Punto_avversario", null, null)}>
-                  <Text style={styles.bottonePuntoAvversarioTesto}>Punto avversario</Text>
-                </Pressable>
-                <Text style={styles.nota}>Usa questo quando il punto arriva senza un'azione da attribuire (es. errore loro in battuta).</Text>
-              </>
-            )}
+            {/* Sempre disponibili, a qualunque passo: un punto può
+                arrivare senza che nessuna nostra giocatrice abbia
+                fatto un'azione attribuibile, e in quel momento non si
+                deve essere costretti a tornare indietro. */}
+            <View style={styles.rigaPuntiDiretti}>
+              <Pressable style={[styles.bottonePuntoNostro, { paddingVertical: d(14) }]} onPress={() => registra("Punto_nostro", null, null)}>
+                <Text style={styles.bottonePuntoNostroTesto}>+1 NOI</Text>
+                <Text style={styles.sottoPulsante}>errore loro</Text>
+              </Pressable>
+              <Pressable style={[styles.bottonePuntoAvversario, { paddingVertical: d(14) }]} onPress={() => registra("Punto_avversario", null, null)}>
+                <Text style={styles.bottonePuntoAvversarioTesto}>+1 LORO</Text>
+                <Text style={styles.sottoPulsante}>errore nostro</Text>
+              </Pressable>
+            </View>
 
             {passo === "fondamentale" && (
               <View style={styles.griglia}>
@@ -419,9 +425,6 @@ export default function PartitaLive() {
               raggiungibili, qualunque passo sia attivo e qualunque sia
               l'orientamento. */}
           <View style={styles.barraFissa}>
-            <Pressable onPress={onAnnulla} style={styles.tastoPiccolo} disabled={eventi.length === 0}>
-              <Text style={styles.tastoPiccoloTesto}>↺</Text>
-            </Pressable>
             <Pressable onPress={apriSituazione} style={styles.tastoPiccolo}>
               <Text style={styles.tastoPiccoloTesto}>📊</Text>
             </Pressable>
@@ -507,19 +510,25 @@ export default function PartitaLive() {
               <Text style={styles.nota}>Modalità essenziale</Text>
               <Switch value={modalitaEssenziale} onValueChange={setModalitaEssenziale} trackColor={{ true: brand.colors.brand }} />
             </View>
-            <Pressable
-              style={styles.bottoneSecondario}
-              onPress={async () => {
-                setPopupAltro(false);
-                try { await nuovoSet(match.id); router.replace(`/partita/${match.id}/prepara`); }
-                catch (e) { avvisa("Errore", (e as Error).message); }
-              }}
-            >
-              <Text style={styles.bottoneSecondarioTesto}>Nuovo set</Text>
-            </Pressable>
-            <Pressable style={styles.bottoneDistruttivo} onPress={() => { setPopupAltro(false); onChiudiPartita(); }}>
-              <Text style={styles.bottoneDistruttivoTesto}>Chiudi partita</Text>
-            </Pressable>
+            {puoScrivere ? (
+              <>
+                <Pressable
+                  style={styles.bottoneSecondario}
+                  onPress={async () => {
+                    setPopupAltro(false);
+                    try { await nuovoSet(match.id); router.replace(`/partita/${match.id}/prepara`); }
+                    catch (e) { avvisa("Errore", (e as Error).message); }
+                  }}
+                >
+                  <Text style={styles.bottoneSecondarioTesto}>Nuovo set</Text>
+                </Pressable>
+                <Pressable style={styles.bottoneDistruttivo} onPress={() => { setPopupAltro(false); onChiudiPartita(); }}>
+                  <Text style={styles.bottoneDistruttivoTesto}>Chiudi partita</Text>
+                </Pressable>
+              </>
+            ) : (
+              <Text style={styles.nota}>Con il profilo Scout puoi registrare le azioni, annullarle e fare i cambi. Avvio di un nuovo set e chiusura della partita spettano all'allenatore.</Text>
+            )}
           </View>
         </View>
       </Modal>
@@ -552,8 +561,12 @@ const styles = StyleSheet.create({
   esitoErrore: { backgroundColor: brand.colors.error },
   tastoEsitoTesto: { color: "#fff", fontWeight: "800", fontSize: 16 },
   tastoAnnullaPasso: { alignItems: "center", paddingVertical: 6 },
-  bottonePuntoAvversario: { backgroundColor: "#4A1620", paddingVertical: 16, borderRadius: 10, alignItems: "center" },
-  bottonePuntoAvversarioTesto: { color: "#fff", fontWeight: "800" },
+  rigaPuntiDiretti: { flexDirection: "row", gap: 6 },
+  bottonePuntoNostro: { flex: 1, backgroundColor: brand.colors.success, borderRadius: 10, alignItems: "center" },
+  bottonePuntoNostroTesto: { color: "#000", fontWeight: "800", fontSize: 15 },
+  bottonePuntoAvversario: { flex: 1, backgroundColor: "#4A1620", borderRadius: 10, alignItems: "center" },
+  bottonePuntoAvversarioTesto: { color: "#fff", fontWeight: "800", fontSize: 15 },
+  sottoPulsante: { color: "rgba(255,255,255,0.7)", fontSize: 10 },
 
   rigaComandiSecondari: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
   barraFissa: { flexDirection: "row", gap: 6, paddingTop: 6, borderTopWidth: 1, borderTopColor: brand.colors.border },

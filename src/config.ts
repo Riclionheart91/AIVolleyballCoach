@@ -24,7 +24,8 @@ export const supabase = {
   sporteasySyncFunction: "sync-sporteasy",
 };
 
-export const fondamentali = ["Battuta", "Ricezione", "Attacco", "Muro", "Difesa"] as const;
+// Vocabolario unico in tutta l'app: "Servizio", non "Battuta".
+export const fondamentali = ["Servizio", "Ricezione", "Attacco", "Muro", "Difesa"] as const;
 
 export const ruoliCampo = ["Palleggiatore", "Schiacciatore", "Opposto", "Centrale", "Libero"] as const;
 
@@ -48,6 +49,7 @@ export const etichetteRuolo: Record<string, string> = {
   vice_allenatore: "Vice-allenatore",
   presidente: "Presidente",
   atleta: "Atleta",
+  scout: "Scout",
 };
 
 export const uiStrings = {
@@ -76,8 +78,8 @@ export const uiStrings = {
  * Restano comunque componibili: se ne possono selezionare più d'uno.
  */
 export const obiettiviTecnici = [
-  "Battuta: precisione",
-  "Battuta: potenza e rischio",
+  "Servizio: precisione",
+  "Servizio: potenza e rischio",
   "Ricezione: postura e spostamenti",
   "Ricezione: lettura della traiettoria",
   "Palleggio: precisione alzata",

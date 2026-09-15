@@ -1,5 +1,5 @@
-export type Fondamentale = "Battuta" | "Ricezione" | "Attacco" | "Muro" | "Difesa";
-export type Ruolo = "allenatore" | "vice_allenatore" | "presidente" | "atleta";
+export type Fondamentale = "Servizio" | "Ricezione" | "Attacco" | "Muro" | "Difesa";
+export type Ruolo = "allenatore" | "vice_allenatore" | "presidente" | "atleta" | "scout";
 export type RuoloCampo = "Palleggiatore" | "Schiacciatore" | "Opposto" | "Centrale" | "Libero";
 export type OrigineValutazione = "manuale" | "ai_approvata" | "ai_modificata";
 export type StatoProposta = "proposta" | "approvata" | "modificata" | "rigettata";
