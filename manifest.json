@@ -1,0 +1,17 @@
+{
+  "name": "AI Volleyball Coach",
+  "short_name": "AVC",
+  "description": "Gestione squadra di pallavolo: allenamenti, scouting, valutazioni.",
+  "start_url": "/AIVolleyballCoach/",
+  "scope": "/AIVolleyballCoach/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0B1220",
+  "theme_color": "#0B1220",
+  "lang": "it",
+  "icons": [
+    { "src": "/AIVolleyballCoach/icon.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/AIVolleyballCoach/icon.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/AIVolleyballCoach/icon.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
