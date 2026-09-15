@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from "react";
-import { View, Text, Pressable, StyleSheet, ScrollView, Switch, Modal, ActivityIndicator, FlatList } from "react-native";
+import { View, Text, Pressable, StyleSheet, ScrollView, Switch, Modal, ActivityIndicator, FlatList, useWindowDimensions } from "react-native";
 import { useLocalSearchParams, useFocusEffect, router } from "expo-router";
 import { useAuth } from "@/src/context/AuthContext";
 import { elencaAtlete } from "@/src/services/athletes";
@@ -65,6 +65,24 @@ export default function PartitaLive() {
   const [rotazioni, setRotazioni] = useState<RendimentoRotazionePartita[]>([]);
   const [parereAI, setParereAI] = useState<string | null>(null);
   const [chiedendoAI, setChiedendoAI] = useState(false);
+  const [popupEventi, setPopupEventi] = useState(false);
+
+  // Adatta la disposizione alla forma dello schermo: in orizzontale il
+  // campo sta a sinistra alto quanto lo schermo, in verticale sta in
+  // alto largo quanto lo schermo e i comandi vanno sotto. In entrambi i
+  // casi il campo resta quadrato e occupa il lato corto per intero,
+  // così è sempre il più grande possibile senza uscire dallo schermo.
+  const { width: larghezzaSchermo, height: altezzaSchermo } = useWindowDimensions();
+  const orizzontale = larghezzaSchermo >= altezzaSchermo;
+  const latoCampo = orizzontale
+    ? Math.min(altezzaSchermo - 24, larghezzaSchermo * 0.55)
+    : Math.min(larghezzaSchermo - 16, altezzaSchermo * 0.45);
+  // I comandi si ridimensionano con lo spazio disponibile invece di
+  // avere misure fisse che su schermi piccoli escono e su grandi
+  // sprecano spazio.
+  const spazioComandi = orizzontale ? larghezzaSchermo - latoCampo - 24 : larghezzaSchermo - 16;
+  const scala = Math.max(0.85, Math.min(1.35, spazioComandi / 340));
+  const d = (valore: number) => Math.round(valore * scala);
 
   const carica = useCallback(async () => {
     if (!id) return;
@@ -298,10 +316,9 @@ export default function PartitaLive() {
   }
 
   return (
-    <View style={styles.contenitore}>
-      {/* Disposizione in riga a prescindere dall'orientamento del telefono. */}
-      <View style={styles.colonnaCampo}>
-        <View style={styles.campoQuadrato}>
+    <View style={[styles.contenitore, { flexDirection: orizzontale ? "row" : "column" }]}>
+      <View style={[styles.colonnaCampo, { width: orizzontale ? latoCampo : "100%" }]}>
+        <View style={{ width: orizzontale ? latoCampo : "100%", aspectRatio: 1 }}>
           <Campo9x9
             occupanti={occupanti}
             onTapPosizione={(pos) => {
@@ -323,13 +340,13 @@ export default function PartitaLive() {
         </View>
       </View>
 
-      <View style={styles.colonnaComandi}>
+      <View style={[styles.colonnaComandi, orizzontale ? { flex: 1 } : { flex: 1, width: "100%" }]}>
         <View style={styles.tabellone}>
           <View style={{ flex: 1 }}>
             <Text style={styles.avversario} numberOfLines={1}>vs {match.avversario}</Text>
             <Text style={styles.setNumero}>Set {setCorrente.numero_set}</Text>
           </View>
-          <Text style={styles.punteggio}>{setCorrente.punti_noi}-{setCorrente.punti_avversario}</Text>
+          <Text style={[styles.punteggio, { fontSize: d(26) }]}>{setCorrente.punti_noi}-{setCorrente.punti_avversario}</Text>
         </View>
 
         {erroreVisibile && (
@@ -360,7 +377,7 @@ export default function PartitaLive() {
 
             {passo === "giocatrice" && (
               <>
-                <Pressable style={styles.bottonePuntoAvversario} onPress={() => registra("Punto_avversario", null, null)}>
+                <Pressable style={[styles.bottonePuntoAvversario, { paddingVertical: d(16) }]} onPress={() => registra("Punto_avversario", null, null)}>
                   <Text style={styles.bottonePuntoAvversarioTesto}>Punto avversario</Text>
                 </Pressable>
                 <Text style={styles.nota}>Usa questo quando il punto arriva senza un'azione da attribuire (es. errore loro in battuta).</Text>
@@ -370,8 +387,8 @@ export default function PartitaLive() {
             {passo === "fondamentale" && (
               <View style={styles.griglia}>
                 {skills.map((s) => (
-                  <Pressable key={s.skill} onPress={() => setSkillSel(s.skill)} style={styles.tastoGriglia}>
-                    <Text style={styles.tastoGrigliaTesto}>{s.etichetta}</Text>
+                  <Pressable key={s.skill} onPress={() => setSkillSel(s.skill)} style={[styles.tastoGriglia, { paddingVertical: d(16) }]}>
+                    <Text style={[styles.tastoGrigliaTesto, { fontSize: d(13) }]}>{s.etichetta}</Text>
                   </Pressable>
                 ))}
                 <Pressable onPress={() => { setAtletaSelId(null); setSkillSel(null); }} style={styles.tastoAnnullaPasso}>
@@ -382,14 +399,14 @@ export default function PartitaLive() {
 
             {passo === "esito" && skillSel && (
               <>
-                <Pressable style={[styles.tastoEsito, styles.esitoPunto]} onPress={() => registra(skillSel, "punto", atletaSelId)}>
-                  <Text style={styles.tastoEsitoTesto}>Punto</Text>
+                <Pressable style={[styles.tastoEsito, styles.esitoPunto, { paddingVertical: d(18) }]} onPress={() => registra(skillSel, "punto", atletaSelId)}>
+                  <Text style={[styles.tastoEsitoTesto, { fontSize: d(16) }]}>Punto</Text>
                 </Pressable>
-                <Pressable style={[styles.tastoEsito, styles.esitoNeutro]} onPress={() => registra(skillSel, "neutro", atletaSelId)}>
-                  <Text style={styles.tastoEsitoTesto}>Neutro</Text>
+                <Pressable style={[styles.tastoEsito, styles.esitoNeutro, { paddingVertical: d(18) }]} onPress={() => registra(skillSel, "neutro", atletaSelId)}>
+                  <Text style={[styles.tastoEsitoTesto, { fontSize: d(16) }]}>Neutro</Text>
                 </Pressable>
-                <Pressable style={[styles.tastoEsito, styles.esitoErrore]} onPress={() => registra(skillSel, "errore", atletaSelId)}>
-                  <Text style={styles.tastoEsitoTesto}>Errore</Text>
+                <Pressable style={[styles.tastoEsito, styles.esitoErrore, { paddingVertical: d(18) }]} onPress={() => registra(skillSel, "errore", atletaSelId)}>
+                  <Text style={[styles.tastoEsitoTesto, { fontSize: d(16) }]}>Errore</Text>
                 </Pressable>
                 <Pressable onPress={() => setSkillSel(null)} style={styles.tastoAnnullaPasso}>
                   <Text style={styles.nota}>← cambia fondamentale</Text>
@@ -420,13 +437,9 @@ export default function PartitaLive() {
               </Pressable>
             </View>
 
-            <Text style={styles.etichettaLog}>Ultimi eventi</Text>
-            {eventi.slice(0, 6).map((e) => (
-              <Text key={e.id} style={styles.rigaLog} numberOfLines={1}>
-                {e.skill === "Punto_avversario" ? "Punto avversario" : `${e.skill} ${e.esito}`}
-                {e.athlete_id ? ` · ${etichettaAtleta(e.athlete_id)}` : ""}
-              </Text>
-            ))}
+            <Pressable onPress={() => setPopupEventi(true)} style={styles.tastoPiccolo}>
+              <Text style={styles.tastoPiccoloTesto}>🕑 Ultimi eventi ({eventi.length})</Text>
+            </Pressable>
           </ScrollView>
         ) : (
           <Text style={styles.nota}>Consultazione in sola lettura.</Text>
@@ -461,6 +474,31 @@ export default function PartitaLive() {
         </View>
       </Modal>
 
+      <Modal visible={popupEventi} animationType="slide" transparent onRequestClose={() => setPopupEventi(false)}>
+        <View style={styles.sfondoPopup}>
+          <View style={styles.cartaPopup}>
+            <View style={styles.intestazionePopup}>
+              <Text style={styles.titoloPopup}>Ultimi eventi</Text>
+              <Pressable onPress={() => setPopupEventi(false)} hitSlop={12}><Text style={styles.chiudiPopup}>✕</Text></Pressable>
+            </View>
+            <FlatList
+              data={eventi}
+              keyExtractor={(e) => e.id}
+              ListEmptyComponent={<Text style={styles.nota}>Nessun evento registrato.</Text>}
+              renderItem={({ item }) => (
+                <Text style={styles.rigaLog}>
+                  {new Date(item.creato_il).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })} · {item.skill === "Punto_avversario" ? "Punto avversario" : `${item.skill} ${item.esito}`}
+                  {item.athlete_id ? ` · ${etichettaAtleta(item.athlete_id)}` : ""}
+                </Text>
+              )}
+            />
+            <Pressable style={styles.bottoneSecondario} onPress={() => { setPopupEventi(false); onAnnulla(); }} disabled={eventi.length === 0}>
+              <Text style={styles.bottoneSecondarioTesto}>↺ Annulla l'ultimo</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
+
       <ModaleSituazione />
     </View>
   );
@@ -469,11 +507,10 @@ export default function PartitaLive() {
 const styles = StyleSheet.create({
   // Riga anziché colonna: garantisce la disposizione "orizzontale"
   // anche quando il telefono è bloccato in verticale.
-  contenitore: { flex: 1, flexDirection: "row", backgroundColor: brand.colors.surface, padding: 8, gap: 8 },
-  colonnaCampo: { flex: 1.1, gap: 6 },
-  campoQuadrato: { aspectRatio: 1, justifyContent: "center" },
+  contenitore: { flex: 1, backgroundColor: brand.colors.surface, padding: 8, gap: 8 },
+  colonnaCampo: { gap: 6 },
   rigaSottoCampo: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  colonnaComandi: { flex: 1, gap: 8 },
+  colonnaComandi: { gap: 8 },
 
   tabellone: { flexDirection: "row", alignItems: "center", backgroundColor: brand.colors.surfaceSecondary, borderRadius: 10, padding: 10, gap: 8 },
   avversario: { color: brand.colors.onSurface, fontWeight: "700", fontSize: 13 },

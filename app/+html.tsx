@@ -32,6 +32,15 @@ export default function Root({ children }: { children: React.ReactNode }) {
         <meta name="mobile-web-app-capable" content="yes" />
         <meta name="theme-color" content="#0B1220" />
 
+        {/* Manifest esplicito: Expo Router con export statico NON lo
+            genera più da solo (il supporto PWA integrato è stato
+            rimosso dalle versioni recenti). Senza manifest, Android non
+            propone l'installazione e iOS 16.4+ non riconosce
+            "display: standalone", restando appeso ai soli meta tag
+            Apple. Il file sta in public/ e viene copiato in dist. */}
+        <link rel="manifest" href="/AIVolleyballCoach/manifest.json" />
+        <link rel="apple-touch-icon" href="/AIVolleyballCoach/icon.png" />
+
         {/* Reset di ScrollView di Expo: impedisce che il contenuto
             "spinga" la larghezza della pagina oltre il viewport,
             causa tipica dello scroll orizzontale indesiderato su
