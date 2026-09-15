@@ -146,3 +146,18 @@ export async function convertiPartitaInAllenamento(matchId: string, titolo?: str
   if (error) throw error;
   return data as string;
 }
+
+export interface RendimentoRotazionePartita {
+  rotazione_di: string;
+  punti_fatti: number;
+  errori_commessi: number;
+  saldo: number;
+  azioni_totali: number;
+}
+
+/** Rendimento per rotazione: quali rotazioni producono e quali perdono. Consultabile anche a partita conclusa. */
+export async function rendimentoRotazioniPartita(matchId: string): Promise<RendimentoRotazionePartita[]> {
+  const { data, error } = await supabaseClient.rpc("rendimento_rotazioni_partita", { p_match_id: matchId });
+  if (error) throw error;
+  return data ?? [];
+}

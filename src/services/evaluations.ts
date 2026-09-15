@@ -178,3 +178,20 @@ export async function impostaCadenzaValutazione(teamId: string, giorni: number):
   const { error } = await supabaseClient.rpc("imposta_cadenza_valutazione", { p_team_id: teamId, p_giorni: giorni });
   if (error) throw error;
 }
+
+/** Parere discorsivo dell'AI sull'andamento della partita, su richiesta esplicita (non automatico). */
+export async function chiediParerePartitaAI(teamId: string, riassunto: string, domanda?: string): Promise<{ errore: boolean; messaggio?: string; testo?: string }> {
+  const prompt =
+    `Sei un allenatore di pallavolo esperto, a bordo campo durante una partita. Ecco la situazione:\n\n${riassunto}\n\n` +
+    (domanda?.trim() ? `Domanda specifica dell'allenatore: ${domanda.trim()}\n\n` : "") +
+    `Dai 2-3 indicazioni pratiche e immediate su cosa bilanciare o cambiare, in italiano, molto concise. ` +
+    `Niente premesse, niente elenco di ciò che già so: vai diretto ai consigli.`;
+
+  const { data: sessione } = await supabaseClient.auth.getSession();
+  if (!sessione.session) return { errore: true, messaggio: "Sessione scaduta." };
+
+  const { data, error } = await supabaseClient.functions.invoke(cfg.aiRouterFunction, { body: { team_id: teamId, prompt } });
+  if (error) return { errore: true, messaggio: error.message };
+  if (data.errore) return { errore: true, messaggio: [data.messaggio, data.dettagli].filter(Boolean).join("\n\n") };
+  return { errore: false, testo: data.testo };
+}
