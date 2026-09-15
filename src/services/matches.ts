@@ -161,3 +161,27 @@ export async function rendimentoRotazioniPartita(matchId: string): Promise<Rendi
   if (error) throw error;
   return data ?? [];
 }
+
+export interface RendimentoTurnoServizio {
+  al_servizio: string;
+  turni_giocati: number;
+  punti_nel_turno: number;
+  punti_subiti_nel_turno: number;
+  media_punti_per_turno: number | null;
+}
+
+/** Quanto rende la squadra nel turno di servizio di ciascuna giocatrice: l'unità di misura naturale della pallavolo. */
+export async function rendimentoTurniServizio(matchId: string): Promise<RendimentoTurnoServizio[]> {
+  const { data, error } = await supabaseClient.rpc("rendimento_turni_servizio", { p_match_id: matchId });
+  if (error) throw error;
+  return data ?? [];
+}
+
+export interface AvvisoFormazione { avviso: string; gravita: string }
+
+/** Controlli sulla formazione dichiarata (per ora: Libero fuori posto). Avvisa senza bloccare. */
+export async function verificaFormazione(setId: string): Promise<AvvisoFormazione[]> {
+  const { data, error } = await supabaseClient.rpc("verifica_formazione", { p_set_id: setId });
+  if (error) return [];
+  return data ?? [];
+}

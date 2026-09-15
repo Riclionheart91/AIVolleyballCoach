@@ -9,6 +9,7 @@ import {
   chiServeDefaultNuovoSet,
   chiudiMatch,
   elencaConvocati,
+  verificaFormazione,
   elencaFormazioneConPosizioni,
   impostaConvocati,
   impostaFormazioneIniziale,
@@ -36,6 +37,7 @@ export default function PreparaPartita() {
   const [caricamento, setCaricamento] = useState(true);
   const [salvandoConvocati, setSalvandoConvocati] = useState(false);
   const [avviando, setAvviando] = useState(false);
+  const [avvisiFormazione, setAvvisiFormazione] = useState<string[]>([]);
 
   const carica = useCallback(async () => {
     if (!id || !team) return;
@@ -180,6 +182,10 @@ export default function PreparaPartita() {
     try {
       const payload = Object.fromEntries(Object.entries(posizioni).map(([p, a]) => [p, a]));
       await impostaFormazioneIniziale(setId, payload, chiServe);
+      // Controlli di regolamento sulla disposizione dichiarata: avvisano
+      // ma non bloccano, perché in allenamento una disposizione
+      // irregolare può essere voluta.
+      setAvvisiFormazione((await verificaFormazione(setId)).map((a) => a.avviso));
       return true;
     } catch (e) {
       avvisa("Errore formazione", (e as Error).message);
@@ -287,6 +293,10 @@ export default function PreparaPartita() {
               <Text style={styles.nota}>{chiServe === "noi" ? "Noi" : "Loro"} — dedotto in automatico dall'alternanza con il set precedente (non richiesto ai set 2-4 per regolamento; verrà richiesto di nuovo al 5° set).</Text>
             )}
 
+            {avvisiFormazione.map((a, i) => (
+              <Text key={i} style={styles.avvisoRegolamento}>⚠ {a}</Text>
+            ))}
+
             <Pressable style={styles.bottoneSecondario} onPress={salvaFormazione} disabled={!formazioneCompleta}>
               <Text style={styles.bottoneSecondarioTesto}>{formazioneCompleta ? "Salva formazione" : `Formazione incompleta (${Object.keys(posizioni).length}/6)`}</Text>
             </Pressable>
@@ -335,6 +345,7 @@ const styles = StyleSheet.create({
   card: { backgroundColor: brand.colors.surfaceSecondary, borderRadius: 12, padding: 14, gap: 8 },
   sottotitolo: { color: brand.colors.onSurface, fontSize: 15, fontWeight: "700" },
   nota: { color: brand.colors.muted, fontSize: 12 },
+  avvisoRegolamento: { color: brand.colors.warning, fontSize: 12, lineHeight: 17 },
   etichetta: { color: brand.colors.onSurface, fontSize: 13, fontWeight: "600" },
   rigaConvocata: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: brand.colors.border },
   rigaConvocataInfo: { flexDirection: "row", alignItems: "center", gap: 8, flex: 1 },

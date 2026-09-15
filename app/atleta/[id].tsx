@@ -4,6 +4,7 @@ import { useLocalSearchParams, router } from "expo-router";
 import { useAuth } from "@/src/context/AuthContext";
 import { aggiornaAtleta, archiviaAtleta, eliminaAtletaDefinitivamente, leggiAtleta, ripristinaAtleta } from "@/src/services/athletes";
 import { confermaAzione, avvisa } from "@/src/lib/confermaAzione";
+import { SchedaRendimento } from "@/src/components/SchedaRendimento";
 import { brand, ruoliCampo } from "@/src/config";
 import type { Athlete, RuoloCampo } from "@/src/types/database";
 
@@ -163,6 +164,9 @@ export default function SchedaAtleta() {
             <RigaSolaLettura etichetta="Telefono" valore={atleta.telefono} />
             <RigaSolaLettura etichetta="Email" valore={atleta.email_contatto} />
             <RigaSolaLettura etichetta="Note" valore={atleta.note_personali} />
+
+            <Text style={styles.titoloSezione}>Rendimento e obiettivi</Text>
+            <SchedaRendimento athleteId={atleta.id} nomeAtleta={`${atleta.nome} ${atleta.cognome}`} modificabile={puoScrivere} />
           </>
         )}
       </ScrollView>
@@ -197,6 +201,7 @@ const styles = StyleSheet.create({
   elimina: { color: brand.colors.error, fontWeight: "600" },
   badgeArchiviata: { color: brand.colors.warning, fontWeight: "700", fontSize: 12 },
   titolo: { color: brand.colors.onSurface, fontSize: 22, fontWeight: "700" },
+  titoloSezione: { color: brand.colors.brandSecondary, fontSize: 12, fontWeight: "800", textTransform: "uppercase", marginTop: 16 },
   sottotitolo: { color: brand.colors.brandSecondary, fontSize: 14, fontWeight: "600" },
   etichettaCampo: { color: brand.colors.muted, fontSize: 12, textTransform: "uppercase" },
   valoreSolaLettura: { color: brand.colors.onSurface, fontSize: 15 },

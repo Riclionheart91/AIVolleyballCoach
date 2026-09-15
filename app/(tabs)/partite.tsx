@@ -1,8 +1,8 @@
 import { useCallback, useState } from "react";
-import { View, Text, FlatList, TextInput, Pressable, StyleSheet, RefreshControl, ActivityIndicator } from "react-native";
+import { View, Text, FlatList, TextInput, Pressable, StyleSheet, RefreshControl, ActivityIndicator, Modal, ScrollView } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { useAuth } from "@/src/context/AuthContext";
-import { andamentoSquadraPartite, convertiPartitaInAllenamento, creaMatch, elencaPartite, type AndamentoSquadraPartiteVoce } from "@/src/services/matches";
+import { andamentoSquadraPartite, convertiPartitaInAllenamento, creaMatch, elencaPartite, rendimentoRotazioniPartita, type AndamentoSquadraPartiteVoce, type RendimentoRotazionePartita } from "@/src/services/matches";
 import { elencaCampionati, riassegnaCampionatoPartita } from "@/src/services/championships";
 import { PannelloSporteasy } from "@/src/components/PannelloSporteasy";
 import { brand } from "@/src/config";
@@ -22,6 +22,14 @@ export default function Partite() {
   const [pickerCampionatoMatchId, setPickerCampionatoMatchId] = useState<string | null>(null);
   // Chiuso di default: occupava spazio in cima anche quando non serviva.
   const [mostraAndamento, setMostraAndamento] = useState(false);
+  const [rotazioniPartita, setRotazioniPartita] = useState<{ nome: string; righe: RendimentoRotazionePartita[] } | null>(null);
+
+  async function apriRotazioni(m: Match) {
+    try {
+      const righe = await rendimentoRotazioniPartita(m.id);
+      setRotazioniPartita({ nome: m.avversario, righe });
+    } catch (e) { avvisa("Errore", (e as Error).message); }
+  }
 
   const carica = useCallback(async () => {
     if (!team) return;
@@ -89,6 +97,28 @@ export default function Partite() {
 
   return (
     <View style={styles.container}>
+      <Modal visible={!!rotazioniPartita} animationType="slide" transparent onRequestClose={() => setRotazioniPartita(null)}>
+        <View style={styles.sfondoPopup}>
+          <View style={styles.cartaPopup}>
+            <Text style={styles.titoloPopup}>Rotazioni — vs {rotazioniPartita?.nome}</Text>
+            <Text style={styles.nota}>Identificate da chi era in posizione 1 al servizio. Dalla peggiore.</Text>
+            <ScrollView style={{ maxHeight: 360 }}>
+              {(rotazioniPartita?.righe ?? []).length === 0 ? (
+                <Text style={styles.nota}>Nessun dato per rotazione: servono eventi registrati con la formazione impostata.</Text>
+              ) : rotazioniPartita!.righe.map((r, i) => (
+                <View key={i} style={styles.rigaRotazione}>
+                  <Text style={styles.rigaRotazioneNome}>{r.rotazione_di}</Text>
+                  <Text style={[styles.rigaRotazioneSaldo, r.saldo < 0 && styles.saldoNegativo]}>
+                    {r.saldo >= 0 ? "+" : ""}{r.saldo} ({r.punti_fatti}/{r.errori_commessi} su {r.azioni_totali})
+                  </Text>
+                </View>
+              ))}
+            </ScrollView>
+            <Pressable onPress={() => setRotazioniPartita(null)}><Text style={styles.chiudiPopup}>Chiudi</Text></Pressable>
+          </View>
+        </View>
+      </Modal>
+
       <FlatList
         data={partite}
         keyExtractor={(m) => m.id}
@@ -186,6 +216,11 @@ export default function Partite() {
               </Pressable>
             )}
             {item.stato === "conclusa" && <Text style={styles.cardRisultato}>Set: {item.set_vinti_noi} - {item.set_vinti_avversario}</Text>}
+            {puoScrivere && item.stato !== "programmata" && (
+              <Pressable onPress={() => apriRotazioni(item)}>
+                <Text style={styles.linkCampionato}>📊 Analisi rotazioni</Text>
+              </Pressable>
+            )}
           </Pressable>
         )}
       />
@@ -228,4 +263,12 @@ const styles = StyleSheet.create({
   badgeInCorso: { color: brand.colors.warning, fontWeight: "700" },
   badgeProgrammata: { color: brand.colors.brandSecondary, fontWeight: "700" },
   vuoto: { color: brand.colors.muted, textAlign: "center", marginTop: 32 },
+  sfondoPopup: { flex: 1, backgroundColor: "rgba(0,0,0,0.55)", justifyContent: "center", padding: 20 },
+  cartaPopup: { backgroundColor: brand.colors.surfaceSecondary, borderRadius: 16, padding: 18, gap: 10 },
+  titoloPopup: { color: brand.colors.onSurface, fontSize: 15, fontWeight: "700" },
+  chiudiPopup: { color: brand.colors.muted, fontSize: 13, textAlign: "center", paddingVertical: 6 },
+  rigaRotazione: { flexDirection: "row", justifyContent: "space-between", paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: brand.colors.border },
+  rigaRotazioneNome: { color: brand.colors.onSurfaceSecondary, fontSize: 12 },
+  rigaRotazioneSaldo: { color: brand.colors.success, fontSize: 12, fontWeight: "700" },
+  saldoNegativo: { color: brand.colors.error },
 });

@@ -17,6 +17,7 @@ import {
   type AndamentoSquadraVoce,
   type AtletaDaValutare,
 } from "@/src/services/evaluations";
+import { SchedaRendimento } from "@/src/components/SchedaRendimento";
 import { brand, fondamentali, uiStrings } from "@/src/config";
 import type { Athlete, Evaluation, EvaluationProposal, Fondamentale } from "@/src/types/database";
 import { avvisa } from "@/src/lib/confermaAzione";
@@ -289,7 +290,9 @@ function SezioneValutazionePersonale({ athleteId }: { athleteId: string }) {
 
   return (
     <View style={{ gap: 12 }}>
-      <Text style={styles.sottotitoloSezione}>Il mio rendimento</Text>
+      <SchedaRendimento athleteId={athleteId} modificabile={false} />
+
+      <Text style={[styles.sottotitoloSezione, { marginTop: 8 }]}>Storico per fondamentale</Text>
       <View style={styles.selettoreRiga}>
         {fondamentali.map((f) => (
           <Pressable key={f} onPress={() => setFondamentale(f)} style={[styles.chip, fondamentale === f && styles.chipAttivo]}>

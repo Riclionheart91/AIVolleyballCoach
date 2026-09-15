@@ -19,6 +19,7 @@ import {
   type RendimentoRotazionePartita,
 } from "@/src/services/matches";
 import { chiediParerePartitaAI } from "@/src/services/evaluations";
+import { rendimentoTurniServizio, type RendimentoTurnoServizio } from "@/src/services/matches";
 import { analizzaSituazione, riassuntoPerAI, type SegnalazioneSituazione } from "@/src/lib/situazione";
 import { brand, skillsScouting, skillsScoutingEssenziali } from "@/src/config";
 import type { Athlete, Esito, Match, MatchEvent, MatchSet, MatchSetLineup, Skill } from "@/src/types/database";
@@ -63,6 +64,7 @@ export default function PartitaLive() {
 
   const [popupSituazione, setPopupSituazione] = useState(false);
   const [rotazioni, setRotazioni] = useState<RendimentoRotazionePartita[]>([]);
+  const [turni, setTurni] = useState<RendimentoTurnoServizio[]>([]);
   const [parereAI, setParereAI] = useState<string | null>(null);
   const [chiedendoAI, setChiedendoAI] = useState(false);
   const [popupEventi, setPopupEventi] = useState(false);
@@ -213,6 +215,7 @@ export default function PartitaLive() {
     setParereAI(null);
     if (match) {
       try { setRotazioni(await rendimentoRotazioniPartita(match.id)); } catch { setRotazioni([]); }
+      try { setTurni(await rendimentoTurniServizio(match.id)); } catch { setTurni([]); }
     }
   }
 
@@ -303,6 +306,20 @@ export default function PartitaLive() {
                 ))
               )}
 
+              <Text style={styles.titoloSezionePopup}>Turni di servizio</Text>
+              {turni.length === 0 ? (
+                <Text style={styles.nota}>Nessun turno nostro registrato ancora.</Text>
+              ) : (
+                turni.map((t, i) => (
+                  <View key={i} style={styles.rigaRotazione}>
+                    <Text style={styles.rigaRotazioneNome}>{t.al_servizio} · {t.turni_giocati} turni</Text>
+                    <Text style={styles.rigaRotazioneSaldo}>
+                      {t.media_punti_per_turno != null ? Number(t.media_punti_per_turno).toFixed(2) : "—"} pt/turno
+                    </Text>
+                  </View>
+                ))
+              )}
+
               <Text style={styles.titoloSezionePopup}>Parere dell'assistente</Text>
               {parereAI ? (
                 <Text style={styles.parere}>{parereAI}</Text>
@@ -388,6 +405,9 @@ export default function PartitaLive() {
                 <Text style={styles.sottoPulsante}>errore nostro</Text>
               </Pressable>
             </View>
+            <Pressable style={styles.bottoneFalloRotazione} onPress={() => registra("Fallo_rotazione", null, null)}>
+              <Text style={styles.bottoneFalloRotazioneTesto}>Fallo di rotazione</Text>
+            </Pressable>
 
             {passo === "fondamentale" && (
               <View style={styles.griglia}>
@@ -567,6 +587,8 @@ const styles = StyleSheet.create({
   bottonePuntoAvversario: { flex: 1, backgroundColor: "#4A1620", borderRadius: 10, alignItems: "center" },
   bottonePuntoAvversarioTesto: { color: "#fff", fontWeight: "800", fontSize: 15 },
   sottoPulsante: { color: "rgba(255,255,255,0.7)", fontSize: 10 },
+  bottoneFalloRotazione: { borderWidth: 1, borderColor: brand.colors.warning, borderRadius: 10, paddingVertical: 8, alignItems: "center" },
+  bottoneFalloRotazioneTesto: { color: brand.colors.warning, fontWeight: "700", fontSize: 12 },
 
   rigaComandiSecondari: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
   barraFissa: { flexDirection: "row", gap: 6, paddingTop: 6, borderTopWidth: 1, borderTopColor: brand.colors.border },
