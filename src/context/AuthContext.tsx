@@ -37,6 +37,8 @@ interface AuthState {
   soloLettura: boolean;
   /** Può registrare azioni durante un set (staff tecnico o profilo scout), ma non necessariamente gestire la partita. */
   puoScoutare: boolean;
+  /** Le funzioni AI sono riservate allo staff: allenatore, vice e presidente. */
+  puoUsareAI: boolean;
   isSuperuser: boolean;
   squadreDisponibili: SquadraDisponibile[];
   cambiaSquadra: (teamId: string) => Promise<void>;
@@ -178,12 +180,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   const puoScrivere = ruolo === "allenatore" || ruolo === "vice_allenatore";
-  const puoScoutare = puoScrivere || ruolo === "scout";
+  const puoScoutare = puoScrivere;
+  const puoUsareAI = puoScrivere || ruolo === "presidente";
   const soloLettura = ruolo === "presidente";
 
   const value = useMemo<AuthState>(
     () => ({
-      session, caricamento, team, ruolo, atletaId, puoScrivere, soloLettura, puoScoutare, isSuperuser,
+      session, caricamento, team, ruolo, atletaId, puoScrivere, soloLettura, puoScoutare, puoUsareAI, isSuperuser,
       squadreDisponibili, cambiaSquadra, caricamentoContesto, erroreTeam, stagioneAttiva,
       accediConGoogle, esci, creaPrimaSquadra, ricaricaContesto,
     }),

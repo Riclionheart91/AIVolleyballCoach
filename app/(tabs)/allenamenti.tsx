@@ -199,11 +199,9 @@ export default function Allenamenti() {
               </View>
             )}
 
-            {aperto === item.id && team && (
-              puoScrivere
-                ? <PresenzeRpeModificabili trainingId={item.id} teamId={team.id} />
-                : <PresenzeRpeSolaLettura trainingId={item.id} teamId={team.id} />
-            )}
+            {/* Presenze e RPE rimossi: le prestazioni si valutano
+                mensilmente e tramite scouting (globale, amichevole,
+                partita), non con un punteggio per seduta. */}
           </View>
         )}
       />
@@ -223,104 +221,12 @@ export default function Allenamenti() {
 }
 
 /** Allenatore/vice: un tap per atleta, niente form separati (stesso principio "poche interazioni per azione" dello scouting live). */
-function PresenzeRpeModificabili({ trainingId, teamId }: { trainingId: string; teamId: string }) {
-  const [atlete, setAtlete] = useState<Athlete[]>([]);
-  const [presenze, setPresenze] = useState<Record<string, boolean>>({});
-  const [valoriRpe, setValoriRpe] = useState<Record<string, number>>({});
-
-  useFocusEffect(
-    useCallback(() => {
-      (async () => {
-        const [listaAtlete, listaPresenze, listaRpe] = await Promise.all([
-          elencaAtlete(teamId),
-          elencaPresenzeAllenamento(trainingId),
-          elencaRpeAllenamento(trainingId),
-        ]);
-        setAtlete(listaAtlete);
-        setPresenze(Object.fromEntries((listaPresenze as Attendance[]).map((p) => [p.athlete_id, p.presente])));
-        setValoriRpe(Object.fromEntries((listaRpe as Rpe[]).map((r) => [r.athlete_id, r.valore])));
-      })();
-    }, [trainingId, teamId]),
-  );
-
-  async function segnaPresenza(athleteId: string, presente: boolean) {
-    setPresenze((p) => ({ ...p, [athleteId]: presente }));
-    await registraPresenza(trainingId, athleteId, presente);
-  }
-
-  async function segnaRpe(athleteId: string, valore: number) {
-    setValoriRpe((r) => ({ ...r, [athleteId]: valore }));
-    await registraRpe(trainingId, athleteId, valore);
-  }
-
-  return (
-    <View style={styles.presenzeContainer}>
-      {atlete.map((a) => (
-        <View key={a.id} style={styles.rigaAtleta}>
-          <Text style={styles.rigaAtletaNome}>{a.cognome}</Text>
-          <View style={styles.presenzaBottoni}>
-            <Pressable onPress={() => segnaPresenza(a.id, true)} style={[styles.presenzaBtn, presenze[a.id] === true && styles.presenzaBtnSi]}>
-              <Text style={styles.presenzaBtnTesto}>P</Text>
-            </Pressable>
-            <Pressable onPress={() => segnaPresenza(a.id, false)} style={[styles.presenzaBtn, presenze[a.id] === false && styles.presenzaBtnNo]}>
-              <Text style={styles.presenzaBtnTesto}>A</Text>
-            </Pressable>
-          </View>
-          {presenze[a.id] !== false && (
-            <View style={styles.rpeBottoni}>
-              {[3, 5, 7, 9].map((v) => (
-                <Pressable key={v} onPress={() => segnaRpe(a.id, v)} style={[styles.rpeBtn, valoriRpe[a.id] === v && styles.rpeBtnAttivo]}>
-                  <Text style={styles.rpeBtnTesto}>{v}</Text>
-                </Pressable>
-              ))}
-            </View>
-          )}
-        </View>
-      ))}
-    </View>
-  );
-}
-
 /**
  * Atleta/presidente: nessun controllo di scrittura. La RLS filtra già i
  * dati (un'atleta riceve solo la propria riga di presenza/RPE, mai
  * quelle delle compagne — il presidente le riceve tutte perché ha
  * visione piena) — qui ci limitiamo a mostrare quello che arriva.
  */
-function PresenzeRpeSolaLettura({ trainingId, teamId }: { trainingId: string; teamId: string }) {
-  const [righe, setRighe] = useState<{ nome: string; presente: boolean | null; rpe: number | null }[]>([]);
-
-  useFocusEffect(
-    useCallback(() => {
-      (async () => {
-        const [listaAtlete, listaPresenze, listaRpe] = await Promise.all([
-          elencaAtlete(teamId),
-          elencaPresenzeAllenamento(trainingId),
-          elencaRpeAllenamento(trainingId),
-        ]);
-        const mappaAtlete = Object.fromEntries(listaAtlete.map((a) => [a.id, `${a.nome} ${a.cognome}`]));
-        const mappaPresenze = Object.fromEntries((listaPresenze as Attendance[]).map((p) => [p.athlete_id, p.presente]));
-        const mappaRpe = Object.fromEntries((listaRpe as Rpe[]).map((r) => [r.athlete_id, r.valore]));
-        const idAtleteVisibili = Array.from(new Set([...(listaPresenze as Attendance[]).map((p) => p.athlete_id), ...(listaRpe as Rpe[]).map((r) => r.athlete_id)]));
-        setRighe(idAtleteVisibili.map((id) => ({ nome: mappaAtlete[id] ?? "—", presente: mappaPresenze[id] ?? null, rpe: mappaRpe[id] ?? null })));
-      })();
-    }, [trainingId, teamId]),
-  );
-
-  if (righe.length === 0) return <Text style={[styles.vuoto, { marginTop: 12 }]}>Nessun dato di presenza registrato ancora.</Text>;
-
-  return (
-    <View style={styles.presenzeContainer}>
-      {righe.map((r, i) => (
-        <View key={i} style={styles.rigaAtleta}>
-          <Text style={styles.rigaAtletaNome}>{r.nome}</Text>
-          <Text style={styles.rigaSolaLetturaValore}>{r.presente === false ? "Assente" : r.presente === true ? `Presente${r.rpe ? ` — RPE ${r.rpe}` : ""}` : "—"}</Text>
-        </View>
-      ))}
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: brand.colors.surface },
   input: { backgroundColor: brand.colors.surfaceTertiary, color: brand.colors.onSurface, borderRadius: 8, padding: 12 },

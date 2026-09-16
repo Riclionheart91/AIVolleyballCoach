@@ -2,7 +2,7 @@ import { useCallback, useState } from "react";
 import { View, Text, TextInput, Pressable, StyleSheet, ScrollView, ActivityIndicator, Modal, FlatList } from "react-native";
 import { useLocalSearchParams, useFocusEffect, router } from "expo-router";
 import { useAuth } from "@/src/context/AuthContext";
-import { elencaEsercizi } from "@/src/services/exercises";
+import { creaEsercizio, elencaEsercizi } from "@/src/services/exercises";
 import { elencaPianoAllenamento, generaPianoAllenamentoAI, impostaPianoAllenamento, leggiBloccoPerData, type VoceRiepilogoPiano } from "@/src/services/trainingPlan";
 import { avvisa } from "@/src/lib/confermaAzione";
 import { brand } from "@/src/config";
@@ -11,7 +11,7 @@ import type { Exercise, Training } from "@/src/types/database";
 
 export default function PianoAllenamento() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { team } = useAuth();
+  const { team, puoScrivere } = useAuth();
   const [training, setTraining] = useState<Training | null>(null);
   const [catalogo, setCatalogo] = useState<Exercise[]>([]);
   const [argomento, setArgomento] = useState("");
@@ -116,15 +116,31 @@ export default function PianoAllenamento() {
         // In "aggiungi" si scartano le proposte già presenti nel piano:
         // senza questo controllo l'AI ripropone volentieri esercizi
         // che ha appena visto nel catalogo.
+        // Esercizi proposti ma non in catalogo: si aggiungono al
+        // catalogo e al piano, così la proposta non va persa.
+        const daCatalogare = r.nuovi ?? [];
+        const creati: typeof r.esercizi = [];
+        for (const n of daCatalogare) {
+          try {
+            const ex = await creaEsercizio(team!.id, { nome: n.nome, categoria: n.categoria || null, descrizione: n.descrizione });
+            creati.push({ exerciseId: ex.id, nome: ex.nome, durataMinuti: n.durataMinuti, note: "" });
+          } catch { /* un nome duplicato non deve fermare il resto */ }
+        }
+        if (creati.length > 0) {
+          setCatalogo(await elencaEsercizi(team!.id));
+          avvisa("Nuovi esercizi", `${creati.length} esercizi non presenti in catalogo sono stati aggiunti e inseriti nel piano.`);
+        }
+        const tutti = [...r.esercizi, ...creati];
+
         if (modo === "aggiungi") {
           const giaPresenti = new Set(esercizi.map((e) => e.exerciseId));
-          const nuovi = r.esercizi.filter((e) => !giaPresenti.has(e.exerciseId));
+          const nuovi = tutti.filter((e) => !giaPresenti.has(e.exerciseId));
           setEsercizi((prec) => [...prec, ...nuovi]);
-          if (nuovi.length < r.esercizi.length) {
-            avvisa("Alcune proposte scartate", `${r.esercizi.length - nuovi.length} esercizi proposti erano già nel piano e non sono stati aggiunti.`);
+          if (nuovi.length < tutti.length) {
+            avvisa("Alcune proposte scartate", `${tutti.length - nuovi.length} esercizi erano già nel piano.`);
           }
         } else {
-          setEsercizi(r.esercizi);
+          setEsercizi(tutti);
           if (r.argomentoSuggerito) setArgomento(r.argomentoSuggerito);
         }
       } catch (e) {
@@ -141,10 +157,24 @@ export default function PianoAllenamento() {
   }
 
   async function salva() {
-    if (!id) return;
+    if (!id || !team) return;
     setSalvando(true);
     try {
-      await impostaPianoAllenamento(id, argomento, esercizi);
+      // Gli esercizi proposti dall'AI e non presenti in catalogo vanno
+      // creati prima: il piano può puntare solo a esercizi esistenti.
+      const daSalvare = [...esercizi];
+      for (let i = 0; i < daSalvare.length; i++) {
+        if (!daSalvare[i].exerciseId) {
+          const creato = await creaEsercizio(team.id, {
+            nome: daSalvare[i].nome,
+            categoria: daSalvare[i].categoria ?? null,
+            descrizione: daSalvare[i].descrizione ?? "",
+          });
+          daSalvare[i] = { ...daSalvare[i], exerciseId: creato.id, nuovo: false };
+        }
+      }
+      setEsercizi(daSalvare);
+      await impostaPianoAllenamento(id, argomento, daSalvare);
       avvisa("Salvato", "Piano allenamento aggiornato.");
       router.back();
     } catch (e) {
@@ -214,7 +244,7 @@ export default function PianoAllenamento() {
                 <Text style={styles.etichettaCategoriaPiano}>{categoria}</Text>
                 {voci.map(({ e, i }) => (
                   <View key={i} style={styles.rigaEsercizio}>
-                    <Text style={styles.rigaEsercizioNome}>{e.nome}</Text>
+                    <Text style={styles.rigaEsercizioNome}>{e.nuovo ? "✨ " : ""}{e.nome}</Text>
                     <TextInput style={styles.inputDurata} keyboardType="numeric" value={String(e.durataMinuti)} onChangeText={(t) => aggiornaDurata(i, t)} />
                     <Text style={styles.nota}>min</Text>
                     <Pressable onPress={() => rimuoviEsercizio(i)}><Text style={styles.rimuovi}>✕</Text></Pressable>

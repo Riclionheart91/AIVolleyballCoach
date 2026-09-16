@@ -4,10 +4,15 @@ import { istruzioniAggiuntive } from "@/src/services/pianoAnnuale";
 import type { Exercise, TrainingExercise } from "@/src/types/database";
 
 export interface VoceRiepilogoPiano {
+  /** Vuoto se l'esercizio è nuovo e non ancora salvato in catalogo. */
   exerciseId: string;
   nome: string;
   durataMinuti: number;
   note: string;
+  categoria?: string;
+  descrizione?: string;
+  /** true = non esiste in catalogo, va aggiunto prima di poterlo salvare nel piano. */
+  nuovo?: boolean;
 }
 
 export async function impostaPianoAllenamento(trainingId: string, argomento: string, esercizi: VoceRiepilogoPiano[]): Promise<void> {
@@ -65,7 +70,8 @@ export async function generaPianoAllenamentoAI(teamId: string, argomento: string
   const prompt = contestoPeriodo +
     `Sei un assistente per un allenatore di pallavolo. Proponi un piano per una sessione di allenamento sul tema "${argomento}", ` +
     `della durata totale di circa ${durataTotaleMinuti} minuti. USA SOLO esercizi da questo catalogo (mai inventarne altri, scrivi il nome esattamente come qui):\n${elencoCatalogo}\n\n` +
-    `Rispondi SOLO in formato JSON: {"esercizi": [{"nome": "nome esatto dal catalogo", "durata_minuti": numero, "note": "breve indicazione"}], "argomento_suggerito": "eventuale titolo più specifico del tema"}. ` +
+    `Puoi proporre anche esercizi NON presenti in catalogo se utili: in quel caso indica "nuovo": true e una descrizione completa.\n` +
+    `Rispondi SOLO in formato JSON: {"esercizi": [{"nome": "...", "durata_minuti": numero, "note": "breve indicazione", "nuovo": false, "categoria": "...", "descrizione": "..."}], "argomento_suggerito": "..."}. ` +
     `La somma delle durate deve avvicinarsi a ${durataTotaleMinuti} minuti.` + istruzioniAggiuntive(istruzioniExtra);
 
   const { data: sessione } = await supabaseClient.auth.getSession();
@@ -80,22 +86,32 @@ export async function generaPianoAllenamentoAI(teamId: string, argomento: string
     const parsed = JSON.parse(pulito);
     const eserciziProposti: VoceRiepilogoPiano[] = [];
 
+    const nuovi: EsercizioNuovoProposto[] = [];
+
     for (const item of parsed.esercizi ?? []) {
-      // Abbina per nome (case-insensitive) al catalogo reale: se l'AI ha
-      // "inventato" un nome non presente, la voce viene scartata invece
-      // di creare un esercizio fantasma — l'allenatore può comunque
-      // aggiungerlo a mano dopo, dal catalogo vero.
       const trovato = catalogo.find((e) => e.nome.trim().toLowerCase() === String(item.nome).trim().toLowerCase());
+      const durata = Number(item.durata_minuti) || 15;
       if (trovato) {
-        eserciziProposti.push({ exerciseId: trovato.id, nome: trovato.nome, durataMinuti: Number(item.durata_minuti) || 10, note: String(item.note ?? "") });
+        eserciziProposti.push({ exerciseId: trovato.id, nome: trovato.nome, durataMinuti: durata, note: String(item.note ?? "") });
+      } else if (item.nome) {
+        // Prima gli esercizi non riconosciuti venivano scartati in
+        // silenzio, e con un catalogo poco coperto il risultato era
+        // "nessun esercizio riconoscibile". Ora si propongono per
+        // l'inserimento in catalogo, così la proposta non va persa.
+        nuovi.push({
+          nome: String(item.nome).trim(),
+          categoria: String(item.categoria ?? argomento).trim(),
+          descrizione: String(item.descrizione ?? item.note ?? "").trim(),
+          durataMinuti: durata,
+        });
       }
     }
 
-    if (eserciziProposti.length === 0) {
-      return { errore: true, messaggio: "L'AI non ha proposto nessun esercizio riconoscibile dal catalogo — percorso manuale sempre disponibile qui sopra." };
+    if (eserciziProposti.length === 0 && nuovi.length === 0) {
+      return { errore: true, messaggio: "L'AI non ha proposto esercizi utilizzabili. Puoi comunque costruire il piano a mano." };
     }
 
-    return { errore: false, argomentoSuggerito: parsed.argomento_suggerito || argomento, esercizi: eserciziProposti };
+    return { errore: false, argomentoSuggerito: parsed.argomento_suggerito || argomento, esercizi: eserciziProposti, nuovi };
   } catch {
     return { errore: true, messaggio: "Risposta AI non nel formato atteso — percorso manuale sempre disponibile qui sopra." };
   }

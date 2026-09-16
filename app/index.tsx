@@ -5,7 +5,7 @@ import { useAuth } from "@/src/context/AuthContext";
 import { brand } from "@/src/config";
 
 export default function Index() {
-  const { session, caricamento, caricamentoContesto, erroreTeam, stagioneAttiva, squadreDisponibili, ricaricaContesto } = useAuth();
+  const { session, caricamento, caricamentoContesto, erroreTeam, stagioneAttiva, squadreDisponibili, ruolo, ricaricaContesto } = useAuth();
 
   useEffect(() => {
     // caricamentoContesto copre SIA squadra SIA stagione in un colpo
@@ -29,8 +29,10 @@ export default function Index() {
     if (squadreDisponibili.length === 0) { router.replace("/crea-squadra"); return; }
     if (!stagioneAttiva) { router.replace("/apri-stagione"); return; }
     if (squadreDisponibili.length > 1) { router.replace("/seleziona-squadra"); return; }
-    router.replace("/(tabs)/allenamenti");
-  }, [session, caricamento, caricamentoContesto, erroreTeam, stagioneAttiva, squadreDisponibili]);
+    // Le persone con profilo atleta non hanno accesso ad allenamenti,
+    // anagrafica ed esercizi: entrano direttamente nella propria scheda.
+    router.replace(ruolo === "atleta" ? "/(tabs)/valutazioni" : "/(tabs)/allenamenti");
+  }, [session, caricamento, caricamentoContesto, erroreTeam, stagioneAttiva, squadreDisponibili, ruolo]);
 
   if (!caricamento && !caricamentoContesto && erroreTeam) {
     return (
