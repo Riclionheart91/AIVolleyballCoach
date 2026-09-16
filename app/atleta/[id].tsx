@@ -5,12 +5,13 @@ import { useAuth } from "@/src/context/AuthContext";
 import { aggiornaAtleta, archiviaAtleta, eliminaAtletaDefinitivamente, leggiAtleta, ripristinaAtleta } from "@/src/services/athletes";
 import { confermaAzione, avvisa } from "@/src/lib/confermaAzione";
 import { SchedaRendimento } from "@/src/components/SchedaRendimento";
+import { PianiIndividuali } from "@/src/components/PianiIndividuali";
 import { brand, ruoliCampo } from "@/src/config";
 import type { Athlete, RuoloCampo } from "@/src/types/database";
 
 export default function SchedaAtleta() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { puoScrivere } = useAuth();
+  const { team, puoScrivere } = useAuth();
   const [atleta, setAtleta] = useState<Athlete | null>(null);
   const [inModifica, setInModifica] = useState(false);
   const [salvataggio, setSalvataggio] = useState(false);
@@ -167,6 +168,17 @@ export default function SchedaAtleta() {
 
             <Text style={styles.titoloSezione}>Rendimento e obiettivi</Text>
             <SchedaRendimento athleteId={atleta.id} nomeAtleta={`${atleta.nome} ${atleta.cognome}`} modificabile={puoScrivere} />
+
+            <Text style={styles.titoloSezione}>Piani individuali</Text>
+            {team && (
+              <PianiIndividuali
+                teamId={team.id}
+                athleteId={atleta.id}
+                nomePersona={`${atleta.nome} ${atleta.cognome}`}
+                ruolo={atleta.ruolo_campo}
+                modificabile={puoScrivere}
+              />
+            )}
           </>
         )}
       </ScrollView>

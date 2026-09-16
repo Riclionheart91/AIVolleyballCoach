@@ -18,6 +18,7 @@ import {
   type AtletaDaValutare,
 } from "@/src/services/evaluations";
 import { SchedaRendimento } from "@/src/components/SchedaRendimento";
+import { PianiIndividuali } from "@/src/components/PianiIndividuali";
 import { brand, fondamentali, uiStrings } from "@/src/config";
 import type { Athlete, Evaluation, EvaluationProposal, Fondamentale } from "@/src/types/database";
 import { avvisa } from "@/src/lib/confermaAzione";
@@ -53,7 +54,7 @@ export default function Valutazioni() {
 
       {puoScrivere && team && <SezioneCicloValutazione teamId={team.id} />}
       {puoScrivere && <SezioneValutazioneCoach teamId={team!.id} />}
-      {ruolo === "atleta" && atletaId && <SezioneValutazionePersonale athleteId={atletaId} />}
+      {ruolo === "atleta" && atletaId && <SezioneValutazionePersonale athleteId={atletaId} teamId={team!.id} />}
       {ruolo === "presidente" && team && <SezioneValutazionePresidente teamId={team.id} />}
     </ScrollView>
   );
@@ -280,7 +281,7 @@ function SezioneValutazioneCoach({ teamId }: { teamId: string }) {
 }
 
 /** Vista dell'atleta: solo il proprio storico, mai quello delle compagne (RLS lo garantisce comunque anche se questa UI avesse un bug). */
-function SezioneValutazionePersonale({ athleteId }: { athleteId: string }) {
+function SezioneValutazionePersonale({ athleteId, teamId }: { athleteId: string; teamId: string }) {
   const [fondamentale, setFondamentale] = useState<Fondamentale>("Attacco");
   const [valutazioni, setValutazioni] = useState<Evaluation[]>([]);
   const [storicoPresenze, setStoricoPresenze] = useState<StoricoPresenzaRiga[]>([]);
@@ -291,6 +292,9 @@ function SezioneValutazionePersonale({ athleteId }: { athleteId: string }) {
   return (
     <View style={{ gap: 12 }}>
       <SchedaRendimento athleteId={athleteId} modificabile={false} />
+
+      <Text style={[styles.sottotitoloSezione, { marginTop: 8 }]}>Il mio piano individuale</Text>
+      <PianiIndividuali teamId={teamId} athleteId={athleteId} nomePersona="" ruolo={null} modificabile={false} />
 
       <Text style={[styles.sottotitoloSezione, { marginTop: 8 }]}>Storico per fondamentale</Text>
       <View style={styles.selettoreRiga}>
