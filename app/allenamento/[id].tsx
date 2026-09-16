@@ -86,9 +86,15 @@ export default function PianoAllenamento() {
   /** Sposta un esercizio nell'ordine di svolgimento, dentro il piano. */
   function spostaEsercizio(indice: number, direzione: -1 | 1) {
     setEsercizi((prec) => {
+      const fase = faseDi(prec[indice]);
+      // Si cerca il vicino DELLA STESSA FASE: scambiare con l'elemento
+      // adiacente nell'elenco complessivo non produceva alcun effetto
+      // visibile, perché spesso apparteneva a un'altra fase.
+      const indiciFase = prec.map((e, i) => ({ e, i })).filter(({ e }) => faseDi(e) === fase).map(({ i }) => i);
+      const pos = indiciFase.indexOf(indice);
+      const dest = indiciFase[pos + direzione];
+      if (pos === -1 || dest === undefined) return prec;
       const nuovo = [...prec];
-      const dest = indice + direzione;
-      if (dest < 0 || dest >= nuovo.length) return prec;
       [nuovo[indice], nuovo[dest]] = [nuovo[dest], nuovo[indice]];
       return nuovo;
     });

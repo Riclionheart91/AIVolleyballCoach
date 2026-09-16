@@ -4,7 +4,7 @@ import { useLocalSearchParams, router } from "expo-router";
 import { useAuth } from "@/src/context/AuthContext";
 import { aggiornaEsercizio, eliminaEsercizio, leggiEsercizio } from "@/src/services/exercises";
 import { confermaAzione, avvisa } from "@/src/lib/confermaAzione";
-import { brand } from "@/src/config";
+import { brand, fasiAllenamento } from "@/src/config";
 import type { Exercise } from "@/src/types/database";
 
 export default function SchedaEsercizio() {
@@ -14,6 +14,7 @@ export default function SchedaEsercizio() {
   const [inModifica, setInModifica] = useState(false);
   const [nome, setNome] = useState("");
   const [categoria, setCategoria] = useState("");
+  const [fase, setFase] = useState<string>("tecnico");
   const [descrizione, setDescrizione] = useState("");
   const [salvataggio, setSalvataggio] = useState(false);
 
@@ -21,7 +22,8 @@ export default function SchedaEsercizio() {
     if (!id) return;
     leggiEsercizio(id).then((e) => {
       setEsercizio(e);
-      setNome(e.nome); setCategoria(e.categoria ?? ""); setDescrizione(e.descrizione ?? "");
+      setNome(e.nome); setCategoria(e.categoria ?? "");
+      setFase(e.fase_consigliata ?? "tecnico"); setDescrizione(e.descrizione ?? "");
     }).catch((err) => avvisa("Errore", err.message));
   }, [id]);
 
@@ -39,7 +41,8 @@ export default function SchedaEsercizio() {
     if (!esercizio || !nome.trim()) return;
     setSalvataggio(true);
     try {
-      const aggiornato = await aggiornaEsercizio(esercizio.id, { nome: nome.trim(), categoria: categoria.trim() || null, descrizione: descrizione.trim() });
+      const aggiornato = await aggiornaEsercizio(esercizio.id, { nome: nome.trim(), categoria: categoria.trim() || null,
+      fase_consigliata: fase, descrizione: descrizione.trim() });
       setEsercizio(aggiornato);
       setInModifica(false);
     } catch (e) {
@@ -88,7 +91,20 @@ export default function SchedaEsercizio() {
             <TextInput style={styles.input} placeholder="Nome" placeholderTextColor={brand.colors.muted} value={nome} onChangeText={setNome} />
             <TextInput style={styles.input} placeholder="Categoria" placeholderTextColor={brand.colors.muted} value={categoria} onChangeText={setCategoria} />
             <TextInput style={[styles.input, { minHeight: 100, textAlignVertical: "top" }]} placeholder="Descrizione / istruzioni" placeholderTextColor={brand.colors.muted} multiline value={descrizione} onChangeText={setDescrizione} />
-            <Pressable style={styles.bottone} onPress={salva} disabled={salvataggio || !nome.trim()}>
+            <Text style={styles.etichetta}>Fase consigliata</Text>
+          <View style={styles.rigaFasi}>
+            {fasiAllenamento.map((f) => (
+              <Pressable
+                key={f.codice}
+                onPress={() => setFase(f.codice)}
+                style={[styles.chipFase, fase === f.codice && styles.chipFaseAttivo]}
+              >
+                <Text style={[styles.chipFaseTesto, fase === f.codice && styles.chipFaseTestoAttivo]}>{f.etichetta}</Text>
+              </Pressable>
+            ))}
+          </View>
+
+          <Pressable style={styles.bottone} onPress={salva} disabled={salvataggio || !nome.trim()}>
               {salvataggio ? <ActivityIndicator color="#000" /> : <Text style={styles.bottoneTesto}>Salva</Text>}
             </Pressable>
           </>
@@ -111,6 +127,11 @@ export default function SchedaEsercizio() {
 }
 
 const styles = StyleSheet.create({
+  rigaFasi: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
+  chipFase: { paddingVertical: 8, paddingHorizontal: 12, borderRadius: 14, backgroundColor: brand.colors.surfaceTertiary },
+  chipFaseAttivo: { backgroundColor: brand.colors.brand },
+  chipFaseTesto: { color: brand.colors.onSurfaceSecondary, fontSize: 12 },
+  chipFaseTestoAttivo: { color: "#000", fontWeight: "700" },
   container: { flex: 1, backgroundColor: brand.colors.surface },
   header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", padding: 16, borderBottomWidth: 1, borderBottomColor: brand.colors.border },
   indietro: { color: brand.colors.brand, fontWeight: "700", fontSize: 15 },

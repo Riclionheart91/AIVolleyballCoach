@@ -10,7 +10,7 @@ import type { Athlete } from "@/src/types/database";
 import { FabAggiungi } from "@/src/components/Fab";
 import { PopupForm } from "@/src/components/PopupForm";
 import { avvisa } from "@/src/lib/confermaAzione";
-import { brand } from "@/src/config";
+import { brand, fasiAllenamento } from "@/src/config";
 import type { Exercise } from "@/src/types/database";
 
 const SENZA_CATEGORIA = "Senza categoria";
@@ -24,6 +24,8 @@ export default function Esercizi() {
   // proprio il problema di leggibilità segnalato. Si aprono a richiesta.
   const [categorieChiuse, setCategorieChiuse] = useState<Set<string> | null>(null);
   const [descrizioneAperta, setDescrizioneAperta] = useState<string | null>(null);
+  // Il catalogo si legge per FASE (quando serve in seduta) e dentro ciascuna per categoria (che cosa allena).
+  const [raggruppaPerFase, setRaggruppaPerFase] = useState(true);
 
   const [popupAperto, setPopupAperto] = useState(false);
   const [nome, setNome] = useState("");
@@ -63,12 +65,22 @@ export default function Esercizi() {
       : esercizi;
 
     const gruppi = visibili.reduce<Record<string, Exercise[]>>((acc, e) => {
-      const chiave = e.categoria?.trim() || SENZA_CATEGORIA;
+      const chiave = raggruppaPerFase
+        ? (fasiAllenamento.find((f) => f.codice === (e.fase_consigliata ?? "tecnico"))?.etichetta ?? "Allenamento tecnico")
+        : (e.categoria?.trim() || SENZA_CATEGORIA);
       (acc[chiave] ??= []).push(e);
       return acc;
     }, {});
 
-    return Object.keys(gruppi).sort((a, b) => a.localeCompare(b)).map((titolo) => ({
+    // Per fase l'ordine è quello di svolgimento della seduta, non
+    // alfabetico: riscaldamento prima, defaticamento in fondo.
+    const ordinaChiavi = (a: string, b: string) => {
+      if (!raggruppaPerFase) return a.localeCompare(b);
+      const ordine = fasiAllenamento.map((f) => f.etichetta);
+      return ordine.indexOf(a) - ordine.indexOf(b);
+    };
+
+    return Object.keys(gruppi).sort(ordinaChiavi).map((titolo) => ({
       titolo,
       totale: gruppi[titolo].length,
       // Durante una ricerca le categorie restano sempre aperte: chiuderle
@@ -76,7 +88,7 @@ export default function Esercizi() {
       // categorieChiuse === null significa "mai toccate": tutte chiuse.
       data: (!filtro && (categorieChiuse === null || categorieChiuse.has(titolo))) ? [] : gruppi[titolo].sort((a, b) => a.nome.localeCompare(b.nome)),
     }));
-  }, [esercizi, ricerca, categorieChiuse]);
+  }, [esercizi, ricerca, categorieChiuse, raggruppaPerFase]);
 
   const categorieEsistenti = useMemo(
     () => [...new Set(esercizi.map((e) => e.categoria?.trim()).filter(Boolean) as string[])].sort(),
@@ -179,6 +191,15 @@ export default function Esercizi() {
         {!!ricerca && <Pressable onPress={() => setRicerca("")} hitSlop={10}><Text style={styles.pulisci}>✕</Text></Pressable>}
       </View>
 
+      <View style={styles.rigaRaggruppa}>
+        <Pressable onPress={() => setRaggruppaPerFase(true)} style={[styles.chipRaggruppa, raggruppaPerFase && styles.chipRaggruppaAttivo]}>
+          <Text style={[styles.chipTesto, raggruppaPerFase && styles.chipTestoAttivo]}>Per fase</Text>
+        </Pressable>
+        <Pressable onPress={() => setRaggruppaPerFase(false)} style={[styles.chipRaggruppa, !raggruppaPerFase && styles.chipRaggruppaAttivo]}>
+          <Text style={[styles.chipTesto, !raggruppaPerFase && styles.chipTestoAttivo]}>Per categoria</Text>
+        </Pressable>
+      </View>
+
       <SectionList
         sections={sezioni}
         keyExtractor={(e) => e.id}
@@ -204,6 +225,11 @@ export default function Esercizi() {
               <Pressable style={styles.rigaTesta} onPress={() => setDescrizioneAperta(aperta ? null : item.id)}>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.rigaNome}>{item.nome}</Text>
+                  <Text style={styles.rigaSotto}>
+                    {raggruppaPerFase
+                      ? (item.categoria?.trim() || "senza categoria")
+                      : (fasiAllenamento.find((f) => f.codice === (item.fase_consigliata ?? "tecnico"))?.etichetta ?? "")}
+                  </Text>
                   {!!item.descrizione && !aperta && <Text style={styles.rigaDescrizione} numberOfLines={1}>{item.descrizione}</Text>}
                   {!item.descrizione && <Text style={styles.rigaDescrizione}>nessuna descrizione</Text>}
                 </View>
@@ -366,6 +392,10 @@ const styles = StyleSheet.create({
   tastoScheda: { width: 36, height: 36, alignItems: "center", justifyContent: "center" },
   tastoSchedaTesto: { color: brand.colors.brand, fontSize: 22, fontWeight: "700" },
   rigaNome: { color: brand.colors.onSurface, fontSize: 15 },
+  rigaRaggruppa: { flexDirection: "row", gap: 8, paddingHorizontal: 16, paddingBottom: 8 },
+  chipRaggruppa: { paddingVertical: 8, paddingHorizontal: 14, borderRadius: 16, backgroundColor: brand.colors.surfaceSecondary },
+  chipRaggruppaAttivo: { backgroundColor: brand.colors.brand },
+  rigaSotto: { color: brand.colors.brandSecondary, fontSize: 11, marginTop: 1 },
   rigaDescrizione: { color: brand.colors.muted, fontSize: 12, marginTop: 2 },
   vuoto: { color: brand.colors.muted, textAlign: "center", marginTop: 32 },
   input: { backgroundColor: brand.colors.surfaceTertiary, color: brand.colors.onSurface, borderRadius: 8, padding: 10 },
