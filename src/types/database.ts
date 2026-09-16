@@ -47,6 +47,7 @@ export interface Exercise {
   team_id: string;
   nome: string;
   categoria: string | null;
+  fase_consigliata?: string | null;
   descrizione: string;
   creato_il: string;
 }

@@ -11,6 +11,9 @@ export interface VoceRiepilogoPiano {
   note: string;
   categoria?: string;
   descrizione?: string;
+  fase?: string;
+  /** Ruolo a cui è destinato: consente lavori in parallelo (i centrali una cosa, il resto un'altra). */
+  ruoloTarget?: string | null;
   /** true = non esiste in catalogo, va aggiunto prima di poterlo salvare nel piano. */
   nuovo?: boolean;
 }
@@ -50,6 +53,21 @@ export async function leggiBloccoPerData(teamId: string, dataIso: string): Promi
 }
 
 export async function generaPianoAllenamentoAI(teamId: string, argomento: string, durataTotaleMinuti: number, catalogo: Exercise[], dataSeduta?: string, istruzioniExtra?: string): Promise<RisultatoGenerazionePiano> {
+  // Ripartizione dei minuti fra le quattro fasi secondo il periodo del
+  // piano annuale: è il vincolo che rende la seduta coerente con il
+  // momento della stagione invece che uguale tutto l'anno.
+  const pesi = dataSeduta ? await pesiFasiPerData(teamId, dataSeduta, durataTotaleMinuti) : [];
+  const vincoloFasi = pesi.length > 0
+    ? `La seduta va divisa in QUATTRO FASI, in questo ordine e con questi minuti indicativi:\n` +
+      pesi.map((p) => `- ${p.fase}: circa ${p.minuti_consigliati} minuti (${p.quota}%)`).join("\n") +
+      `\n${pesi[0]?.motivo ?? ""}\n` +
+      `Riscaldamento = mobilità articolare, attivazione core e parte alta, andature e balzi controllati.\n` +
+      `Tecnico = fondamentali analitici (palleggio, bagher, servizio, ricezione), agilità e reattività.\n` +
+      `Situazionale = esercizi a tema, attacco contro difesa, mini-partite, simulazione di gara.\n` +
+      `Defaticamento = mobilità leggera e respirazione sulle aree più sollecitate da QUESTA seduta.\n` +
+      `Indica per ogni esercizio il campo "fase" con uno di: riscaldamento, tecnico, situazionale, defaticamento.\n` +
+      `Dove utile puoi proporre lavori PARALLELI per ruolo: stesso momento, esercizi diversi. In quel caso valorizza "ruolo_target" (es. "Centrale"), altrimenti lascialo vuoto.\n\n`
+    : "";
   if (catalogo.length === 0) {
     return { errore: true, messaggio: "Il catalogo esercizi è vuoto: aggiungi almeno qualche esercizio nella tab Esercizi prima di generare un piano con l'AI." };
   }
@@ -67,11 +85,11 @@ export async function generaPianoAllenamentoAI(teamId: string, argomento: string
       `Scegli gli esercizi coerenti con questi obiettivi e con il tipo di periodo (in un periodo di scarico riduci volume e intensità).\n\n`
     : "";
 
-  const prompt = contestoPeriodo +
+  const prompt = contestoPeriodo + vincoloFasi +
     `Sei un assistente per un allenatore di pallavolo. Proponi un piano per una sessione di allenamento sul tema "${argomento}", ` +
     `della durata totale di circa ${durataTotaleMinuti} minuti. USA SOLO esercizi da questo catalogo (mai inventarne altri, scrivi il nome esattamente come qui):\n${elencoCatalogo}\n\n` +
     `Puoi proporre anche esercizi NON presenti in catalogo se utili: in quel caso indica "nuovo": true e una descrizione completa.\n` +
-    `Rispondi SOLO in formato JSON: {"esercizi": [{"nome": "...", "durata_minuti": numero, "note": "breve indicazione", "nuovo": false, "categoria": "...", "descrizione": "..."}], "argomento_suggerito": "..."}. ` +
+    `Rispondi SOLO in formato JSON: {"esercizi": [{"nome": "...", "fase": "riscaldamento|tecnico|situazionale|defaticamento", "ruolo_target": "", "durata_minuti": numero, "note": "breve indicazione", "nuovo": false, "categoria": "...", "descrizione": "..."}], "argomento_suggerito": "..."}. ` +
     `La somma delle durate deve avvicinarsi a ${durataTotaleMinuti} minuti.` + istruzioniAggiuntive(istruzioniExtra);
 
   const { data: sessione } = await supabaseClient.auth.getSession();
@@ -123,6 +141,8 @@ export interface VoceSessione {
   id: string;
   exercise_id: string;
   nome: string;
+  fase: string | null;
+  ruolo_target: string | null;
   /** Descrizione dal catalogo: serve a bordo campo per spiegare l'esercizio senza uscire dalla sessione. */
   descrizione: string;
   durata_minuti: number | null;
@@ -137,7 +157,7 @@ export interface VoceSessione {
 export async function elencaSessione(trainingId: string, catalogo: Exercise[]): Promise<VoceSessione[]> {
   const { data, error } = await supabaseClient
     .from("training_exercises")
-    .select("id, exercise_id, durata_minuti, note, ordine, iniziato_il, concluso_il, durata_effettiva_secondi")
+    .select("id, exercise_id, durata_minuti, note, ordine, fase, ruolo_target, iniziato_il, concluso_il, durata_effettiva_secondi")
     .eq("training_id", trainingId)
     .order("ordine");
   if (error) throw error;
@@ -165,4 +185,20 @@ export async function concludiEsercizio(trainingExerciseId: string): Promise<voi
 export async function concludiSessione(trainingId: string): Promise<void> {
   const { error } = await supabaseClient.rpc("concludi_sessione_allenamento", { p_training_id: trainingId });
   if (error) throw error;
+}
+
+export interface PesoFase {
+  fase: string;
+  minuti_consigliati: number;
+  quota: number;
+  motivo: string;
+}
+
+/** Ripartizione consigliata dei minuti tra le fasi, in base al periodo del piano annuale in cui cade la seduta. */
+export async function pesiFasiPerData(teamId: string, dataIso: string, durataTotale: number): Promise<PesoFase[]> {
+  const { data, error } = await supabaseClient.rpc("pesi_fasi_per_data", {
+    p_team_id: teamId, p_data: dataIso.slice(0, 10), p_durata_totale: durataTotale,
+  });
+  if (error) return [];
+  return data ?? [];
 }

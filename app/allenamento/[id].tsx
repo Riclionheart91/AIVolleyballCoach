@@ -3,9 +3,9 @@ import { View, Text, TextInput, Pressable, StyleSheet, ScrollView, ActivityIndic
 import { useLocalSearchParams, useFocusEffect, router } from "expo-router";
 import { useAuth } from "@/src/context/AuthContext";
 import { creaEsercizio, elencaEsercizi } from "@/src/services/exercises";
-import { elencaPianoAllenamento, generaPianoAllenamentoAI, impostaPianoAllenamento, leggiBloccoPerData, type VoceRiepilogoPiano } from "@/src/services/trainingPlan";
+import { pesiFasiPerData, type PesoFase, elencaPianoAllenamento, generaPianoAllenamentoAI, impostaPianoAllenamento, leggiBloccoPerData, type VoceRiepilogoPiano } from "@/src/services/trainingPlan";
 import { avvisa } from "@/src/lib/confermaAzione";
-import { brand } from "@/src/config";
+import { brand, fasiAllenamento } from "@/src/config";
 import { supabaseClient } from "@/src/lib/supabase";
 import type { Exercise, Training } from "@/src/types/database";
 
@@ -27,6 +27,7 @@ export default function PianoAllenamento() {
   const [sceltaGenerazione, setSceltaGenerazione] = useState(false);
   const [esercizioEspanso, setEsercizioEspanso] = useState<number | null>(null);
   const [rigenerando, setRigenerando] = useState<number | null>(null);
+  const [pesiFasi, setPesiFasi] = useState<PesoFase[]>([]);
   const [salvando, setSalvando] = useState(false);
 
   const carica = useCallback(async () => {
@@ -36,7 +37,10 @@ export default function PianoAllenamento() {
     setArgomento(t?.argomento ?? "");
     const cat = await elencaEsercizi(team.id);
     setCatalogo(cat);
-    if (t?.data) setBloccoPeriodo(await leggiBloccoPerData(team.id, t.data).catch(() => null));
+    if (t?.data) {
+      setBloccoPeriodo(await leggiBloccoPerData(team.id, t.data).catch(() => null));
+      setPesiFasi(await pesiFasiPerData(team.id, t.data, Number(durataObiettivo) || 120).catch(() => []));
+    }
     const piano = await elencaPianoAllenamento(id);
     setEsercizi(piano.map((p) => ({
       exerciseId: p.exercise_id,
@@ -57,6 +61,26 @@ export default function PianoAllenamento() {
 
   function categoriaDi(e: VoceRiepilogoPiano): string {
     return ((e.categoria ?? catalogo.find((c) => c.id === e.exerciseId)?.categoria ?? "") as string).trim() || "Senza categoria";
+  }
+
+  function faseDi(e: VoceRiepilogoPiano): string {
+    return (e.fase ?? catalogo.find((c) => c.id === e.exerciseId)?.fase_consigliata ?? "tecnico") as string;
+  }
+
+  /** Sposta un esercizio in un'altra fase, mettendolo in fondo a quella. */
+  function cambiaFase(indice: number, nuovaFase: string) {
+    setEsercizi((prec) => {
+      const voce = { ...prec[indice], fase: nuovaFase };
+      const senza = prec.filter((_, i) => i !== indice);
+      const ordineFasi = fasiAllenamento.map((f) => f.codice as string);
+      const risultato: VoceRiepilogoPiano[] = [];
+      for (const f of ordineFasi) {
+        risultato.push(...senza.filter((e) => faseDi(e) === f));
+        if (f === nuovaFase) risultato.push(voce);
+      }
+      return risultato;
+    });
+    setEsercizioEspanso(null);
   }
 
   /** Sposta un esercizio nell'ordine di svolgimento, dentro il piano. */
@@ -300,43 +324,35 @@ export default function PianoAllenamento() {
           {esercizi.length === 0 ? (
             <Text style={styles.nota}>Nessun esercizio ancora in questo piano.</Text>
           ) : (
-            // L'ordine mostrato è quello REALE di svolgimento, non
-            // alfabetico: è ciò che si riordina e che verrà salvato.
-            (() => {
-              const ordineCategorie: string[] = [];
-              for (const e of esercizi) { const c = categoriaDi(e); if (!ordineCategorie.includes(c)) ordineCategorie.push(c); }
-              return ordineCategorie.map((categoria, indiceCat) => (
-                <View key={categoria} style={styles.bloccoCategoria}>
-                  <View style={styles.intestazioneCategoria}>
-                    <Text style={styles.etichettaCategoriaPiano}>{categoria}</Text>
-                    <View style={styles.comandiBlocco}>
-                      <Pressable onPress={() => spostaCategoria(categoria, -1)} disabled={indiceCat === 0} hitSlop={8}>
-                        <Text style={[styles.frecciaBlocco, indiceCat === 0 && styles.frecciaSpenta]}>▲</Text>
-                      </Pressable>
-                      <Pressable onPress={() => spostaCategoria(categoria, 1)} disabled={indiceCat === ordineCategorie.length - 1} hitSlop={8}>
-                        <Text style={[styles.frecciaBlocco, indiceCat === ordineCategorie.length - 1 && styles.frecciaSpenta]}>▼</Text>
-                      </Pressable>
-                    </View>
+            fasiAllenamento.map((f) => {
+              const dellaFase = esercizi.map((e, i) => ({ e, i })).filter(({ e }) => faseDi(e) === f.codice);
+              const minutiFase = dellaFase.reduce((s2, { e }) => s2 + (e.durataMinuti ?? 0), 0);
+              const consigliati = pesiFasi.find((p) => p.fase === f.codice);
+              return (
+                <View key={f.codice} style={styles.bloccoFase}>
+                  <View style={styles.intestazioneFase}>
+                    <Text style={styles.titoloFase}>{f.etichetta}</Text>
+                    <Text style={[styles.minutiFase, consigliati && minutiFase > consigliati.minuti_consigliati * 1.3 && styles.minutiEccesso]}>
+                      {minutiFase}′{consigliati ? ` / ~${consigliati.minuti_consigliati}′` : ""}
+                    </Text>
                   </View>
+                  <Text style={styles.descrizioneFase}>{f.descrizione}</Text>
 
-                  {esercizi.map((e, i) => categoriaDi(e) !== categoria ? null : (
+                  {dellaFase.length === 0 ? (
+                    <Text style={styles.faseVuota}>Nessun esercizio in questa fase.</Text>
+                  ) : dellaFase.map(({ e, i }, posInFase) => (
                     <View key={i} style={styles.bloccoEsercizio}>
-                      <View style={styles.rigaEsercizio}>
-                        <View style={styles.frecceEsercizio}>
-                          <Pressable onPress={() => spostaEsercizio(i, -1)} disabled={i === 0} hitSlop={6}>
-                            <Text style={[styles.frecciaPiccola, i === 0 && styles.frecciaSpenta]}>▲</Text>
-                          </Pressable>
-                          <Pressable onPress={() => spostaEsercizio(i, 1)} disabled={i === esercizi.length - 1} hitSlop={6}>
-                            <Text style={[styles.frecciaPiccola, i === esercizi.length - 1 && styles.frecciaSpenta]}>▼</Text>
-                          </Pressable>
-                        </View>
-                        <Pressable style={{ flex: 1 }} onPress={() => setEsercizioEspanso(esercizioEspanso === i ? null : i)}>
+                      <Pressable style={styles.rigaEsercizio} onPress={() => setEsercizioEspanso(esercizioEspanso === i ? null : i)}>
+                        <Text style={styles.numeroOrdine}>{posInFase + 1}</Text>
+                        <View style={{ flex: 1 }}>
                           <Text style={styles.rigaEsercizioNome}>{e.nuovo ? "✨ " : ""}{e.nome}</Text>
-                        </Pressable>
+                          <Text style={styles.sottoEsercizio}>
+                            {categoriaDi(e)}{e.ruoloTarget ? ` · solo ${e.ruoloTarget}` : ""}
+                          </Text>
+                        </View>
                         <TextInput style={styles.inputDurata} keyboardType="numeric" value={String(e.durataMinuti)} onChangeText={(t) => aggiornaDurata(i, t)} />
                         <Text style={styles.nota}>min</Text>
-                        <Pressable onPress={() => rimuoviEsercizio(i)} hitSlop={8}><Text style={styles.rimuovi}>✕</Text></Pressable>
-                      </View>
+                      </Pressable>
 
                       {esercizioEspanso === i && (
                         <View style={styles.dettaglioEsercizio}>
@@ -344,6 +360,30 @@ export default function PianoAllenamento() {
                             {e.descrizione || catalogo.find((c) => c.id === e.exerciseId)?.descrizione || "Nessuna descrizione disponibile."}
                           </Text>
                           {!!e.note && <Text style={styles.noteEsercizio}>Note: {e.note}</Text>}
+
+                          {/* Comandi grandi: le frecce minuscole erano
+                              impossibili da centrare da telefono. */}
+                          <View style={styles.rigaComandiEsercizio}>
+                            <Pressable style={styles.tastoComando} onPress={() => spostaEsercizio(i, -1)} disabled={posInFase === 0}>
+                              <Text style={[styles.tastoComandoTesto, posInFase === 0 && styles.tastoSpento]}>▲ Su</Text>
+                            </Pressable>
+                            <Pressable style={styles.tastoComando} onPress={() => spostaEsercizio(i, 1)} disabled={posInFase === dellaFase.length - 1}>
+                              <Text style={[styles.tastoComandoTesto, posInFase === dellaFase.length - 1 && styles.tastoSpento]}>▼ Giù</Text>
+                            </Pressable>
+                            <Pressable style={styles.tastoComandoDistruttivo} onPress={() => rimuoviEsercizio(i)}>
+                              <Text style={styles.tastoComandoDistruttivoTesto}>Rimuovi</Text>
+                            </Pressable>
+                          </View>
+
+                          <Text style={styles.etichettaMini}>Sposta in un'altra fase</Text>
+                          <View style={styles.rigaFasi}>
+                            {fasiAllenamento.filter((x) => x.codice !== f.codice).map((x) => (
+                              <Pressable key={x.codice} style={styles.chipFase} onPress={() => cambiaFase(i, x.codice)}>
+                                <Text style={styles.chipFaseTesto}>{x.etichetta}</Text>
+                              </Pressable>
+                            ))}
+                          </View>
+
                           <Pressable style={styles.bottoneRigenera} onPress={() => rigeneraSingolo(i)} disabled={rigenerando === i}>
                             <Text style={styles.bottoneRigeneraTesto}>
                               {rigenerando === i ? "Sto cercando un'alternativa…" : "✨ Sostituisci con un altro esercizio"}
@@ -354,8 +394,8 @@ export default function PianoAllenamento() {
                     </View>
                   ))}
                 </View>
-              ));
-            })()
+              );
+            })
           )}
         </View>
 
@@ -454,6 +494,25 @@ const styles = StyleSheet.create({
   bottoneSceltaSecondariaTesto: { color: brand.colors.brand, fontWeight: "800", fontSize: 15 },
   bottoneSceltaNota: { color: brand.colors.muted, fontSize: 11 },
   annullaScelta: { color: brand.colors.muted, fontSize: 13, textAlign: "center", paddingVertical: 8 },
+  bloccoFase: { backgroundColor: brand.colors.surfaceSecondary, borderRadius: 12, padding: 12, marginBottom: 10, gap: 4 },
+  intestazioneFase: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  titoloFase: { color: brand.colors.brandSecondary, fontSize: 13, fontWeight: "800", textTransform: "uppercase" },
+  minutiFase: { color: brand.colors.onSurface, fontSize: 13, fontWeight: "700" },
+  minutiEccesso: { color: brand.colors.warning },
+  descrizioneFase: { color: brand.colors.muted, fontSize: 11, lineHeight: 15, marginBottom: 4 },
+  faseVuota: { color: brand.colors.muted, fontSize: 12, fontStyle: "italic", paddingVertical: 6 },
+  numeroOrdine: { color: brand.colors.muted, fontSize: 12, fontWeight: "700", width: 18 },
+  sottoEsercizio: { color: brand.colors.muted, fontSize: 11 },
+  rigaComandiEsercizio: { flexDirection: "row", gap: 6, marginTop: 4 },
+  tastoComando: { flex: 1, backgroundColor: brand.colors.surfaceTertiary, paddingVertical: 12, borderRadius: 8, alignItems: "center", minHeight: 44, justifyContent: "center" },
+  tastoComandoTesto: { color: brand.colors.onSurface, fontWeight: "700", fontSize: 13 },
+  tastoSpento: { color: brand.colors.muted, opacity: 0.4 },
+  tastoComandoDistruttivo: { flex: 1, borderWidth: 1, borderColor: brand.colors.error, paddingVertical: 12, borderRadius: 8, alignItems: "center", minHeight: 44, justifyContent: "center" },
+  tastoComandoDistruttivoTesto: { color: brand.colors.error, fontWeight: "700", fontSize: 13 },
+  etichettaMini: { color: brand.colors.muted, fontSize: 10, textTransform: "uppercase", marginTop: 6 },
+  rigaFasi: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
+  chipFase: { backgroundColor: brand.colors.surfaceTertiary, paddingVertical: 8, paddingHorizontal: 12, borderRadius: 14 },
+  chipFaseTesto: { color: brand.colors.onSurfaceSecondary, fontSize: 12 },
   bloccoCategoria: { marginBottom: 10 },
   intestazioneCategoria: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   comandiBlocco: { flexDirection: "row", gap: 14 },

@@ -12,7 +12,7 @@ import {
   type VoceSessione,
 } from "@/src/services/trainingPlan";
 import { confermaAzione, avvisa } from "@/src/lib/confermaAzione";
-import { brand } from "@/src/config";
+import { brand, etichetteFase, fasiAllenamento } from "@/src/config";
 import { supabaseClient } from "@/src/lib/supabase";
 import type { Training } from "@/src/types/database";
 
@@ -101,7 +101,7 @@ export default function SessioneAllenamento() {
 
       {inCorso ? (
         <View style={styles.riquadroInCorso}>
-          <Text style={styles.etichettaInCorso}>IN CORSO</Text>
+          <Text style={styles.etichettaInCorso}>IN CORSO · {etichetteFase[inCorso.fase ?? "tecnico"] ?? ""}</Text>
           <Text style={styles.nomeInCorso}>{inCorso.nome}</Text>
           <Text style={[styles.cronometro, oltre && styles.cronometroOltre]}>{mmss(secondiInCorso)}</Text>
           <Text style={styles.sottoCronometro}>
@@ -130,7 +130,17 @@ export default function SessioneAllenamento() {
 
       <Text style={styles.etichettaElenco}>Esercizi della seduta</Text>
       <ScrollView contentContainerStyle={{ paddingHorizontal: 12, paddingBottom: 16 }}>
-        {voci.map((v) => {
+        {fasiAllenamento.map((f) => {
+          const dellaFase = voci.filter((v) => (v.fase ?? "tecnico") === f.codice);
+          if (dellaFase.length === 0) return null;
+          const fattiFase = dellaFase.filter((v) => v.concluso_il).length;
+          return (
+            <View key={f.codice}>
+              <View style={styles.intestazioneFaseSessione}>
+                <Text style={styles.titoloFaseSessione}>{f.etichetta}</Text>
+                <Text style={styles.contatoreFase}>{fattiFase}/{dellaFase.length}</Text>
+              </View>
+              {dellaFase.map((v) => {
           const attivo = inCorso?.id === v.id;
           const fatto = !!v.concluso_il;
           const aperta = espansa === v.id;
@@ -140,7 +150,7 @@ export default function SessioneAllenamento() {
                 <View style={{ flex: 1 }}>
                   <Text style={styles.rigaNome} numberOfLines={aperta ? undefined : 1}>{fatto ? "✓ " : ""}{v.nome}</Text>
                   <Text style={styles.rigaDettaglio}>
-                    {v.durata_minuti ?? 0} min{(attivo || fatto) ? ` · reale ${mmss(secondi(v))}` : ""}
+                    {v.ruolo_target ? `solo ${v.ruolo_target} · ` : ""}{v.durata_minuti ?? 0} min{(attivo || fatto) ? ` · reale ${mmss(secondi(v))}` : ""}
                     {v.descrizione ? (aperta ? "" : " · tocca per la descrizione") : ""}
                   </Text>
                 </View>
@@ -151,6 +161,9 @@ export default function SessioneAllenamento() {
                 )}
               </Pressable>
               {aperta && !!v.descrizione && <Text style={styles.rigaDescrizione}>{v.descrizione}</Text>}
+            </View>
+          );
+              })}
             </View>
           );
         })}
@@ -221,6 +234,9 @@ const styles = StyleSheet.create({
   testoFermo: { color: brand.colors.onSurface, fontSize: 15, fontWeight: "600", textAlign: "center" },
   riepilogoFermo: { color: brand.colors.muted, fontSize: 13 },
 
+  intestazioneFaseSessione: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingTop: 10, paddingBottom: 4 },
+  titoloFaseSessione: { color: brand.colors.brandSecondary, fontSize: 12, fontWeight: "800", textTransform: "uppercase" },
+  contatoreFase: { color: brand.colors.muted, fontSize: 11, fontWeight: "700" },
   etichettaElenco: { color: brand.colors.muted, fontSize: 11, textTransform: "uppercase", paddingHorizontal: 16, paddingBottom: 4 },
   riga: { backgroundColor: brand.colors.surfaceSecondary, borderRadius: 10, marginBottom: 8, paddingHorizontal: 12, borderWidth: 1, borderColor: "transparent" },
   rigaAttiva: { borderColor: brand.colors.brand },

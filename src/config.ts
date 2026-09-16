@@ -113,3 +113,37 @@ export const obiettiviTattici = [
   "Lettura dell'avversario",
   "Gestione dei momenti critici",
 ] as const;
+
+/**
+ * Fasi dell'allenamento. Sono sempre le stesse quattro in ogni seduta:
+ * cambia il peso di ciascuna a seconda del periodo della stagione, non
+ * la loro presenza. L'ordine dell'elenco è l'ordine di svolgimento.
+ */
+export const fasiAllenamento = [
+  {
+    codice: "riscaldamento" as const,
+    etichetta: "Riscaldamento",
+    descrizione: "Mobilità articolare, attivazione del core e della parte alta, andature e balzi controllati per abituare il corpo agli atterraggi.",
+  },
+  {
+    codice: "tecnico" as const,
+    etichetta: "Allenamento tecnico",
+    descrizione: "Fondamentali analitici (palleggio, bagher, servizio, ricezione) e lavoro su agilità e reattività, quando si è freschi.",
+  },
+  {
+    codice: "situazionale" as const,
+    etichetta: "Situazionale e gioco",
+    descrizione: "Esercizi a tema, attacco contro difesa, mini-partite con regole speciali, simulazione di gara.",
+  },
+  {
+    codice: "defaticamento" as const,
+    etichetta: "Defaticamento",
+    descrizione: "Mobilità leggera e respirazione sulle aree più sollecitate dalla seduta, per abbassare il battito e ridurre la tensione.",
+  },
+];
+
+export type FaseAllenamento = (typeof fasiAllenamento)[number]["codice"];
+
+export const etichetteFase: Record<string, string> = Object.fromEntries(
+  fasiAllenamento.map((f) => [f.codice, f.etichetta]),
+);
