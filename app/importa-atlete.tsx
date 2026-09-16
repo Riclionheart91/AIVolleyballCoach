@@ -165,7 +165,7 @@ export default function ImportaAtlete() {
 
           {daAggiornare.length > 0 && (
             <View style={styles.card}>
-              <Text style={styles.sottotitolo}>Atlete con dati diversi da quelli già in anagrafica</Text>
+              <Text style={styles.sottotitolo}>Rosa con dati diversi da quelli già in anagrafica</Text>
               {daAggiornare.map((riga) => {
                 const indice = righeAnalizzate.indexOf(riga);
                 return (
@@ -225,7 +225,7 @@ export default function ImportaAtlete() {
           <Text style={styles.titolo}>Importazione completata</Text>
           <Text style={styles.nota}>{esito.create} atlete create, {esito.aggiornate} aggiornate{esito.errori > 0 ? `, ${esito.errori} con errori` : ""}.</Text>
           <Pressable style={styles.bottone} onPress={() => router.back()}>
-            <Text style={styles.bottoneTesto}>Torna alle atlete</Text>
+            <Text style={styles.bottoneTesto}>Torna alla rosa</Text>
           </Pressable>
         </View>
       )}

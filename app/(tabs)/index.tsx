@@ -55,7 +55,7 @@ export default function Atlete() {
           <>
             {puoScrivere && (
               <Pressable style={styles.rigaEspandi} onPress={() => setMostraArchiviate(!mostraArchiviate)}>
-                <Text style={styles.rigaEspandiTesto}>{mostraArchiviate ? "▾" : "▸"} Atlete archiviate ({archiviate.length})</Text>
+                <Text style={styles.rigaEspandiTesto}>{mostraArchiviate ? "▾" : "▸"} Rosa archiviate ({archiviate.length})</Text>
               </Pressable>
             )}
             {mostraArchiviate && archiviate.map((a) => (

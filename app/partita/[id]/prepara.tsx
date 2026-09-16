@@ -242,14 +242,17 @@ export default function PreparaPartita() {
         {numeroSet === 1 ? (
           <View style={styles.card}>
             <Text style={styles.sottotitolo}>1. Convocati per questa gara</Text>
-            <Text style={styles.nota}>Seleziona chi è convocata (può essere meno dell'intera rosa). Segna anche chi gioca da Libero. Si chiede una sola volta: valida per tutta la partita.</Text>
+            <Text style={styles.nota}>Seleziona chi è convocato (può essere meno dell'intera rosa). Segna anche chi gioca da Libero. Si chiede una sola volta: valida per tutta la partita.</Text>
             {atlete.map((a) => (
               <View key={a.id} style={styles.rigaConvocata}>
                 <Pressable style={styles.rigaConvocataInfo} onPress={() => toggleConvocata(a.id)}>
                   <View style={[styles.checkbox, convocateIds.has(a.id) && styles.checkboxAttivo]}>
                     {convocateIds.has(a.id) && <Text style={styles.checkboxSpunta}>✓</Text>}
                   </View>
-                  <Text style={styles.rigaConvocataTesto}>{a.numero_maglia ? `#${a.numero_maglia} ` : ""}{a.nome} {a.cognome}</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.rigaConvocataTesto}>{a.numero_maglia ? `#${a.numero_maglia} ` : ""}{a.nome} {a.cognome}</Text>
+                    <Text style={styles.rigaConvocataRuolo}>{a.ruolo_campo ?? "ruolo non indicato"}</Text>
+                  </View>
                 </Pressable>
                 {convocateIds.has(a.id) && (
                   <Pressable onPress={() => toggleLibero(a.id)}>
@@ -268,12 +271,12 @@ export default function PreparaPartita() {
 
         {!mostraFormazione ? (
           <Pressable style={styles.bottoneApriFormazione} onPress={() => setMostraFormazione(true)} disabled={convocateIds.size < 6}>
-            <Text style={styles.bottoneApriFormazioneTesto}>{convocateIds.size < 6 ? `Servono almeno 6 convocate (${convocateIds.size}/6)` : "2. Imposta formazione iniziale →"}</Text>
+            <Text style={styles.bottoneApriFormazioneTesto}>{convocateIds.size < 6 ? `Servono almeno 6 convocati (${convocateIds.size}/6)` : "2. Imposta formazione iniziale →"}</Text>
           </Pressable>
         ) : (
           <View style={styles.card}>
             <Text style={styles.sottotitolo}>2. Formazione iniziale (tocca una posizione)</Text>
-            <Text style={styles.nota}>Tocca una casella del campo, poi scegli la convocata da mettere lì. La posizione 1 è la zona di battuta. Una giocatrice già posizionata non compare più tra le scelte per un'altra casella.</Text>
+            <Text style={styles.nota}>Tocca una casella del campo, poi scegli chi mettere lì. La posizione 1 è la zona di battuta. Chi è già posizionato non compare più tra le scelte per un'altra casella.</Text>
             <View style={styles.rigaAzioniCampo}>
               <Pressable onPress={svuotaFormazione} style={styles.bottoneAzioneCampo}><Text style={styles.bottoneAzioneCampoTesto}>🗑 Svuota tutto</Text></Pressable>
               <Pressable onPress={ruotaFormazioneDiUnaPosizione} style={styles.bottoneAzioneCampo}><Text style={styles.bottoneAzioneCampoTesto}>↻ Ruota di 1</Text></Pressable>
@@ -326,10 +329,10 @@ export default function PreparaPartita() {
               keyExtractor={(a) => a.id}
               renderItem={({ item }) => (
                 <Pressable style={styles.rigaSceltaAtleta} onPress={() => assegnaPosizione(item.id)}>
-                  <Text style={styles.rigaSceltaAtletaTesto}>{item.numero_maglia ? `#${item.numero_maglia} ` : ""}{item.nome} {item.cognome}</Text>
+                  <Text style={styles.rigaSceltaAtletaTesto}>{item.numero_maglia ? `#${item.numero_maglia} ` : ""}{item.nome} {item.cognome}{item.ruolo_campo ? ` · ${item.ruolo_campo}` : ""}</Text>
                 </Pressable>
               )}
-              ListEmptyComponent={<Text style={styles.nota}>Tutte le convocate sono già posizionate altrove.</Text>}
+              ListEmptyComponent={<Text style={styles.nota}>Sono già tutti posizionati altrove.</Text>}
             />
             <Pressable onPress={() => setPosizioneInModifica(null)}><Text style={styles.linkAnnulla}>Chiudi</Text></Pressable>
           </View>
@@ -350,6 +353,7 @@ const styles = StyleSheet.create({
   rigaConvocata: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: brand.colors.border },
   rigaConvocataInfo: { flexDirection: "row", alignItems: "center", gap: 8, flex: 1 },
   rigaConvocataTesto: { color: brand.colors.onSurface, fontSize: 14 },
+  rigaConvocataRuolo: { color: brand.colors.muted, fontSize: 11 },
   checkbox: { width: 20, height: 20, borderRadius: 5, borderWidth: 2, borderColor: brand.colors.brand, alignItems: "center", justifyContent: "center" },
   checkboxAttivo: { backgroundColor: brand.colors.brand },
   checkboxSpunta: { color: "#000", fontWeight: "800", fontSize: 12 },

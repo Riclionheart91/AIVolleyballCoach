@@ -81,7 +81,7 @@ export default function SchedaAtleta() {
 
   function chiediArchiviazione() {
     if (!atleta) return;
-    confermaAzione("Archiviare l'atleta?", `"${atleta.nome} ${atleta.cognome}" non comparirà più negli elenchi attivi. Puoi ripristinarla in qualunque momento dalla sezione "Atlete archiviate".`, "Archivia", async () => {
+    confermaAzione("Archiviare l'atleta?", `"${atleta.nome} ${atleta.cognome}" non comparirà più negli elenchi attivi. Puoi ripristinarla in qualunque momento dalla sezione "Archiviati".`, "Archivia", async () => {
       try { await archiviaAtleta(atleta.id); router.back(); } catch (e) { avvisa("Errore", (e as Error).message); }
     }, true);
   }
@@ -110,7 +110,7 @@ export default function SchedaAtleta() {
     <View style={styles.container}>
       <View style={styles.header}>
         <Pressable onPress={tornaIndietro} hitSlop={12}>
-          <Text style={styles.indietro}>← Atlete</Text>
+          <Text style={styles.indietro}>← Rosa</Text>
         </Pressable>
         {inModifica && puoScrivere && (
           <View style={{ flexDirection: "row", gap: 16 }}>

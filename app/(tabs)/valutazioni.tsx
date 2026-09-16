@@ -106,7 +106,7 @@ function SezioneCicloValutazione({ teamId }: { teamId: string }) {
       )}
 
       {daValutare.length === 0 ? (
-        <Text style={styles.vuoto}>Tutte le atlete sono state valutate di recente.</Text>
+        <Text style={styles.vuoto}>Sono tutti valutati di recente.</Text>
       ) : (
         <>
           {daMostrare.map((a) => (
@@ -326,7 +326,7 @@ function SezioneValutazionePersonale({ athleteId }: { athleteId: string }) {
   );
 }
 
-/** Vista del presidente: sola lettura su tutte le atlete, nessun controllo di scrittura. */
+/** Vista del presidente: sola lettura su tutte la rosa, nessun controllo di scrittura. */
 function SezioneValutazionePresidente({ teamId }: { teamId: string }) {
   const [atlete, setAtlete] = useState<Athlete[]>([]);
   const [atletaSelId, setAtletaSelId] = useState<string | null>(null);

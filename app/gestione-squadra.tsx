@@ -14,7 +14,7 @@ const RUOLI_COLLABORATORE: Ruolo[] = ["allenatore", "vice_allenatore", "presiden
 /**
  * Gestione della squadra: chi ha accesso e con quale profilo.
  * Separata in due parti perché rispondono a bisogni diversi —
- * i collaboratori si invitano per email, mentre le atlete esistono già
+ * i collaboratori si invitano per email, mentre la rosa esistono già
  * in anagrafica e vanno solo collegate a un account.
  */
 export default function GestioneSquadra() {
@@ -147,8 +147,8 @@ export default function GestioneSquadra() {
         </View>
 
         <View style={styles.card}>
-          <Text style={styles.sezione}>Atlete ({atlete.length})</Text>
-          <Text style={styles.nota}>Un tocco invita l'atleta se ha già l'email in anagrafica; altrimenti la chiede e la salva.</Text>
+          <Text style={styles.sezione}>Rosa ({atlete.length})</Text>
+          <Text style={styles.nota}>Un tocco invia l'invito se l'email è già in anagrafica; altrimenti la chiede e la salva.</Text>
           {atlete.map((a) => {
             const collegata = atleteCollegate.has(a.id);
             const invitata = invitiPerAtleta.get(a.id);
@@ -162,7 +162,15 @@ export default function GestioneSquadra() {
                   </Text>
                 </View>
                 {collegata ? (
-                  <Text style={styles.statoOk}>✓</Text>
+                  <Pressable
+                    onPress={() => {
+                      const m = membri.find((x) => x.atleta_id === a.id);
+                      if (m) chiediRimozione(m);
+                    }}
+                    hitSlop={8}
+                  >
+                    <Text style={styles.azioneAnnulla}>Revoca accesso</Text>
+                  </Pressable>
                 ) : invitata ? (
                   <Pressable onPress={async () => { await annullaInvito(invitata.id); carica(); }} hitSlop={8}>
                     <Text style={styles.azioneAnnulla}>Annulla</Text>
@@ -230,7 +238,7 @@ export default function GestioneSquadra() {
             <Text style={styles.nota}>Viene salvata in anagrafica e usata subito per l'invito.</Text>
             <TextInput
               style={styles.input}
-              placeholder="Email Google dell'atleta"
+              placeholder="Email Google"
               placeholderTextColor={brand.colors.muted}
               autoCapitalize="none"
               keyboardType="email-address"

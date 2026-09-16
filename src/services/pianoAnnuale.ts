@@ -245,12 +245,12 @@ export async function generaBlocchiGuidatoAI(
   dataInizio: string,
   dataFine: string,
   risposte: RisposteGuida,
-  numeroAtlete: number,
+  numeroRosa: number,
   istruzioniExtra?: string,
 ): Promise<RisultatoGenerazioneBlocchi> {
   const prompt =
     `Sei un preparatore di pallavolo. Costruisci la periodizzazione dal ${dataInizio} al ${dataFine}.\n` +
-    `Squadra: ${numeroAtlete} atlete, livello "${risposte.livello}", ${risposte.seduteSettimana} sedute a settimana. ` +
+    `Squadra: ${numeroRosa} atlete, livello "${risposte.livello}", ${risposte.seduteSettimana} sedute a settimana. ` +
     `Obiettivo principale della stagione: "${risposte.obiettivoStagione}".\n\n` +
     `Gli obiettivi di ogni blocco devono essere scelti ESCLUSIVAMENTE da questi elenchi, copiati alla lettera:\n` +
     `TECNICI: ${obiettiviTecnici.join(" | ")}\n` +

@@ -23,7 +23,7 @@ export default function RootLayout() {
         <Stack.Screen name="pianificazione-annuale" options={{ headerShown: false }} />
         <Stack.Screen name="campionati" options={{ headerShown: false }} />
         <Stack.Screen name="gestione-squadra" options={{ headerShown: false }} />
-        <Stack.Screen name="importa-atlete" options={{ headerShown: true, title: "Importa atlete" }} />
+        <Stack.Screen name="importa-atlete" options={{ headerShown: true, title: "Importa rosa" }} />
       </Stack>
     </AuthProvider>
   );

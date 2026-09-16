@@ -185,3 +185,23 @@ export async function verificaFormazione(setId: string): Promise<AvvisoFormazion
   if (error) return [];
   return data ?? [];
 }
+
+export interface LiberoInCampo { libero_id: string; titolare_id: string; posizione: number | null }
+
+/** Chi è il Libero attualmente in campo e chi ha rimpiazzato, se c'è. */
+export async function liberoInCampo(setId: string): Promise<LiberoInCampo | null> {
+  const { data, error } = await supabaseClient.rpc("libero_in_campo", { p_set_id: setId });
+  if (error) return null;
+  return (data && data.length > 0) ? data[0] : null;
+}
+
+/** Il Libero entra al posto di chi è in seconda linea: non consuma sostituzioni ed è ripetibile. */
+export async function rimpiazzaConLibero(setId: string, liberoId: string, titolareId: string): Promise<void> {
+  const { error } = await supabaseClient.rpc("rimpiazza_con_libero", { p_set_id: setId, p_libero_id: liberoId, p_titolare_id: titolareId });
+  if (error) throw error;
+}
+
+export async function faiUscireLibero(setId: string): Promise<void> {
+  const { error } = await supabaseClient.rpc("fai_uscire_libero", { p_set_id: setId });
+  if (error) throw error;
+}

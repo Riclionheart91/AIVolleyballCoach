@@ -119,7 +119,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: "Atlete",
+          title: "Rosa",
           tabBarIcon: ({ color, size }) => <Ionicons name="people" color={color} size={size} />,
           // Su richiesta: un'atleta non gestisce il roster, l'ha in
           // sola lettura tramite l'invito già collegato alla propria

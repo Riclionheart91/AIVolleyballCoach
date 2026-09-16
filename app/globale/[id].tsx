@@ -160,7 +160,7 @@ export default function GlobaleAllenamento() {
       async () => {
         try {
           const n = await chiudiGlobale(globale.id, true);
-          avvisa("Globale chiuso", n > 0 ? `${n} proposte di valutazione create.` : "Nessuna proposta: servono almeno 3 azioni per atleta e fondamentale.");
+          avvisa("Globale chiuso", n > 0 ? `${n} proposte di valutazione create.` : "Nessuna proposta: servono almeno 3 azioni per persona e fondamentale.");
           router.back();
         } catch (e) { avvisa("Errore", (e as Error).message); }
       },
@@ -184,7 +184,7 @@ export default function GlobaleAllenamento() {
       <ScrollView contentContainerStyle={{ padding: 12, gap: 10, paddingBottom: 40 }}>
         {!inGioco && (
           <Text style={styles.nota}>
-            Componi le due squadre toccando le caselle dei campi: servono 6 giocatrici per parte. La posizione 1 è la zona di battuta.
+            Componi le due squadre toccando le caselle dei campi: servono 6 persone per parte. La posizione 1 è la zona di battuta.
           </Text>
         )}
 
@@ -303,7 +303,7 @@ export default function GlobaleAllenamento() {
                 </Pressable>
               ))}
               {atlete.filter((a) => !giaSchierate.has(a.id)).length === 0 && (
-                <Text style={styles.nota}>Tutte le atlete sono già schierate.</Text>
+                <Text style={styles.nota}>Tutte la rosa sono già schierate.</Text>
               )}
             </ScrollView>
             <Pressable onPress={() => setSceltaPosizione(null)}><Text style={styles.chiudi}>Annulla</Text></Pressable>

@@ -25,6 +25,8 @@ export default function PianoAllenamento() {
   const [bloccoPeriodo, setBloccoPeriodo] = useState<{ nome: string; tipo: string } | null>(null);
   const [istruzioniExtra, setIstruzioniExtra] = useState("");
   const [sceltaGenerazione, setSceltaGenerazione] = useState(false);
+  const [esercizioEspanso, setEsercizioEspanso] = useState<number | null>(null);
+  const [rigenerando, setRigenerando] = useState<number | null>(null);
   const [salvando, setSalvando] = useState(false);
 
   const carica = useCallback(async () => {
@@ -51,6 +53,71 @@ export default function PianoAllenamento() {
   function aggiungiEsercizio(ex: Exercise) {
     setEsercizi((prev) => [...prev, { exerciseId: ex.id, nome: ex.nome, durataMinuti: 15, note: "" }]);
     setMostraCatalogo(false);
+  }
+
+  function categoriaDi(e: VoceRiepilogoPiano): string {
+    return ((e.categoria ?? catalogo.find((c) => c.id === e.exerciseId)?.categoria ?? "") as string).trim() || "Senza categoria";
+  }
+
+  /** Sposta un esercizio nell'ordine di svolgimento, dentro il piano. */
+  function spostaEsercizio(indice: number, direzione: -1 | 1) {
+    setEsercizi((prec) => {
+      const nuovo = [...prec];
+      const dest = indice + direzione;
+      if (dest < 0 || dest >= nuovo.length) return prec;
+      [nuovo[indice], nuovo[dest]] = [nuovo[dest], nuovo[indice]];
+      return nuovo;
+    });
+  }
+
+  /**
+   * Sposta un'intera categoria tenendo insieme i suoi esercizi: in
+   * allenamento si ragiona per blocchi (prima tutta la battuta, poi
+   * tutta la ricezione), non per singole righe.
+   */
+  function spostaCategoria(categoria: string, direzione: -1 | 1) {
+    setEsercizi((prec) => {
+      const ordine: string[] = [];
+      for (const e of prec) { const c = categoriaDi(e); if (!ordine.includes(c)) ordine.push(c); }
+      const i = ordine.indexOf(categoria);
+      const j = i + direzione;
+      if (i === -1 || j < 0 || j >= ordine.length) return prec;
+      [ordine[i], ordine[j]] = [ordine[j], ordine[i]];
+      return ordine.flatMap((c) => prec.filter((e) => categoriaDi(e) === c));
+    });
+  }
+
+  /**
+   * Sostituisce un singolo esercizio con un'alternativa dello stesso
+   * tipo, lasciando intatto il resto del piano: capita di avere una
+   * seduta buona con una sola esercitazione che non convince.
+   */
+  async function rigeneraSingolo(indice: number) {
+    if (!team) return;
+    const attuale = esercizi[indice];
+    setRigenerando(indice);
+    try {
+      const daEvitare = esercizi.map((e) => e.nome).join(", ");
+      const r = await generaPianoAllenamentoAI(
+        team.id,
+        `${categoriaDi(attuale)} — un solo esercizio alternativo a "${attuale.nome}"`,
+        attuale.durataMinuti,
+        catalogo,
+        training?.data,
+        `Proponi UN SOLO esercizio, della stessa categoria e di durata simile. Non proporre nessuno di questi, già presenti nel piano: ${daEvitare}.`,
+      );
+      if (r.errore || !r.esercizi || r.esercizi.length === 0) {
+        avvisa("Nessuna alternativa", r.messaggio ?? "L'assistente non ha proposto alternative.");
+        return;
+      }
+      const sostituto = { ...r.esercizi[0], durataMinuti: attuale.durataMinuti };
+      setEsercizi((prec) => prec.map((e, i) => (i === indice ? sostituto : e)));
+      setEsercizioEspanso(null);
+    } catch (e) {
+      avvisa("Errore", (e as Error).message);
+    } finally {
+      setRigenerando(null);
+    }
   }
 
   function rimuoviEsercizio(indice: number) {
@@ -216,7 +283,7 @@ export default function PianoAllenamento() {
           <TextInput
             style={[styles.input, { minHeight: 56, textAlignVertical: "top" }]}
             multiline
-            placeholder="Indicazioni per questa seduta (facoltativo): es. poche atlete disponibili, lavorare sul muro, niente salti per infortuni"
+            placeholder="Indicazioni per questa seduta (facoltativo): es. pochi disponibili, lavorare sul muro, niente salti per infortuni"
             placeholderTextColor={brand.colors.muted}
             value={istruzioniExtra}
             onChangeText={setIstruzioniExtra}
@@ -233,25 +300,62 @@ export default function PianoAllenamento() {
           {esercizi.length === 0 ? (
             <Text style={styles.nota}>Nessun esercizio ancora in questo piano.</Text>
           ) : (
-            Object.entries(
-              esercizi.reduce<Record<string, { e: VoceRiepilogoPiano; i: number }[]>>((acc, e, i) => {
-                const cat = catalogo.find((c) => c.id === e.exerciseId)?.categoria?.trim() || "Senza categoria";
-                (acc[cat] ??= []).push({ e, i });
-                return acc;
-              }, {}),
-            ).sort(([a], [b]) => a.localeCompare(b)).map(([categoria, voci]) => (
-              <View key={categoria}>
-                <Text style={styles.etichettaCategoriaPiano}>{categoria}</Text>
-                {voci.map(({ e, i }) => (
-                  <View key={i} style={styles.rigaEsercizio}>
-                    <Text style={styles.rigaEsercizioNome}>{e.nuovo ? "✨ " : ""}{e.nome}</Text>
-                    <TextInput style={styles.inputDurata} keyboardType="numeric" value={String(e.durataMinuti)} onChangeText={(t) => aggiornaDurata(i, t)} />
-                    <Text style={styles.nota}>min</Text>
-                    <Pressable onPress={() => rimuoviEsercizio(i)}><Text style={styles.rimuovi}>✕</Text></Pressable>
+            // L'ordine mostrato è quello REALE di svolgimento, non
+            // alfabetico: è ciò che si riordina e che verrà salvato.
+            (() => {
+              const ordineCategorie: string[] = [];
+              for (const e of esercizi) { const c = categoriaDi(e); if (!ordineCategorie.includes(c)) ordineCategorie.push(c); }
+              return ordineCategorie.map((categoria, indiceCat) => (
+                <View key={categoria} style={styles.bloccoCategoria}>
+                  <View style={styles.intestazioneCategoria}>
+                    <Text style={styles.etichettaCategoriaPiano}>{categoria}</Text>
+                    <View style={styles.comandiBlocco}>
+                      <Pressable onPress={() => spostaCategoria(categoria, -1)} disabled={indiceCat === 0} hitSlop={8}>
+                        <Text style={[styles.frecciaBlocco, indiceCat === 0 && styles.frecciaSpenta]}>▲</Text>
+                      </Pressable>
+                      <Pressable onPress={() => spostaCategoria(categoria, 1)} disabled={indiceCat === ordineCategorie.length - 1} hitSlop={8}>
+                        <Text style={[styles.frecciaBlocco, indiceCat === ordineCategorie.length - 1 && styles.frecciaSpenta]}>▼</Text>
+                      </Pressable>
+                    </View>
                   </View>
-                ))}
-              </View>
-            ))
+
+                  {esercizi.map((e, i) => categoriaDi(e) !== categoria ? null : (
+                    <View key={i} style={styles.bloccoEsercizio}>
+                      <View style={styles.rigaEsercizio}>
+                        <View style={styles.frecceEsercizio}>
+                          <Pressable onPress={() => spostaEsercizio(i, -1)} disabled={i === 0} hitSlop={6}>
+                            <Text style={[styles.frecciaPiccola, i === 0 && styles.frecciaSpenta]}>▲</Text>
+                          </Pressable>
+                          <Pressable onPress={() => spostaEsercizio(i, 1)} disabled={i === esercizi.length - 1} hitSlop={6}>
+                            <Text style={[styles.frecciaPiccola, i === esercizi.length - 1 && styles.frecciaSpenta]}>▼</Text>
+                          </Pressable>
+                        </View>
+                        <Pressable style={{ flex: 1 }} onPress={() => setEsercizioEspanso(esercizioEspanso === i ? null : i)}>
+                          <Text style={styles.rigaEsercizioNome}>{e.nuovo ? "✨ " : ""}{e.nome}</Text>
+                        </Pressable>
+                        <TextInput style={styles.inputDurata} keyboardType="numeric" value={String(e.durataMinuti)} onChangeText={(t) => aggiornaDurata(i, t)} />
+                        <Text style={styles.nota}>min</Text>
+                        <Pressable onPress={() => rimuoviEsercizio(i)} hitSlop={8}><Text style={styles.rimuovi}>✕</Text></Pressable>
+                      </View>
+
+                      {esercizioEspanso === i && (
+                        <View style={styles.dettaglioEsercizio}>
+                          <Text style={styles.testoDettaglio}>
+                            {e.descrizione || catalogo.find((c) => c.id === e.exerciseId)?.descrizione || "Nessuna descrizione disponibile."}
+                          </Text>
+                          {!!e.note && <Text style={styles.noteEsercizio}>Note: {e.note}</Text>}
+                          <Pressable style={styles.bottoneRigenera} onPress={() => rigeneraSingolo(i)} disabled={rigenerando === i}>
+                            <Text style={styles.bottoneRigeneraTesto}>
+                              {rigenerando === i ? "Sto cercando un'alternativa…" : "✨ Sostituisci con un altro esercizio"}
+                            </Text>
+                          </Pressable>
+                        </View>
+                      )}
+                    </View>
+                  ))}
+                </View>
+              ));
+            })()
           )}
         </View>
 
@@ -350,6 +454,19 @@ const styles = StyleSheet.create({
   bottoneSceltaSecondariaTesto: { color: brand.colors.brand, fontWeight: "800", fontSize: 15 },
   bottoneSceltaNota: { color: brand.colors.muted, fontSize: 11 },
   annullaScelta: { color: brand.colors.muted, fontSize: 13, textAlign: "center", paddingVertical: 8 },
+  bloccoCategoria: { marginBottom: 10 },
+  intestazioneCategoria: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  comandiBlocco: { flexDirection: "row", gap: 14 },
+  frecciaBlocco: { color: brand.colors.brand, fontSize: 15, fontWeight: "700" },
+  frecciaPiccola: { color: brand.colors.brand, fontSize: 11, fontWeight: "700" },
+  frecciaSpenta: { color: brand.colors.surfaceTertiary },
+  frecceEsercizio: { gap: 2, alignItems: "center" },
+  bloccoEsercizio: { borderBottomWidth: 1, borderBottomColor: brand.colors.border },
+  dettaglioEsercizio: { paddingBottom: 10, paddingLeft: 24, gap: 6 },
+  testoDettaglio: { color: brand.colors.onSurfaceSecondary, fontSize: 13, lineHeight: 19 },
+  noteEsercizio: { color: brand.colors.muted, fontSize: 12 },
+  bottoneRigenera: { borderWidth: 1, borderColor: brand.colors.brandSecondary, borderRadius: 8, paddingVertical: 8, alignItems: "center" },
+  bottoneRigeneraTesto: { color: brand.colors.brandSecondary, fontSize: 12, fontWeight: "700" },
   etichettaCategoriaPiano: { color: brand.colors.brandSecondary, fontSize: 12, fontWeight: "700", marginTop: 8, textTransform: "uppercase" },
   rigaEsercizio: { flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 6, borderTopWidth: 1, borderTopColor: brand.colors.border },
   rigaEsercizioNome: { color: brand.colors.onSurface, flex: 1, fontSize: 14 },

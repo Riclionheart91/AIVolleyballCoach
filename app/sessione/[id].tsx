@@ -26,7 +26,7 @@ function mmss(secondi: number): string {
  * Esecuzione della seduta, pensata prima per lo smartphone: si usa in
  * piedi, con una mano, spesso con poca luce. Perciò l'esercizio in
  * corso occupa la parte alta con la DESCRIZIONE sempre leggibile (per
- * spiegarlo alle atlete senza uscire dalla schermata), il cronometro è
+ * spiegarlo alla rosa senza uscire dalla schermata), il cronometro è
  * grande, e i comandi stanno in basso dove arriva il pollice.
  */
 export default function SessioneAllenamento() {

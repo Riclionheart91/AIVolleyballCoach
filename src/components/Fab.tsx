@@ -3,7 +3,7 @@ import { brand } from "@/src/config";
 
 interface Props {
   onPress: () => void;
-  /** Se ci sono due FAB nella stessa schermata (es. Atlete: aggiungi + importa), questo sposta il secondo più in alto per non sovrapporli. */
+  /** Se ci sono due FAB nella stessa schermata (es. Rosa: aggiungi + importa), questo sposta il secondo più in alto per non sovrapporli. */
   posizione?: "principale" | "secondaria";
   icona?: string;
   colore?: string;

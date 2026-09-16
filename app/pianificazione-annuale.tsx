@@ -127,7 +127,7 @@ export default function PianificazioneAnnuale() {
       const intervallo = setInterval(() => setPercentuale((p) => (p < 90 ? p + Math.max(1, Math.round((90 - p) * 0.15)) : p)), 400);
       try {
         const atlete = await elencaAtlete(team!.id);
-        const contesto = `Squadra di ${atlete.length} atlete. Stagione: ${stagioneAttiva?.nome ?? "non specificata"}.`;
+        const contesto = `Squadra di ${atlete.length} persone. Stagione: ${stagioneAttiva?.nome ?? "non specificata"}.`;
         const inizio = stagioneAttiva?.data_apertura?.slice(0, 10) || oggiIso();
         const r = await generaBlocchiAI(team!.id, inizio, fraMesi(9), contesto);
         if (r.errore || !r.blocchi) { avvisa("Generazione non riuscita", r.messaggio ?? "Errore sconosciuto"); return; }

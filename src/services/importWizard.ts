@@ -27,7 +27,7 @@ export const CAMPI_IMPORTABILI: { campo: CampoImportabile; etichetta: string; ob
 // vengono scartate in automatico (staff, dirigenti, allenatori...)
 // invece di dover essere deselezionate una per una a mano.
 const SINONIMI_FILTRO_TIPO_PERSONA = ["impiego", "ruolopersona", "tipo", "type", "categoria"];
-// Radici normalizzate che indicano "è una giocatrice": basta che il
+// Radici normalizzate che indicano "questa persona gioca": basta che il
 // valore della colonna Impiego ne contenga una (copre "Giocatore",
 // "Giocatrice", "Atleta", "Player" in qualunque forma/plurale).
 const RADICI_GIOCATORE = ["giocat", "atlet", "player"];
@@ -174,7 +174,7 @@ function normalizzaRuoloCampo(valoreFile: string | undefined): RuoloCampo | null
 }
 
 /**
- * Confronta ogni riga del file con le atlete già censite (dedup su
+ * Confronta ogni riga del file con la rosa già censite (dedup su
  * codice fiscale, fallback nome+cognome) e prepara il riepilogo che il
  * wizard mostrerà per la conferma. Se è stata indicata una colonna
  * "tipo persona" (Impiego), le righe che non sembrano una giocatrice

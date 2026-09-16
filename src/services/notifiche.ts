@@ -76,7 +76,7 @@ export async function calcolaNotifiche(teamId: string, puoScrivere: boolean): Pr
       notifiche.push({
         id: "ciclo-valutazione", tipo: "ciclo_valutazione", urgente: false,
         titolo: "Valutazioni da aggiornare",
-        descrizione: `${daValutare.length} atleta/e oltre la cadenza${maiValutate > 0 ? ` (${maiValutate} mai valutata/e)` : ""}`,
+        descrizione: `${daValutare.length} persone oltre la cadenza${maiValutate > 0 ? ` (${maiValutate} mai valutate)` : ""}`,
         link: "/(tabs)/valutazioni",
       });
     }

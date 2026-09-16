@@ -24,7 +24,7 @@ export async function concludiStagione(seasonId: string): Promise<void> {
   if (error) throw error;
 }
 
-/** Genera la baseline per tutte le atlete attive; ritorna quante righe ha creato. */
+/** Genera la baseline per tutte la rosa attive; ritorna quante righe ha creato. */
 export async function generaBaselineStagione(seasonId: string): Promise<number> {
   const { data, error } = await supabaseClient.rpc("genera_baseline_stagione", { p_season_id: seasonId });
   if (error) throw error;

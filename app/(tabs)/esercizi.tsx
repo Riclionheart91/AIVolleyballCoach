@@ -124,7 +124,7 @@ export default function Esercizi() {
           carenze: carenze.map((c) => ({ fondamentale: c.fondamentale, media: Number(c.media) })),
         };
         if (atletaConCarenze.carenze.length === 0) {
-          avvisa("Nessuna valutazione", `Per ${atletaAi.nome} non ci sono valutazioni recenti: senza quelle non posso individuare le carenze. Procedo con esercizi generici per il suo ruolo.`);
+          avvisa("Nessuna valutazione", `Per ${atletaAi.nome} non ci sono valutazioni recenti: senza quelle non posso individuare le carenze. Procedo con esercizi generici per il ruolo.`);
         }
       }
 
@@ -290,7 +290,7 @@ export default function Esercizi() {
                   ))}
                 </View>
 
-                <Text style={styles.etichettaOpzione}>Correttivi per una singola atleta (dalle sue carenze)</Text>
+                <Text style={styles.etichettaOpzione}>Correttivi individuali (dalle carenze rilevate)</Text>
                 <View style={styles.chipRiga}>
                   <Pressable onPress={() => setAtletaAi(null)} style={[styles.chip, !atletaAi && styles.chipAttivo]}>
                     <Text style={[styles.chipTesto, !atletaAi && styles.chipTestoAttivo]}>Nessuna</Text>

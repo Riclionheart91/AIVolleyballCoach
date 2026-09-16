@@ -47,7 +47,7 @@ export interface AndamentoSquadraVoce {
   numero_valutazioni: number;
 }
 
-/** Aggregato di squadra per fondamentale/mese — MAI scomposto per singola atleta. Visibile a qualunque ruolo del team, incluse le atlete (RPC lo garantisce lato server). */
+/** Aggregato di squadra per fondamentale/mese — MAI scomposto per singola atleta. Visibile a qualunque ruolo del team, incluse la rosa (RPC lo garantisce lato server). */
 export async function andamentoSquadra(teamId: string): Promise<AndamentoSquadraVoce[]> {
   const { data, error } = await supabaseClient.rpc("andamento_squadra_valutazioni", { p_team_id: teamId });
   if (error) throw error;
@@ -167,7 +167,7 @@ export interface AtletaDaValutare {
   giorni_dall_ultima: number | null;
 }
 
-/** Atlete mai valutate o la cui valutazione più recente supera la cadenza impostata per la squadra (30 giorni di default). */
+/** Rosa mai valutate o la cui valutazione più recente supera la cadenza impostata per la squadra (30 giorni di default). */
 export async function atleteDaValutare(teamId: string): Promise<AtletaDaValutare[]> {
   const { data, error } = await supabaseClient.rpc("atlete_da_valutare", { p_team_id: teamId });
   if (error) throw error;
