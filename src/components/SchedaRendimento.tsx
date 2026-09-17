@@ -24,7 +24,12 @@ function coloreLivello(valore: number): string {
  * "modificabile" è vero solo per l'allenatore: l'atleta vede gli
  * obiettivi ma non può cambiarseli.
  */
-export function SchedaRendimento({ athleteId, nomeAtleta, modificabile }: { athleteId: string; nomeAtleta?: string; modificabile: boolean }) {
+export function SchedaRendimento({ athleteId, nomeAtleta, modificabile, soloRiepilogo = false }: {
+  athleteId: string; nomeAtleta?: string; modificabile: boolean;
+  /** true = mostra solo i tre numeri sintetici, il dettaglio si apre a richiesta. */
+  soloRiepilogo?: boolean;
+}) {
+  const [dettaglioAperto, setDettaglioAperto] = useState(false);
   const [righe, setRighe] = useState<RigaScheda[]>([]);
   const [caricamento, setCaricamento] = useState(true);
   const [inModifica, setInModifica] = useState<RigaScheda | null>(null);
@@ -77,7 +82,15 @@ export function SchedaRendimento({ athleteId, nomeAtleta, modificabile }: { athl
         </View>
       </View>
 
-      {righe.map((r) => {
+      {soloRiepilogo && (
+        <Pressable onPress={() => setDettaglioAperto(!dettaglioAperto)} style={styles.apriDettaglio}>
+          <Text style={styles.apriDettaglioTesto}>
+            {dettaglioAperto ? "▾ Nascondi dettaglio per fondamentale" : "▸ Dettaglio per fondamentale e obiettivi"}
+          </Text>
+        </Pressable>
+      )}
+
+      {(!soloRiepilogo || dettaglioAperto) && righe.map((r) => {
         const valore = r.valore_attuale != null ? Number(r.valore_attuale) : null;
         const percentuale = valore != null ? Math.round((valore / 10) * 100) : 0;
         const percObiettivo = r.obiettivo != null ? Math.round((Number(r.obiettivo) / 10) * 100) : null;
@@ -188,6 +201,8 @@ const styles = StyleSheet.create({
   boxRiepilogo: { flex: 1, backgroundColor: brand.colors.surfaceSecondary, borderRadius: 12, paddingVertical: 12, alignItems: "center" },
   valoreRiepilogo: { color: brand.colors.onSurface, fontSize: 20, fontWeight: "800" },
   etichettaRiepilogo: { color: brand.colors.muted, fontSize: 10, textTransform: "uppercase" },
+  apriDettaglio: { paddingVertical: 10, alignItems: "center" },
+  apriDettaglioTesto: { color: brand.colors.brandSecondary, fontSize: 13, fontWeight: "600" },
   card: { backgroundColor: brand.colors.surfaceSecondary, borderRadius: 12, padding: 14, gap: 8, borderWidth: 1, borderColor: "transparent" },
   cardRecord: { borderColor: brand.colors.warning },
   rigaTitolo: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },

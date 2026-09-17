@@ -157,3 +157,56 @@ export async function generaPianoIndividualeAI(
     return { errore: true, messaggio: "Risposta AI non nel formato atteso." };
   }
 }
+
+/** Quante sedute risultano svolte questa settimana, per ciascun esercizio del piano. */
+export async function svolgimentiDellaSettimana(pianoId: string): Promise<Record<string, number>> {
+  const daQuando = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
+  const { data } = await supabaseClient
+    .from("piano_individuale_svolgimenti")
+    .select("piano_esercizio_id, piano_individuale_esercizi!inner(piano_id)")
+    .gte("data", daQuando)
+    .eq("piano_individuale_esercizi.piano_id", pianoId);
+  const conteggio: Record<string, number> = {};
+  for (const r of (data ?? []) as { piano_esercizio_id: string }[]) {
+    conteggio[r.piano_esercizio_id] = (conteggio[r.piano_esercizio_id] ?? 0) + 1;
+  }
+  return conteggio;
+}
+
+/**
+ * Porta a "quante" le sedute svolte nella settimana per un esercizio.
+ * Le righe hanno una data (con vincolo di unicità per giorno), quindi
+ * aggiungere o togliere significa scrivere su giorni distinti a
+ * ritroso: è il modo più semplice per rappresentare "2 sedute su 3"
+ * senza inventare un'altra tabella.
+ */
+export async function impostaSvolgimentiSettimana(pianoEsercizioId: string, quante: number): Promise<void> {
+  const daQuando = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
+  const { data: esistenti } = await supabaseClient
+    .from("piano_individuale_svolgimenti")
+    .select("id, data")
+    .eq("piano_esercizio_id", pianoEsercizioId)
+    .gte("data", daQuando)
+    .order("data");
+
+  const attuali = esistenti ?? [];
+  if (quante < attuali.length) {
+    const daRimuovere = attuali.slice(quante).map((r) => r.id);
+    if (daRimuovere.length > 0) {
+      const { error } = await supabaseClient.from("piano_individuale_svolgimenti").delete().in("id", daRimuovere);
+      if (error) throw error;
+    }
+    return;
+  }
+
+  const giaUsate = new Set(attuali.map((r) => r.data));
+  const nuove: { piano_esercizio_id: string; data: string }[] = [];
+  for (let giorno = 0; giorno < 7 && attuali.length + nuove.length < quante; giorno++) {
+    const d = new Date(Date.now() - giorno * 86400000).toISOString().slice(0, 10);
+    if (!giaUsate.has(d)) nuove.push({ piano_esercizio_id: pianoEsercizioId, data: d });
+  }
+  if (nuove.length > 0) {
+    const { error } = await supabaseClient.from("piano_individuale_svolgimenti").insert(nuove);
+    if (error) throw error;
+  }
+}

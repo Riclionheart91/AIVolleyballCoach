@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { View, Text, TextInput, Pressable, StyleSheet, ScrollView, ActivityIndicator, Modal, FlatList } from "react-native";
 import { useLocalSearchParams, useFocusEffect, router } from "expo-router";
 import { useAuth } from "@/src/context/AuthContext";
@@ -28,7 +28,12 @@ export default function PianoAllenamento() {
   const [esercizioEspanso, setEsercizioEspanso] = useState<number | null>(null);
   const [rigenerando, setRigenerando] = useState<number | null>(null);
   const [pesiFasi, setPesiFasi] = useState<PesoFase[]>([]);
+  // Il salvataggio differito legge da qui: lo stato dentro setTimeout
+  // sarebbe quello vecchio.
+  const eserciziRef = useRef<VoceRiepilogoPiano[]>([]);
   const [salvando, setSalvando] = useState(false);
+
+  useEffect(() => { eserciziRef.current = esercizi; }, [esercizi]);
 
   const carica = useCallback(async () => {
     if (!id || !team) return;
@@ -85,6 +90,7 @@ export default function PianoAllenamento() {
 
   /** Sposta un esercizio nell'ordine di svolgimento, dentro il piano. */
   function spostaEsercizio(indice: number, direzione: -1 | 1) {
+    let indiceDestinazione = indice;
     setEsercizi((prec) => {
       const fase = faseDi(prec[indice]);
       // Si cerca il vicino DELLA STESSA FASE: scambiare con l'elemento
@@ -96,8 +102,28 @@ export default function PianoAllenamento() {
       if (pos === -1 || dest === undefined) return prec;
       const nuovo = [...prec];
       [nuovo[indice], nuovo[dest]] = [nuovo[dest], nuovo[indice]];
+      indiceDestinazione = dest;
       return nuovo;
     });
+    // L'esercizio aperto segue lo spostamento: prima restava agganciato
+    // alla posizione e si apriva quello che ci era finito dentro.
+    setEsercizioEspanso(indiceDestinazione);
+    salvaOrdine();
+  }
+
+  /**
+   * Salva in silenzio l'ordine corrente. Il riordino è un'azione
+   * minuta e ripetuta: chiedere di premere "Salva" ogni volta faceva
+   * perdere gli spostamenti a chi usciva dalla schermata.
+   */
+  function salvaOrdine() {
+    if (!id) return;
+    setTimeout(async () => {
+      try {
+        const attuali = eserciziRef.current;
+        if (attuali.every((e) => e.exerciseId)) await impostaPianoAllenamento(id, argomento, attuali);
+      } catch { /* silenzioso: l'ordine resta comunque a schermo e il salvataggio esplicito è sempre disponibile */ }
+    }, 0);
   }
 
   /**

@@ -168,7 +168,7 @@ export default function Partite() {
       {andamento.length > 0 && (
         <View style={styles.cardAndamento}>
           <Pressable onPress={() => setMostraAndamento(!mostraAndamento)}>
-            <Text style={styles.sottotitoloSezione}>{mostraAndamento ? "▾" : "▸"} Andamento tra le partite</Text>
+            <Text style={styles.sottotitoloSezione}>{mostraAndamento ? "▾" : "▸"} Rendimento medio per fondamentale</Text>
           </Pressable>
           {mostraAndamento && andamento.slice(0, 8).map((v, i) => (
             <View key={i} style={styles.rigaAndamento}>

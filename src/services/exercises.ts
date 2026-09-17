@@ -36,6 +36,7 @@ export interface EsercizioProposto {
   nome: string;
   categoria: string;
   descrizione: string;
+  fase: string;
 }
 
 export interface RisultatoGenerazioneEsercizi {
@@ -58,8 +59,8 @@ export interface ContestoGenerazione {
   ruolo?: string | null;
   /** Atleta specifica con le sue carenze: genera esercizi correttivi individuali. */
   atleta?: { nome: string; ruolo: string | null; carenze: { fondamentale: string; media: number }[] } | null;
-  /** Momento della seduta: in riscaldamento gli esercizi individuali correttivi trovano spazio naturale. */
-  fase?: "riscaldamento" | "tecnica" | "qualsiasi";
+  /** Fase della seduta a cui destinare gli esercizi. Vuoto = lascia decidere all'AI in base al tipo di esercizio. */
+  fase?: "riscaldamento" | "tecnico" | "situazionale" | "defaticamento" | "qualsiasi";
 }
 
 export async function generaEserciziAI(
@@ -89,11 +90,21 @@ export async function generaEserciziAI(
       `Gli esercizi devono aggredire proprio queste carenze, essere svolgibili individualmente o in coppia, e richiedere poco spazio e poca attrezzatura.\n`
     : "";
 
-  const bloccoFase = contesto?.fase === "riscaldamento"
-    ? `Devono poter essere svolti in RISCALDAMENTO: progressivi, a bassa intensità iniziale, senza carichi massimali né salti ripetuti a freddo.\n`
-    : contesto?.fase === "tecnica"
-      ? `Devono collocarsi nella parte di allenamento tecnico specifico, a intensità piena.\n`
-      : "";
+  // Descrizione esplicita di ciascuna fase: senza, l'AI tende a
+  // etichettare quasi tutto come "tecnico".
+  const DESCRIZIONE_FASI: Record<string, string> = {
+    riscaldamento: "RISCALDAMENTO: mobilità articolare, attivazione del core e della parte alta, andature e balzi controllati. Progressivi, bassa intensità iniziale, niente carichi massimali né salti ripetuti a freddo.",
+    tecnico: "ALLENAMENTO TECNICO: fondamentali analitici (palleggio, bagher, servizio, ricezione, attacco, muro) e lavoro su agilità, velocità e reattività agli stimoli. Intensità piena, si è freschi.",
+    situazionale: "SITUAZIONALE E GIOCO: esercizi a tema, attacco contro difesa, mini-partite con regole speciali, simulazione di gara. C'è opposizione e una situazione di gioco reale.",
+    defaticamento: "DEFATICAMENTO: mobilità leggera e respirazione sulle aree più sollecitate, per abbassare il battito e ridurre la tensione muscolare.",
+  };
+
+  const bloccoFase = contesto?.fase && contesto.fase !== "qualsiasi"
+    ? `Gli esercizi devono appartenere a questa fase della seduta — ${DESCRIZIONE_FASI[contesto.fase]}\n` +
+      `Indica "fase": "${contesto.fase}" per ognuno.\n`
+    : `Per ogni esercizio indica a quale FASE della seduta appartiene, scegliendo con criterio tra:\n` +
+      Object.values(DESCRIZIONE_FASI).map((d) => `- ${d}`).join("\n") + "\n" +
+      `Non usare "tecnico" come ripiego: un esercizio con opposizione o punteggio è situazionale, uno di mobilità o attivazione è riscaldamento.\n`;
 
   const prompt =
     `Sei un allenatore di pallavolo. Proponi ${quanti} esercizi nuovi per la categoria "${categoria}".\n` +
@@ -102,7 +113,7 @@ export async function generaEserciziAI(
       ? `Il catalogo contiene già questi esercizi, NON riproporli né proporne varianti quasi identiche:\n${nomiEsistenti.join(" | ")}\n\n`
       : "") +
     `Rispondi SOLO con JSON, senza altro testo:\n` +
-    `{"esercizi":[{"nome":"...","categoria":"${categoria}","descrizione":"come si svolge, in 2-3 frasi: disposizione, obiettivo, criterio di riuscita"}]}` +
+    `{"esercizi":[{"nome":"...","categoria":"${categoria}","fase":"riscaldamento|tecnico|situazionale|defaticamento","descrizione":"come si svolge, in 2-3 frasi: disposizione, obiettivo, criterio di riuscita"}]}` +
     istruzioniAggiuntive(istruzioniExtra);
 
   const { data: sessione } = await supabaseClient.auth.getSession();
@@ -126,6 +137,9 @@ export async function generaEserciziAI(
         nome: String(e.nome).trim(),
         categoria: String(e.categoria ?? categoria).trim() || categoria,
         descrizione: String(e.descrizione ?? "").trim(),
+        fase: ["riscaldamento", "tecnico", "situazionale", "defaticamento"].includes(String(e.fase))
+          ? String(e.fase)
+          : (contesto?.fase && contesto.fase !== "qualsiasi" ? contesto.fase : "tecnico"),
       }))
       .filter((e: EsercizioProposto) => !giaPresenti.has(normalizza(e.nome)));
 

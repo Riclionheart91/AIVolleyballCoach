@@ -3,7 +3,7 @@ import { View, Text, Pressable, StyleSheet, ActivityIndicator, TextInput } from 
 import { useFocusEffect } from "expo-router";
 import {
   aggiungiEsercizioPiano, cambiaStatoPiano, creaPianoIndividuale, elencaEserciziPiano,
-  elencaPianiIndividuali, eliminaPianoIndividuale, generaPianoIndividualeAI, segnaSvolto, svolgimentiOggi,
+  elencaPianiIndividuali, eliminaPianoIndividuale, generaPianoIndividualeAI, impostaSvolgimentiSettimana, svolgimentiDellaSettimana,
   type EsercizioPiano, type PianoIndividuale,
 } from "@/src/services/pianiIndividuali";
 import { elencaEsercizi } from "@/src/services/exercises";
@@ -28,7 +28,7 @@ export function PianiIndividuali({ teamId, athleteId, nomePersona, ruolo, modifi
   const [piani, setPiani] = useState<PianoIndividuale[]>([]);
   const [espanso, setEspanso] = useState<string | null>(null);
   const [esercizi, setEsercizi] = useState<EsercizioPiano[]>([]);
-  const [fattiOggi, setFattiOggi] = useState<Set<string>>(new Set());
+  const [svolgimentiSettimana, setSvolgimentiSettimana] = useState<Record<string, number>>({});
   const [caricamento, setCaricamento] = useState(true);
   const [generando, setGenerando] = useState(false);
   const [istruzioni, setIstruzioni] = useState("");
@@ -48,7 +48,7 @@ export function PianiIndividuali({ teamId, athleteId, nomePersona, ruolo, modifi
     setEspanso(pianoId);
     try {
       setEsercizi(await elencaEserciziPiano(pianoId));
-      setFattiOggi(await svolgimentiOggi(pianoId));
+      setSvolgimentiSettimana(await svolgimentiDellaSettimana(pianoId));
     } catch (e) { avvisa("Errore", (e as Error).message); }
   }
 
@@ -83,14 +83,13 @@ export function PianiIndividuali({ teamId, athleteId, nomePersona, ruolo, modifi
     }
   }
 
-  async function commutaSvolto(pe: EsercizioPiano) {
-    const era = fattiOggi.has(pe.id);
-    setFattiOggi((prec) => {
-      const nuovo = new Set(prec);
-      if (era) nuovo.delete(pe.id); else nuovo.add(pe.id);
-      return nuovo;
-    });
-    try { await segnaSvolto(pe.id, !era); carica(); }
+  async function commutaSvolto(pe: EsercizioPiano, indiceSeduta: number) {
+    const fatteOra = svolgimentiSettimana[pe.id] ?? 0;
+    // Toccare una spunta già verde toglie quella e le successive:
+    // l'ordine delle sedute è progressivo.
+    const nuoveFatte = fatteOra > indiceSeduta ? indiceSeduta : indiceSeduta + 1;
+    setSvolgimentiSettimana((prec) => ({ ...prec, [pe.id]: nuoveFatte }));
+    try { await impostaSvolgimentiSettimana(pe.id, nuoveFatte); carica(); }
     catch (e) { avvisa("Errore", (e as Error).message); carica(); }
   }
 
@@ -128,9 +127,23 @@ export function PianiIndividuali({ teamId, athleteId, nomePersona, ruolo, modifi
             {espanso === p.id && (
               <View style={styles.dettaglioPiano}>
                 {esercizi.map((pe) => (
-                  <Pressable key={pe.id} style={styles.rigaEsercizio} onPress={() => commutaSvolto(pe)}>
-                    <View style={[styles.spunta, fattiOggi.has(pe.id) && styles.spuntaAttiva]}>
-                      {fattiOggi.has(pe.id) && <Text style={styles.spuntaSegno}>✓</Text>}
+                  <View key={pe.id} style={styles.rigaEsercizio}>
+                    {/* Una spunta per ciascuna delle sedute settimanali
+                        previste: con una sola non si distingueva la
+                        prima seduta dalla seconda. */}
+                    <View style={styles.colonnaSpunte}>
+                      {Array.from({ length: pe.volte_a_settimana }).map((_, n) => {
+                        const fatta = (svolgimentiSettimana[pe.id] ?? 0) > n;
+                        return (
+                          <Pressable
+                            key={n}
+                            onPress={() => commutaSvolto(pe, n)}
+                            style={[styles.spunta, fatta && styles.spuntaAttiva]}
+                          >
+                            {fatta ? <Text style={styles.spuntaSegno}>✓</Text> : <Text style={styles.numeroSeduta}>{n + 1}</Text>}
+                          </Pressable>
+                        );
+                      })}
                     </View>
                     <View style={{ flex: 1 }}>
                       <Text style={styles.nomeEsercizio}>{pe.nome_libero ?? "Esercizio"}</Text>
@@ -139,9 +152,9 @@ export function PianiIndividuali({ teamId, athleteId, nomePersona, ruolo, modifi
                         {pe.volte_a_settimana}× a settimana · {pe.durata_minuti ?? 10}′ · {ETICHETTE_QUANDO[pe.quando]}
                       </Text>
                     </View>
-                  </Pressable>
+                  </View>
                 ))}
-                <Text style={styles.nota}>Tocca un esercizio per segnarlo come svolto oggi.</Text>
+                <Text style={styles.nota}>Tocca i quadratini numerati per segnare le sedute svolte questa settimana.</Text>
 
                 {modificabile && (
                   <View style={styles.rigaAzioni}>
@@ -174,13 +187,13 @@ export function PianiIndividuali({ teamId, athleteId, nomePersona, ruolo, modifi
             />
           )}
           <View style={styles.rigaGenerazione}>
+            <Pressable style={styles.bottoneNota} onPress={() => setMostraIstruzioni(!mostraIstruzioni)}>
+              <Text style={styles.bottoneNotaTesto}>{mostraIstruzioni ? "−" : "+"}</Text>
+            </Pressable>
             <Pressable style={styles.bottoneAI} onPress={onGenera} disabled={generando}>
               {generando
                 ? <ActivityIndicator color={brand.colors.brandSecondary} />
-                : <Text style={styles.bottoneAITesto}>✨ Crea piano dalle carenze</Text>}
-            </Pressable>
-            <Pressable style={styles.bottoneNota} onPress={() => setMostraIstruzioni(!mostraIstruzioni)}>
-              <Text style={styles.bottoneNotaTesto}>{mostraIstruzioni ? "−" : "+"}</Text>
+                : <Text style={styles.bottoneAITesto}>✨ Crea piano</Text>}
             </Pressable>
           </View>
         </>
@@ -200,8 +213,10 @@ const styles = StyleSheet.create({
   barraSfondo: { height: 6, backgroundColor: brand.colors.surfaceTertiary, borderRadius: 3, overflow: "hidden" },
   barraRiempimento: { height: "100%", backgroundColor: brand.colors.brand },
   dettaglioPiano: { gap: 10, marginTop: 8, borderTopWidth: 1, borderTopColor: brand.colors.border, paddingTop: 10 },
-  rigaEsercizio: { flexDirection: "row", gap: 10, alignItems: "flex-start", minHeight: 48 },
-  spunta: { width: 24, height: 24, borderRadius: 6, borderWidth: 2, borderColor: brand.colors.brand, alignItems: "center", justifyContent: "center", marginTop: 2 },
+  rigaEsercizio: { flexDirection: "row", gap: 10, alignItems: "flex-start", minHeight: 48, paddingVertical: 4 },
+  colonnaSpunte: { gap: 4 },
+  numeroSeduta: { color: brand.colors.muted, fontSize: 11, fontWeight: "700" },
+  spunta: { width: 30, height: 30, borderRadius: 6, borderWidth: 2, borderColor: brand.colors.brand, alignItems: "center", justifyContent: "center", marginTop: 2 },
   spuntaAttiva: { backgroundColor: brand.colors.brand },
   spuntaSegno: { color: "#000", fontWeight: "800", fontSize: 14 },
   nomeEsercizio: { color: brand.colors.onSurface, fontSize: 14, fontWeight: "600" },
@@ -213,8 +228,8 @@ const styles = StyleSheet.create({
   nota: { color: brand.colors.muted, fontSize: 12, lineHeight: 17 },
   input: { backgroundColor: brand.colors.surfaceTertiary, color: brand.colors.onSurface, borderRadius: 8, padding: 10, minHeight: 56, textAlignVertical: "top" },
   rigaGenerazione: { flexDirection: "row", gap: 8 },
-  bottoneAI: { flex: 1, borderWidth: 1, borderColor: brand.colors.brandSecondary, borderRadius: 10, paddingVertical: 12, alignItems: "center" },
+  bottoneAI: { flex: 1, borderWidth: 1, borderColor: brand.colors.brandSecondary, borderRadius: 10, paddingVertical: 10, alignItems: "center" },
   bottoneAITesto: { color: brand.colors.brandSecondary, fontWeight: "700" },
-  bottoneNota: { width: 48, borderWidth: 1, borderColor: brand.colors.muted, borderRadius: 10, alignItems: "center", justifyContent: "center" },
+  bottoneNota: { width: 44, borderWidth: 1, borderColor: brand.colors.muted, borderRadius: 10, alignItems: "center", justifyContent: "center" },
   bottoneNotaTesto: { color: brand.colors.muted, fontSize: 20, fontWeight: "700" },
 });

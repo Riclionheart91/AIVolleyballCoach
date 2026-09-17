@@ -14,6 +14,7 @@ export default function SchedaAtleta() {
   const { team, puoScrivere } = useAuth();
   const [atleta, setAtleta] = useState<Athlete | null>(null);
   const [inModifica, setInModifica] = useState(false);
+  const [anagraficaAperta, setAnagraficaAperta] = useState(false);
   const [salvataggio, setSalvataggio] = useState(false);
 
   const [nome, setNome] = useState("");
@@ -156,18 +157,31 @@ export default function SchedaAtleta() {
           </>
         ) : (
           <>
+            {/* Ordine voluto: identità, poi il rendimento in sintesi,
+                poi l'anagrafica richiusa, infine i piani individuali.
+                I dati anagrafici si consultano di rado, il rendimento
+                ogni volta. */}
             <Text style={styles.titolo}>{atleta.nome} {atleta.cognome}</Text>
             {!!atleta.ruolo_campo && <Text style={styles.sottotitolo}>{atleta.ruolo_campo}{atleta.numero_maglia ? ` — n. ${atleta.numero_maglia}` : ""}</Text>}
-            <RigaSolaLettura etichetta="Data di nascita" valore={atleta.data_nascita} />
-            <RigaSolaLettura etichetta="Codice fiscale" valore={atleta.codice_fiscale} />
-            <RigaSolaLettura etichetta="Numero di licenza" valore={atleta.numero_licenza} />
-            <RigaSolaLettura etichetta="Scadenza certificato medico" valore={atleta.scadenza_certificato_medico} />
-            <RigaSolaLettura etichetta="Telefono" valore={atleta.telefono} />
-            <RigaSolaLettura etichetta="Email" valore={atleta.email_contatto} />
-            <RigaSolaLettura etichetta="Note" valore={atleta.note_personali} />
 
-            <Text style={styles.titoloSezione}>Rendimento e obiettivi</Text>
-            <SchedaRendimento athleteId={atleta.id} nomeAtleta={`${atleta.nome} ${atleta.cognome}`} modificabile={puoScrivere} />
+            <View style={{ marginTop: 12 }}>
+              <SchedaRendimento athleteId={atleta.id} nomeAtleta={`${atleta.nome} ${atleta.cognome}`} modificabile={puoScrivere} soloRiepilogo />
+            </View>
+
+            <Pressable onPress={() => setAnagraficaAperta(!anagraficaAperta)} style={styles.apriSezione}>
+              <Text style={styles.apriSezioneTesto}>{anagraficaAperta ? "▾" : "▸"} Dati anagrafici</Text>
+            </Pressable>
+            {anagraficaAperta && (
+              <>
+                <RigaSolaLettura etichetta="Data di nascita" valore={atleta.data_nascita} />
+                <RigaSolaLettura etichetta="Codice fiscale" valore={atleta.codice_fiscale} />
+                <RigaSolaLettura etichetta="Numero di licenza" valore={atleta.numero_licenza} />
+                <RigaSolaLettura etichetta="Scadenza certificato medico" valore={atleta.scadenza_certificato_medico} />
+                <RigaSolaLettura etichetta="Telefono" valore={atleta.telefono} />
+                <RigaSolaLettura etichetta="Email" valore={atleta.email_contatto} />
+                <RigaSolaLettura etichetta="Note" valore={atleta.note_personali} />
+              </>
+            )}
 
             <Text style={styles.titoloSezione}>Piani individuali</Text>
             {team && (
@@ -213,6 +227,8 @@ const styles = StyleSheet.create({
   elimina: { color: brand.colors.error, fontWeight: "600" },
   badgeArchiviata: { color: brand.colors.warning, fontWeight: "700", fontSize: 12 },
   titolo: { color: brand.colors.onSurface, fontSize: 22, fontWeight: "700" },
+  apriSezione: { paddingVertical: 12, marginTop: 8, borderTopWidth: 1, borderTopColor: brand.colors.border },
+  apriSezioneTesto: { color: brand.colors.brandSecondary, fontSize: 13, fontWeight: "700" },
   titoloSezione: { color: brand.colors.brandSecondary, fontSize: 12, fontWeight: "800", textTransform: "uppercase", marginTop: 16 },
   sottotitolo: { color: brand.colors.brandSecondary, fontSize: 14, fontWeight: "600" },
   etichettaCampo: { color: brand.colors.muted, fontSize: 12, textTransform: "uppercase" },

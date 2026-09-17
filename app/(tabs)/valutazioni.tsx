@@ -3,9 +3,7 @@ import { View, Text, TextInput, Pressable, StyleSheet, FlatList, ScrollView, Act
 import { useFocusEffect } from "expo-router";
 import { useAuth } from "@/src/context/AuthContext";
 import { elencaAtlete } from "@/src/services/athletes";
-import { elencaMioStoricoPresenze, type StoricoPresenzaRiga } from "@/src/services/trainings";
 import {
-  andamentoSquadra,
   atleteDaValutare,
   decidiProposta,
   elencaPropostePendenti,
@@ -14,43 +12,19 @@ import {
   impostaCadenzaValutazione,
   registraValutazione,
   rigettaProposta,
-  type AndamentoSquadraVoce,
   type AtletaDaValutare,
 } from "@/src/services/evaluations";
 import { SchedaRendimento } from "@/src/components/SchedaRendimento";
-import { PianiIndividuali } from "@/src/components/PianiIndividuali";
 import { brand, fondamentali, uiStrings } from "@/src/config";
 import type { Athlete, Evaluation, EvaluationProposal, Fondamentale } from "@/src/types/database";
 import { avvisa } from "@/src/lib/confermaAzione";
 
 export default function Valutazioni() {
   const { team, puoScrivere, ruolo, atletaId } = useAuth();
-  const [andamento, setAndamento] = useState<AndamentoSquadraVoce[]>([]);
-
-  useFocusEffect(
-    useCallback(() => {
-      if (!team) return;
-      andamentoSquadra(team.id).then(setAndamento).catch(() => setAndamento([]));
-    }, [team]),
-  );
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.contenuto}>
       <Text style={styles.titolo}>{uiStrings.valutazioni.title}</Text>
-
-      <View style={styles.cardAndamento}>
-        <Text style={styles.sottotitoloSezione}>Andamento squadra (media mensile per fondamentale)</Text>
-        {andamento.length === 0 ? (
-          <Text style={styles.vuoto}>Ancora nessuna valutazione registrata.</Text>
-        ) : (
-          andamento.slice(-8).map((v, i) => (
-            <View key={i} style={styles.rigaAndamento}>
-              <Text style={styles.rigaAndamentoTesto}>{v.mese.slice(0, 7)} — {v.fondamentale}</Text>
-              <Text style={styles.rigaAndamentoValore}>{v.media} <Text style={styles.rigaAndamentoN}>({v.numero_valutazioni})</Text></Text>
-            </View>
-          ))
-        )}
-      </View>
 
       {puoScrivere && team && <SezioneCicloValutazione teamId={team.id} />}
       {puoScrivere && <SezioneValutazioneCoach teamId={team!.id} />}
@@ -284,17 +258,13 @@ function SezioneValutazioneCoach({ teamId }: { teamId: string }) {
 function SezioneValutazionePersonale({ athleteId, teamId }: { athleteId: string; teamId: string }) {
   const [fondamentale, setFondamentale] = useState<Fondamentale>("Attacco");
   const [valutazioni, setValutazioni] = useState<Evaluation[]>([]);
-  const [storicoPresenze, setStoricoPresenze] = useState<StoricoPresenzaRiga[]>([]);
 
   useFocusEffect(useCallback(() => { elencaValutazioni(athleteId, fondamentale).then(setValutazioni); }, [athleteId, fondamentale]));
-  useFocusEffect(useCallback(() => { elencaMioStoricoPresenze(athleteId).then(setStoricoPresenze); }, [athleteId]));
 
   return (
     <View style={{ gap: 12 }}>
       <SchedaRendimento athleteId={athleteId} modificabile={false} />
 
-      <Text style={[styles.sottotitoloSezione, { marginTop: 8 }]}>Il mio piano individuale</Text>
-      <PianiIndividuali teamId={teamId} athleteId={athleteId} nomePersona="" ruolo={null} modificabile={false} />
 
       <Text style={[styles.sottotitoloSezione, { marginTop: 8 }]}>Storico per fondamentale</Text>
       <View style={styles.selettoreRiga}>
@@ -315,17 +285,6 @@ function SezioneValutazionePersonale({ athleteId, teamId }: { athleteId: string;
         ))
       )}
 
-      <Text style={[styles.sottotitoloSezione, { marginTop: 8 }]}>Le mie presenze agli allenamenti</Text>
-      {storicoPresenze.length === 0 ? (
-        <Text style={styles.vuoto}>Nessun allenamento registrato ancora.</Text>
-      ) : (
-        storicoPresenze.map((r) => (
-          <View key={r.training_id} style={styles.rigaAndamento}>
-            <Text style={styles.rigaAndamentoTesto}>{r.titolo} — {r.data ? new Date(r.data).toLocaleDateString("it-IT") : ""}</Text>
-            <Text style={styles.rigaAndamentoValore}>{r.presente === false ? "Assente" : r.presente === true ? `Presente${r.rpe ? ` (RPE ${r.rpe})` : ""}` : "—"}</Text>
-          </View>
-        ))
-      )}
     </View>
   );
 }

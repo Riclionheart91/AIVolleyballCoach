@@ -31,7 +31,7 @@ export default function Index() {
     if (squadreDisponibili.length > 1) { router.replace("/seleziona-squadra"); return; }
     // Le persone con profilo atleta non hanno accesso ad allenamenti,
     // anagrafica ed esercizi: entrano direttamente nella propria scheda.
-    router.replace(ruolo === "atleta" ? "/(tabs)/valutazioni" : "/(tabs)/allenamenti");
+    router.replace(ruolo === "atleta" ? "/(tabs)/scheda" : "/(tabs)/allenamenti");
   }, [session, caricamento, caricamentoContesto, erroreTeam, stagioneAttiva, squadreDisponibili, ruolo]);
 
   if (!caricamento && !caricamentoContesto && erroreTeam) {
