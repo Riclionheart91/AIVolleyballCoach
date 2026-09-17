@@ -331,6 +331,7 @@ function SezioneValutazionePresidente({ teamId }: { teamId: string }) {
 }
 
 const styles = StyleSheet.create({
+  input: { backgroundColor: brand.colors.surfaceTertiary, color: brand.colors.onSurface, borderRadius: 8, padding: 10 },
   container: { flex: 1, backgroundColor: brand.colors.surface },
   contenuto: { padding: 16, gap: 12, paddingBottom: 60 },
   titolo: { color: brand.colors.onSurface, fontSize: 20, fontWeight: "700" },

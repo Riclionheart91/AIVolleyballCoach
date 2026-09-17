@@ -35,7 +35,7 @@ export default function Esercizi() {
   const [categoriaAi, setCategoriaAi] = useState("");
   const [quantiAi, setQuantiAi] = useState("5");
   const [istruzioniAi, setIstruzioniAi] = useState("");
-  const [faseAi, setFaseAi] = useState<"qualsiasi" | "riscaldamento" | "tecnica">("qualsiasi");
+  const [faseAi, setFaseAi] = useState<"qualsiasi" | "riscaldamento" | "tecnico" | "situazionale" | "defaticamento">("qualsiasi");
   const [ruoloAi, setRuoloAi] = useState<string | null>(null);
   const [atletaAi, setAtletaAi] = useState<Athlete | null>(null);
   const [atlete, setAtlete] = useState<Athlete[]>([]);
@@ -158,7 +158,7 @@ export default function Esercizi() {
     if (daSalvare.length === 0) return;
     try {
       for (const p of daSalvare) {
-        await creaEsercizio(team.id, { nome: p.nome, categoria: p.categoria || null, descrizione: p.descrizione });
+        await creaEsercizio(team.id, { nome: p.nome, categoria: p.categoria || null, descrizione: p.descrizione, fase_consigliata: p.fase });
       }
       setProposte([]);
       setPopupAiAperto(false);
@@ -295,11 +295,14 @@ export default function Esercizi() {
                     </Pressable>
                   ))}
                 </View>
-                <Text style={styles.etichettaOpzione}>Momento della seduta</Text>
+                <Text style={styles.etichettaOpzione}>Fase della seduta</Text>
                 <View style={styles.chipRiga}>
-                  {([["qualsiasi", "Indifferente"], ["riscaldamento", "Riscaldamento"], ["tecnica", "Tecnico specifico"]] as const).map(([v, etichetta]) => (
-                    <Pressable key={v} onPress={() => setFaseAi(v)} style={[styles.chip, faseAi === v && styles.chipAttivo]}>
-                      <Text style={[styles.chipTesto, faseAi === v && styles.chipTestoAttivo]}>{etichetta}</Text>
+                  <Pressable onPress={() => setFaseAi("qualsiasi")} style={[styles.chip, faseAi === "qualsiasi" && styles.chipAttivo]}>
+                    <Text style={[styles.chipTesto, faseAi === "qualsiasi" && styles.chipTestoAttivo]}>Decide l'AI</Text>
+                  </Pressable>
+                  {fasiAllenamento.map((f) => (
+                    <Pressable key={f.codice} onPress={() => setFaseAi(f.codice)} style={[styles.chip, faseAi === f.codice && styles.chipAttivo]}>
+                      <Text style={[styles.chipTesto, faseAi === f.codice && styles.chipTestoAttivo]}>{f.etichetta}</Text>
                     </Pressable>
                   ))}
                 </View>

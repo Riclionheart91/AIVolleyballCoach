@@ -127,6 +127,7 @@ export default function SchedaEsercizio() {
 }
 
 const styles = StyleSheet.create({
+  etichetta: { color: brand.colors.muted, fontSize: 11, textTransform: "uppercase", marginTop: 6 },
   rigaFasi: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
   chipFase: { paddingVertical: 8, paddingHorizontal: 12, borderRadius: 14, backgroundColor: brand.colors.surfaceTertiary },
   chipFaseAttivo: { backgroundColor: brand.colors.brand },
