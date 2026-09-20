@@ -2,14 +2,14 @@ import { useCallback, useState } from "react";
 import { View, Text, TextInput, Pressable, StyleSheet, ScrollView, ActivityIndicator, Modal } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { useAuth } from "@/src/context/AuthContext";
-import { elencaMembri, cambiaRuoloMembro, rimuoviMembro, type MembroTeam } from "@/src/services/membri";
+import { elencaMembri, cambiaRuoloMembro, impostaPermessoScout, rimuoviMembro, RUOLI_CON_SCOUT, type MembroTeam } from "@/src/services/membri";
 import { annullaInvito, elencaInvitiPendenti, invitaMembro, type TeamInvite } from "@/src/services/teamInvites";
 import { aggiornaAtleta, elencaAtlete } from "@/src/services/athletes";
 import { confermaAzione, avvisa } from "@/src/lib/confermaAzione";
 import { brand, etichetteRuolo } from "@/src/config";
 import type { Athlete, Ruolo } from "@/src/types/database";
 
-const RUOLI_COLLABORATORE: Ruolo[] = ["allenatore", "vice_allenatore", "presidente", "scout"];
+const RUOLI_COLLABORATORE: Ruolo[] = ["allenatore", "vice_allenatore", "presidente"];
 
 /**
  * Gestione della squadra: chi ha accesso e con quale profilo.
@@ -115,7 +115,7 @@ export default function GestioneSquadra() {
             <Pressable key={m.user_id} style={styles.riga} onPress={() => setMembroInModifica(m)}>
               <View style={{ flex: 1 }}>
                 <Text style={styles.rigaTitolo}>{m.email}</Text>
-                <Text style={styles.rigaSotto}>{etichetteRuolo[m.ruolo] ?? m.ruolo}</Text>
+                <Text style={styles.rigaSotto}>{etichetteRuolo[m.ruolo] ?? m.ruolo}{m.puo_scoutare ? " · scout" : ""}</Text>
               </View>
               <Text style={styles.freccia}>›</Text>
             </Pressable>
@@ -139,7 +139,7 @@ export default function GestioneSquadra() {
             ))}
           </View>
           <Text style={styles.nota}>
-            Lo Scout può registrare le azioni durante un set, annullarle e fare i cambi. Non può avviare set, chiudere la partita né impostare la formazione: a fine set attende che allenatore o vice inseriscano la nuova.
+            Il permesso di registrare lo scouting si assegna dopo, toccando la persona nell'elenco qui sopra: vale solo per allenatore e vice.
           </Text>
           <Pressable style={styles.bottone} onPress={invitaCollaboratore} disabled={!emailNuovo.trim()}>
             <Text style={styles.bottoneTesto}>Invia invito</Text>
@@ -223,6 +223,32 @@ export default function GestioneSquadra() {
                 </Pressable>
               ))}
             </View>
+            {membroInModifica && RUOLI_CON_SCOUT.includes(membroInModifica.ruolo) ? (
+              <Pressable
+                style={styles.rigaPermesso}
+                onPress={async () => {
+                  if (!team || !membroInModifica) return;
+                  try {
+                    await impostaPermessoScout(team.id, membroInModifica.user_id, !membroInModifica.puo_scoutare);
+                    setMembroInModifica({ ...membroInModifica, puo_scoutare: !membroInModifica.puo_scoutare });
+                    carica();
+                  } catch (e) { avvisa("Errore", (e as Error).message); }
+                }}
+              >
+                <View style={[styles.quadratino, membroInModifica.puo_scoutare && styles.quadratinoAttivo]}>
+                  {membroInModifica.puo_scoutare && <Text style={styles.spunta}>✓</Text>}
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.testoPermesso}>Può registrare lo scouting</Text>
+                  <Text style={styles.nota}>Registra le azioni durante il set, le annulla e fa i cambi. Non avvia set né chiude la partita.</Text>
+                </View>
+              </Pressable>
+            ) : (
+              <Text style={styles.nota}>
+                Il permesso scout si assegna solo ad allenatore e vice: chi registra le azioni sta in panchina.
+              </Text>
+            )}
+
             <Pressable style={styles.bottoneDistruttivo} onPress={() => membroInModifica && chiediRimozione(membroInModifica)}>
               <Text style={styles.bottoneDistruttivoTesto}>Rimuovi dalla squadra</Text>
             </Pressable>
@@ -280,6 +306,11 @@ const styles = StyleSheet.create({
   chipAttivo: { backgroundColor: brand.colors.brand },
   chipTesto: { color: brand.colors.onSurfaceSecondary, fontSize: 12 },
   chipTestoAttivo: { color: "#000", fontWeight: "700" },
+  rigaPermesso: { flexDirection: "row", gap: 10, alignItems: "flex-start", paddingVertical: 8 },
+  quadratino: { width: 22, height: 22, borderRadius: 6, borderWidth: 2, borderColor: brand.colors.brand, alignItems: "center", justifyContent: "center", marginTop: 2 },
+  quadratinoAttivo: { backgroundColor: brand.colors.brand },
+  spunta: { color: "#000", fontWeight: "800", fontSize: 12 },
+  testoPermesso: { color: brand.colors.onSurface, fontSize: 14, fontWeight: "600" },
   bottone: { backgroundColor: brand.colors.brand, padding: 12, borderRadius: 8, alignItems: "center" },
   bottoneTesto: { color: "#000", fontWeight: "700" },
   bottoneDistruttivo: { borderColor: brand.colors.error, borderWidth: 1, padding: 12, borderRadius: 8, alignItems: "center" },

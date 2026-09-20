@@ -157,16 +157,12 @@ export default function SchedaAtleta() {
           </>
         ) : (
           <>
-            {/* Ordine voluto: identità, poi il rendimento in sintesi,
-                poi l'anagrafica richiusa, infine i piani individuali.
-                I dati anagrafici si consultano di rado, il rendimento
-                ogni volta. */}
+            {/* Ordine: identità, anagrafica richiusa (dove la si cerca),
+                poi il rendimento in sintesi e i piani individuali.
+                Il dettaglio per fondamentale e gli obiettivi si aprono
+                a richiesta, per tenere la scheda compatta. */}
             <Text style={styles.titolo}>{atleta.nome} {atleta.cognome}</Text>
             {!!atleta.ruolo_campo && <Text style={styles.sottotitolo}>{atleta.ruolo_campo}{atleta.numero_maglia ? ` — n. ${atleta.numero_maglia}` : ""}</Text>}
-
-            <View style={{ marginTop: 12 }}>
-              <SchedaRendimento athleteId={atleta.id} nomeAtleta={`${atleta.nome} ${atleta.cognome}`} modificabile={puoScrivere} soloRiepilogo />
-            </View>
 
             <Pressable onPress={() => setAnagraficaAperta(!anagraficaAperta)} style={styles.apriSezione}>
               <Text style={styles.apriSezioneTesto}>{anagraficaAperta ? "▾" : "▸"} Dati anagrafici</Text>
@@ -182,6 +178,10 @@ export default function SchedaAtleta() {
                 <RigaSolaLettura etichetta="Note" valore={atleta.note_personali} />
               </>
             )}
+
+            <View style={{ marginTop: 12 }}>
+              <SchedaRendimento athleteId={atleta.id} nomeAtleta={`${atleta.nome} ${atleta.cognome}`} modificabile={puoScrivere} soloRiepilogo />
+            </View>
 
             <Text style={styles.titoloSezione}>Piani individuali</Text>
             {team && (
