@@ -55,6 +55,8 @@ export default function PartitaLive() {
   const [atlete, setAtlete] = useState<Athlete[]>([]);
   const [convocateIds, setConvocateIds] = useState<string[]>([]);
   const [liberiIds, setLiberiIds] = useState<Set<string>>(new Set());
+  const [libero, setLibero] = useState<LiberoInCampo | null>(null);
+  const [popupLibero, setPopupLibero] = useState(false);
   const [formazione, setFormazione] = useState<MatchSetLineup[]>([]);
   const [storicoFormazione, setStoricoFormazione] = useState<MatchSetLineup[]>([]);
 
@@ -545,6 +547,60 @@ export default function PartitaLive() {
         </View>
       </Modal>
 
+
+      <Modal visible={popupLibero} animationType="fade" transparent onRequestClose={() => setPopupLibero(false)}>
+        <View style={styles.sfondoPopup}>
+          <View style={styles.cartaPopup}>
+            <View style={styles.intestazionePopup}>
+              <Text style={styles.titoloPopup}>Libero</Text>
+              <Pressable onPress={() => setPopupLibero(false)} hitSlop={12}><Text style={styles.chiudiPopup}>✕</Text></Pressable>
+            </View>
+
+            {libero ? (
+              <>
+                <Text style={styles.nota}>
+                  In campo: {etichettaAtleta(libero.libero_id)} al posto di {etichettaAtleta(libero.titolare_id)}
+                  {libero.posizione ? ` (posizione ${libero.posizione})` : ""}.
+                </Text>
+                <Text style={styles.nota}>
+                  Esce da solo quando la rotazione lo porta in prima linea, e rientra chi aveva rimpiazzato.
+                </Text>
+                <Pressable
+                  style={styles.bottoneSecondario}
+                  onPress={async () => {
+                    if (!setCorrente) return;
+                    try { await faiUscireLibero(setCorrente.id); setPopupLibero(false); carica(); }
+                    catch (e) { avvisa("Errore", (e as Error).message); }
+                  }}
+                >
+                  <Text style={styles.bottoneSecondarioTesto}>Fai uscire il Libero</Text>
+                </Pressable>
+              </>
+            ) : (
+              <>
+                <Text style={styles.nota}>
+                  Scegli chi esce per far entrare il Libero. Solo seconda linea (posizioni 5 e 6): in posizione 1 si va al servizio e il Libero non può servire.
+                </Text>
+                {formazione.filter((f) => f.posizione === 5 || f.posizione === 6).map((f) => (
+                  <Pressable
+                    key={f.athlete_id}
+                    style={styles.rigaScelta}
+                    onPress={async () => {
+                      if (!setCorrente) return;
+                      const lib = atlete.find((a) => liberiIds.has(a.id));
+                      if (!lib) { avvisa("Nessun Libero", "Nessuno è indicato come Libero nella distinta di questa partita."); return; }
+                      try { await rimpiazzaConLibero(setCorrente.id, lib.id, f.athlete_id); setPopupLibero(false); carica(); }
+                      catch (e) { avvisa("Errore", (e as Error).message); }
+                    }}
+                  >
+                    <Text style={styles.rigaSceltaTesto}>esce {etichettaAtleta(f.athlete_id)} (posizione {f.posizione})</Text>
+                  </Pressable>
+                ))}
+              </>
+            )}
+          </View>
+        </View>
+      </Modal>
 
       <ModaleSituazione />
     </View>
