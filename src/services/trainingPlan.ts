@@ -19,7 +19,14 @@ export interface VoceRiepilogoPiano {
 }
 
 export async function impostaPianoAllenamento(trainingId: string, argomento: string, esercizi: VoceRiepilogoPiano[]): Promise<void> {
-  const payload = esercizi.map((e, i) => ({ exercise_id: e.exerciseId, durata_minuti: e.durataMinuti, note: e.note, ordine: i }));
+  // BUG CORRETTO: qui si buttavano via fase e ruoloTarget prima ancora
+  // di mandarli al database — anche se comparivano giusti a schermo,
+  // sparivano al salvataggio (da qui la sessione dal vivo che mostrava
+  // sempre tutto come "tecnico").
+  const payload = esercizi.map((e, i) => ({
+    exercise_id: e.exerciseId, durata_minuti: e.durataMinuti, note: e.note, ordine: i,
+    fase: e.fase ?? "tecnico", ruolo_target: e.ruoloTarget ?? null,
+  }));
   const { error } = await supabaseClient.rpc("imposta_piano_allenamento", { p_training_id: trainingId, p_argomento: argomento, p_esercizi: payload });
   if (error) throw error;
 }
@@ -142,6 +149,8 @@ export interface VoceSessione {
   exercise_id: string;
   nome: string;
   fase: string | null;
+  /** Sottogruppo dentro la fase (Battuta, Attacco, Globale...): dal catalogo, non salvato sul piano. */
+  categoria: string;
   ruolo_target: string | null;
   /** Descrizione dal catalogo: serve a bordo campo per spiegare l'esercizio senza uscire dalla sessione. */
   descrizione: string;
@@ -163,7 +172,7 @@ export async function elencaSessione(trainingId: string, catalogo: Exercise[]): 
   if (error) throw error;
   return (data ?? []).map((r) => {
     const ex = catalogo.find((c) => c.id === r.exercise_id);
-    return { ...r, nome: ex?.nome ?? "Esercizio", descrizione: ex?.descrizione ?? "" };
+    return { ...r, nome: ex?.nome ?? "Esercizio", descrizione: ex?.descrizione ?? "", categoria: ex?.categoria ?? "" };
   }) as VoceSessione[];
 }
 

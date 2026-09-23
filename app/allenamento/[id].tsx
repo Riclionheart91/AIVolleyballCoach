@@ -60,7 +60,14 @@ export default function PianoAllenamento() {
   const totaleMinuti = esercizi.reduce((s, e) => s + (e.durataMinuti || 0), 0);
 
   function aggiungiEsercizio(ex: Exercise) {
-    setEsercizi((prev) => [...prev, { exerciseId: ex.id, nome: ex.nome, durataMinuti: 15, note: "" }]);
+    // BUG CORRETTO: prima non si portava dietro la fase dell'esercizio,
+    // quindi sembrava corretta solo a schermo (per via del ripiego di
+    // faseDi()) ma al salvataggio finiva sempre in "tecnico".
+    setEsercizi((prev) => [...prev, {
+      exerciseId: ex.id, nome: ex.nome, durataMinuti: 15, note: "",
+      fase: (ex.fase_consigliata as string | undefined) ?? "tecnico",
+      categoria: ex.categoria ?? undefined,
+    }]);
     setMostraCatalogo(false);
   }
 
@@ -360,6 +367,19 @@ export default function PianoAllenamento() {
               const dellaFase = esercizi.map((e, i) => ({ e, i })).filter(({ e }) => faseDi(e) === f.codice);
               const minutiFase = dellaFase.reduce((s2, { e }) => s2 + (e.durataMinuti ?? 0), 0);
               const consigliati = pesiFasi.find((p) => p.fase === f.codice);
+
+              // Sottogruppo per categoria dentro la fase (es. Tecnico >
+              // Battuta, Tecnico > Attacco). L'ordine di riga e lo
+              // spostamento su/giù restano quelli veri dentro la fase
+              // (posInFase), non quelli del sottogruppo: si sposta
+              // sempre correttamente anche se il risultato attraversa
+              // un sottogruppo diverso.
+              const sottogruppi: string[] = [];
+              for (const { e } of dellaFase) {
+                const cat = categoriaDi(e) || "Altro";
+                if (!sottogruppi.includes(cat)) sottogruppi.push(cat);
+              }
+
               return (
                 <View key={f.codice} style={styles.bloccoFase}>
                   <View style={styles.intestazioneFase}>
@@ -372,7 +392,12 @@ export default function PianoAllenamento() {
 
                   {dellaFase.length === 0 ? (
                     <Text style={styles.faseVuota}>Nessun esercizio in questa fase.</Text>
-                  ) : dellaFase.map(({ e, i }, posInFase) => (
+                  ) : sottogruppi.map((cat) => (
+                    <View key={cat}>
+                      {sottogruppi.length > 1 && <Text style={styles.titoloSottogruppoPiano}>{cat}</Text>}
+                      {dellaFase.filter(({ e }) => (categoriaDi(e) || "Altro") === cat).map(({ e, i }) => {
+                        const posInFase = dellaFase.findIndex((x) => x.i === i);
+                        return (
                     <View key={i} style={styles.bloccoEsercizio}>
                       <Pressable style={styles.rigaEsercizio} onPress={() => setEsercizioEspanso(esercizioEspanso === i ? null : i)}>
                         <Text style={styles.numeroOrdine}>{posInFase + 1}</Text>
@@ -423,6 +448,9 @@ export default function PianoAllenamento() {
                           </Pressable>
                         </View>
                       )}
+                    </View>
+                        );
+                      })}
                     </View>
                   ))}
                 </View>
@@ -535,6 +563,7 @@ const styles = StyleSheet.create({
   faseVuota: { color: brand.colors.muted, fontSize: 12, fontStyle: "italic", paddingVertical: 6 },
   numeroOrdine: { color: brand.colors.muted, fontSize: 12, fontWeight: "700", width: 18 },
   sottoEsercizio: { color: brand.colors.muted, fontSize: 11 },
+  titoloSottogruppoPiano: { color: brand.colors.muted, fontSize: 10, fontWeight: "700", textTransform: "uppercase", paddingTop: 6, paddingBottom: 2, paddingLeft: 4 },
   rigaComandiEsercizio: { flexDirection: "row", gap: 6, marginTop: 4 },
   tastoComando: { flex: 1, backgroundColor: brand.colors.surfaceTertiary, paddingVertical: 12, borderRadius: 8, alignItems: "center", minHeight: 44, justifyContent: "center" },
   tastoComandoTesto: { color: brand.colors.onSurface, fontWeight: "700", fontSize: 13 },

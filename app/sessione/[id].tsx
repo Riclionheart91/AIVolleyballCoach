@@ -134,40 +134,62 @@ export default function SessioneAllenamento() {
           const dellaFase = voci.filter((v) => (v.fase ?? "tecnico") === f.codice);
           if (dellaFase.length === 0) return null;
           const fattiFase = dellaFase.filter((v) => v.concluso_il).length;
+
+          // Sottogruppo dentro la fase: es. Tecnico > Battuta, Tecnico >
+          // Attacco, Situazionale > Globale. L'ordine dei sottogruppi
+          // segue l'ordine di comparsa nel piano, non l'alfabeto.
+          const sottogruppi: string[] = [];
+          for (const v of dellaFase) {
+            const cat = v.categoria || "Altro";
+            if (!sottogruppi.includes(cat)) sottogruppi.push(cat);
+          }
+
           return (
             <View key={f.codice}>
               <View style={styles.intestazioneFaseSessione}>
                 <Text style={styles.titoloFaseSessione}>{f.etichetta}</Text>
                 <Text style={styles.contatoreFase}>{fattiFase}/{dellaFase.length}</Text>
               </View>
-              {dellaFase.map((v) => {
-          const attivo = inCorso?.id === v.id;
-          const fatto = !!v.concluso_il;
-          const aperta = espansa === v.id;
-          return (
-            <View key={v.id} style={[styles.riga, attivo && styles.rigaAttiva, fatto && styles.rigaFatta]}>
-              <Pressable style={styles.rigaTesta} onPress={() => setEspansa(aperta ? null : v.id)}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.rigaNome} numberOfLines={aperta ? undefined : 1}>{fatto ? "✓ " : ""}{v.nome}</Text>
-                  <Text style={styles.rigaDettaglio}>
-                    {v.ruolo_target ? `solo ${v.ruolo_target} · ` : ""}{v.durata_minuti ?? 0} min{(attivo || fatto) ? ` · reale ${mmss(secondi(v))}` : ""}
-                    {v.descrizione ? (aperta ? "" : " · tocca per la descrizione") : ""}
-                  </Text>
+              {sottogruppi.map((cat) => (
+                <View key={cat}>
+                  {sottogruppi.length > 1 && <Text style={styles.titoloSottogruppo}>{cat}</Text>}
+                  {dellaFase.filter((v) => (v.categoria || "Altro") === cat).map((v) => {
+                    const attivo = inCorso?.id === v.id;
+                    const fatto = !!v.concluso_il;
+                    const aperta = espansa === v.id;
+                    return (
+                      <View key={v.id} style={[styles.riga, attivo && styles.rigaAttiva, fatto && styles.rigaFatta]}>
+                        <Pressable style={styles.rigaTesta} onPress={() => setEspansa(aperta ? null : v.id)}>
+                          <View style={{ flex: 1 }}>
+                            <Text style={styles.rigaNome} numberOfLines={aperta ? undefined : 1}>{fatto ? "✓ " : ""}{v.nome}</Text>
+                            <Text style={styles.rigaDettaglio}>
+                              {v.ruolo_target ? `solo ${v.ruolo_target} · ` : ""}{v.durata_minuti ?? 0} min{(attivo || fatto) ? ` · reale ${mmss(secondi(v))}` : ""}
+                              {v.descrizione ? (aperta ? "" : " · tocca per la descrizione") : ""}
+                            </Text>
+                          </View>
+                          {puoScrivere && sessioneAvviata && !attivo && (
+                            <Pressable style={styles.tastoRiga} onPress={() => azione(() => avviaEsercizio(v.id))} hitSlop={8}>
+                              <Text style={styles.tastoRigaTesto}>{fatto ? "↻" : "▶"}</Text>
+                            </Pressable>
+                          )}
+                        </Pressable>
+                        {aperta && !!v.descrizione && <Text style={styles.rigaDescrizione}>{v.descrizione}</Text>}
+                      </View>
+                    );
+                  })}
                 </View>
-                {puoScrivere && sessioneAvviata && !attivo && (
-                  <Pressable style={styles.tastoRiga} onPress={() => azione(() => avviaEsercizio(v.id))} hitSlop={8}>
-                    <Text style={styles.tastoRigaTesto}>{fatto ? "↻" : "▶"}</Text>
-                  </Pressable>
-                )}
-              </Pressable>
-              {aperta && !!v.descrizione && <Text style={styles.rigaDescrizione}>{v.descrizione}</Text>}
-            </View>
-          );
-              })}
+              ))}
             </View>
           );
         })}
       </ScrollView>
+
+      <View style={styles.rigaGlobale}>
+        <Pressable style={styles.bottoneGlobale} onPress={() => router.push(`/globale/${id}`)}>
+          <Text style={styles.bottoneGlobaleTesto}>🏐 Globale tracciato</Text>
+        </Pressable>
+      </View>
+
 
       {puoScrivere && (
         <View style={styles.barraComandi}>
@@ -236,6 +258,10 @@ const styles = StyleSheet.create({
 
   intestazioneFaseSessione: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingTop: 10, paddingBottom: 4 },
   titoloFaseSessione: { color: brand.colors.brandSecondary, fontSize: 12, fontWeight: "800", textTransform: "uppercase" },
+  titoloSottogruppo: { color: brand.colors.muted, fontSize: 11, fontWeight: "700", textTransform: "uppercase", paddingTop: 6, paddingBottom: 2, paddingLeft: 4 },
+  rigaGlobale: { paddingHorizontal: 12, paddingBottom: 10 },
+  bottoneGlobale: { borderWidth: 1, borderColor: brand.colors.brandSecondary, paddingVertical: 12, borderRadius: 12, alignItems: "center" },
+  bottoneGlobaleTesto: { color: brand.colors.brandSecondary, fontWeight: "700" },
   contatoreFase: { color: brand.colors.muted, fontSize: 11, fontWeight: "700" },
   etichettaElenco: { color: brand.colors.muted, fontSize: 11, textTransform: "uppercase", paddingHorizontal: 16, paddingBottom: 4 },
   riga: { backgroundColor: brand.colors.surfaceSecondary, borderRadius: 10, marginBottom: 8, paddingHorizontal: 12, borderWidth: 1, borderColor: "transparent" },
