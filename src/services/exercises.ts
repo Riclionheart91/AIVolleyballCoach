@@ -4,7 +4,11 @@ import { istruzioniAggiuntive } from "@/src/services/pianoAnnuale";
 import type { Exercise } from "@/src/types/database";
 
 export async function elencaEsercizi(teamId: string): Promise<Exercise[]> {
-  const { data, error } = await supabaseClient.from("exercises").select("*").eq("team_id", teamId).order("nome");
+  // Il catalogo è condiviso su tutta la piattaforma: non si filtra più
+  // per chi l'ha creato. Il parametro resta nella firma per non dover
+  // toccare tutti i punti che la richiamano, e serve ancora a
+  // creaEsercizio() per attribuire la paternità di un nuovo esercizio.
+  const { data, error } = await supabaseClient.from("exercises").select("*").order("nome");
   if (error) throw error;
   return data ?? [];
 }
