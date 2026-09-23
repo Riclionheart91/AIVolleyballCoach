@@ -57,7 +57,10 @@ export default function Esercizi() {
 
   useFocusEffect(useCallback(() => { carica(); }, [carica]));
 
-  /** Raggruppa per categoria: con un catalogo di decine di voci l'elenco piatto diventa illeggibile, che è il problema segnalato. */
+  /** Una riga della lista: o l'intestazione di un sottogruppo (solo in modalità "per fase"), o un esercizio vero. */
+  type RigaLista = { tipo: "sottogruppo"; id: string; testo: string } | { tipo: "esercizio"; id: string; es: Exercise };
+
+  /** Raggruppa per fase e, dentro ciascuna, per categoria: due livelli, non uno solo. */
   const sezioni = useMemo(() => {
     const filtro = ricerca.trim().toLowerCase();
     const visibili = filtro
@@ -80,14 +83,37 @@ export default function Esercizi() {
       return ordine.indexOf(a) - ordine.indexOf(b);
     };
 
-    return Object.keys(gruppi).sort(ordinaChiavi).map((titolo) => ({
-      titolo,
-      totale: gruppi[titolo].length,
-      // Durante una ricerca le categorie restano sempre aperte: chiuderle
+    return Object.keys(gruppi).sort(ordinaChiavi).map((titolo) => {
+      // Durante una ricerca le sezioni restano sempre aperte: chiuderle
       // nasconderebbe proprio i risultati cercati.
       // categorieChiuse === null significa "mai toccate": tutte chiuse.
-      data: (!filtro && (categorieChiuse === null || categorieChiuse.has(titolo))) ? [] : gruppi[titolo].sort((a, b) => a.nome.localeCompare(b.nome)),
-    }));
+      const chiusa = !filtro && (categorieChiuse === null || categorieChiuse.has(titolo));
+      let righe: RigaLista[] = [];
+
+      if (!chiusa) {
+        const eserciziGruppo = [...gruppi[titolo]].sort((a, b) => a.nome.localeCompare(b.nome));
+        if (raggruppaPerFase) {
+          // Sottogruppo per categoria (Battuta, Muro, Palleggio...)
+          // dentro la fase: mancava del tutto, era il difetto
+          // segnalato. Resta sempre visibile quando la fase è aperta,
+          // senza un suo stato di apertura separato — un solo livello
+          // di piegatura evita di dover tracciare due dimensioni.
+          const perCategoria: Record<string, Exercise[]> = {};
+          for (const e of eserciziGruppo) {
+            const cat = e.categoria?.trim() || SENZA_CATEGORIA;
+            (perCategoria[cat] ??= []).push(e);
+          }
+          for (const cat of Object.keys(perCategoria).sort()) {
+            righe.push({ tipo: "sottogruppo", id: `sg-${titolo}-${cat}`, testo: cat });
+            for (const e of perCategoria[cat]) righe.push({ tipo: "esercizio", id: e.id, es: e });
+          }
+        } else {
+          righe = eserciziGruppo.map((e) => ({ tipo: "esercizio", id: e.id, es: e }));
+        }
+      }
+
+      return { titolo, totale: gruppi[titolo].length, data: righe };
+    });
   }, [esercizi, ricerca, categorieChiuse, raggruppaPerFase]);
 
   const categorieEsistenti = useMemo(
@@ -97,9 +123,18 @@ export default function Esercizi() {
 
   function commutaCategoria(titolo: string) {
     setCategorieChiuse((prev) => {
-      // Al primo tocco si parte da "tutte chiuse" e si apre solo questa.
+      // BUG CORRETTO: qui si costruiva sempre l'insieme dai valori di
+      // CATEGORIA, anche in modalità "per fase" — ma i titoli delle
+      // sezioni lì sono nomi di FASE, che non compaiono mai in
+      // quell'insieme. Risultato: nessuna fase risultava mai "chiusa",
+      // quindi toccandone una si aprivano tutte insieme. L'insieme dei
+      // titoli ora segue la modalità attiva, la stessa usata sopra per
+      // costruire le sezioni.
       if (prev === null) {
-        const tutte = new Set(esercizi.map((e) => e.categoria?.trim() || SENZA_CATEGORIA));
+        const tuttiITitoli = raggruppaPerFase
+          ? fasiAllenamento.map((f) => f.etichetta)
+          : [...new Set(esercizi.map((e) => e.categoria?.trim() || SENZA_CATEGORIA))];
+        const tutte = new Set(tuttiITitoli);
         tutte.delete(titolo);
         return tutte;
       }
@@ -202,7 +237,7 @@ export default function Esercizi() {
 
       <SectionList
         sections={sezioni}
-        keyExtractor={(e) => e.id}
+        keyExtractor={(r) => r.id}
         stickySectionHeadersEnabled
         contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 100 }}
         refreshControl={<RefreshControl refreshing={caricamento} onRefresh={carica} tintColor={brand.colors.brand} />}
@@ -216,28 +251,34 @@ export default function Esercizi() {
           </Pressable>
         )}
         renderItem={({ item }) => {
-          const aperta = descrizioneAperta === item.id;
+          // Riga di sottogruppo (Battuta, Muro, Palleggio...): solo
+          // un'intestazione, non ha una propria scheda da aprire.
+          if (item.tipo === "sottogruppo") {
+            return <Text style={styles.titoloSottogruppoCatalogo}>{item.testo}</Text>;
+          }
+          const es = item.es;
+          const aperta = descrizioneAperta === es.id;
           return (
             <View style={styles.riga}>
               {/* Un tocco apre la descrizione sul posto (serve durante
                   l'allenamento), la freccia porta alla scheda completa
                   per modificarla. */}
-              <Pressable style={styles.rigaTesta} onPress={() => setDescrizioneAperta(aperta ? null : item.id)}>
+              <Pressable style={styles.rigaTesta} onPress={() => setDescrizioneAperta(aperta ? null : es.id)}>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.rigaNome}>{item.nome}</Text>
+                  <Text style={styles.rigaNome}>{es.nome}</Text>
                   <Text style={styles.rigaSotto}>
                     {raggruppaPerFase
-                      ? (item.categoria?.trim() || "senza categoria")
-                      : (fasiAllenamento.find((f) => f.codice === (item.fase_consigliata ?? "tecnico"))?.etichetta ?? "")}
+                      ? (es.categoria?.trim() || "senza categoria")
+                      : (fasiAllenamento.find((f) => f.codice === (es.fase_consigliata ?? "tecnico"))?.etichetta ?? "")}
                   </Text>
-                  {!!item.descrizione && !aperta && <Text style={styles.rigaDescrizione} numberOfLines={1}>{item.descrizione}</Text>}
-                  {!item.descrizione && <Text style={styles.rigaDescrizione}>nessuna descrizione</Text>}
+                  {!!es.descrizione && !aperta && <Text style={styles.rigaDescrizione} numberOfLines={1}>{es.descrizione}</Text>}
+                  {!es.descrizione && <Text style={styles.rigaDescrizione}>nessuna descrizione</Text>}
                 </View>
-                <Pressable onPress={() => router.push(`/esercizio/${item.id}`)} hitSlop={12} style={styles.tastoScheda}>
+                <Pressable onPress={() => router.push(`/esercizio/${es.id}`)} hitSlop={12} style={styles.tastoScheda}>
                   <Text style={styles.tastoSchedaTesto}>›</Text>
                 </Pressable>
               </Pressable>
-              {aperta && !!item.descrizione && <Text style={styles.rigaDescrizioneEstesa}>{item.descrizione}</Text>}
+              {aperta && !!es.descrizione && <Text style={styles.rigaDescrizioneEstesa}>{es.descrizione}</Text>}
             </View>
           );
         }}
@@ -388,6 +429,7 @@ const styles = StyleSheet.create({
   pulisci: { color: brand.colors.muted, fontSize: 16 },
   intestazioneCategoria: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", backgroundColor: brand.colors.surface, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: brand.colors.border },
   titoloCategoria: { color: brand.colors.brandSecondary, fontSize: 13, fontWeight: "800", textTransform: "uppercase" },
+  titoloSottogruppoCatalogo: { color: brand.colors.muted, fontSize: 11, fontWeight: "700", textTransform: "uppercase", paddingTop: 8, paddingBottom: 2 },
   conteggioCategoria: { color: brand.colors.muted, fontSize: 12, fontWeight: "700" },
   riga: { paddingLeft: 14, borderBottomWidth: 1, borderBottomColor: brand.colors.border },
   rigaTesta: { flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 12, minHeight: 56 },
