@@ -217,9 +217,14 @@ export default function Partite() {
             )}
             {item.stato === "conclusa" && <Text style={styles.cardRisultato}>Set: {item.set_vinti_noi} - {item.set_vinti_avversario}</Text>}
             {puoScrivere && item.stato !== "programmata" && (
-              <Pressable onPress={() => apriRotazioni(item)}>
-                <Text style={styles.linkCampionato}>📊 Analisi rotazioni</Text>
-              </Pressable>
+              <View style={{ flexDirection: "row", gap: 16 }}>
+                <Pressable onPress={() => router.push(`/analisi-partita/${item.id}`)}>
+                  <Text style={styles.linkCampionato}>📈 Analisi completa</Text>
+                </Pressable>
+                <Pressable onPress={() => apriRotazioni(item)}>
+                  <Text style={styles.linkCampionato}>📊 Rotazioni</Text>
+                </Pressable>
+              </View>
             )}
           </Pressable>
         )}

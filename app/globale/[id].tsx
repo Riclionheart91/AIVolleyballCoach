@@ -11,6 +11,7 @@ import {
   type EventoGlobale, type FormazioneGlobale, type Globale, type RendimentoRotazione, type SquadraGlobale,
 } from "@/src/services/globale";
 import { Campo9x9, type OccupanteCampo } from "@/src/components/Campo9x9";
+import { useSincronizzazioneLive } from "@/src/hooks/useSincronizzazioneLive";
 import { confermaAzione, avvisa } from "@/src/lib/confermaAzione";
 import { brand } from "@/src/config";
 import type { Athlete } from "@/src/types/database";
@@ -71,6 +72,15 @@ export default function GlobaleAllenamento() {
   }, [trainingId, team, puoScrivere]);
 
   useFocusEffect(useCallback(() => { carica(); }, [carica]));
+
+  useSincronizzazioneLive(
+    [
+      { nome: "globale_eventi", colonnaFiltro: "globale_id", valoreFiltro: globale?.id },
+      { nome: "globale_formazioni", colonnaFiltro: "globale_id", valoreFiltro: globale?.id },
+      { nome: "globali", colonnaFiltro: "id", valoreFiltro: globale?.id },
+    ],
+    carica,
+  );
 
   function atleta(aid: string): Athlete | undefined { return atlete.find((a) => a.id === aid); }
   function etichetta(aid: string): string {

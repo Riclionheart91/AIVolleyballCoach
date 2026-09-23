@@ -117,6 +117,18 @@ export default function TabsLayout() {
       }}
     >
       <Tabs.Screen
+        name="scheda"
+        options={{
+          title: "Scheda",
+          tabBarIcon: ({ color, size }) => <Ionicons name="person-outline" color={color} size={size} />,
+          // Prima della sua registrazione esplicita qui, Expo Router la
+          // mostrava comunque come tab implicita a chiunque, perché un
+          // file dentro (tabs)/ senza una voce dedicata diventa comunque
+          // raggiungibile. Ora è nascosta a chi non ha il profilo atleta.
+          href: ruolo === "atleta" ? undefined : null,
+        }}
+      />
+      <Tabs.Screen
         name="index"
         options={{
           title: "Rosa",

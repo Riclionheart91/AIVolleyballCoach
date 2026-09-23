@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import { View, Text, Pressable, StyleSheet, ScrollView, ActivityIndicator, Modal, FlatList } from "react-native";
+import { View, Text, Pressable, StyleSheet, ScrollView, ActivityIndicator, Modal, FlatList, useWindowDimensions } from "react-native";
 import { useLocalSearchParams, useFocusEffect, router } from "expo-router";
 import { useAuth } from "@/src/context/AuthContext";
 import { elencaAtlete } from "@/src/services/athletes";
@@ -23,6 +23,12 @@ import type { Athlete, Match } from "@/src/types/database";
 export default function PreparaPartita() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { team } = useAuth();
+  const { width: larghezzaSchermo } = useWindowDimensions();
+  // Il campo qui non aveva mai un'altezza esplicita: si affidava a un
+  // flex:1 che, dentro una lista scorrevole, collassa quasi a zero.
+  // Un lato pari a gran parte della larghezza dello schermo lo rende
+  // ben visibile e più facile da toccare con precisione.
+  const latoCampo = Math.min(larghezzaSchermo - 32, 420);
   const [match, setMatch] = useState<Match | null>(null);
   const [setId, setSetId] = useState<string | null>(null);
   const [numeroSet, setNumeroSet] = useState(1);
@@ -115,7 +121,11 @@ export default function PreparaPartita() {
     setSalvandoConvocati(true);
     try {
       await impostaConvocati(id, Array.from(convocateIds), Array.from(liberoIds));
-      avvisa("Salvato", "Convocati aggiornati.");
+      // Passa subito alla formazione invece di lasciare la persona a
+      // dover cercare il pulsante "2. Imposta formazione" — è il passo
+      // naturale successivo, non serve chiederlo di nuovo.
+      if (convocateIds.size >= 6) setMostraFormazione(true);
+      else avvisa("Salvato", "Convocati aggiornati. Ne servono almeno 6 per passare alla formazione.");
     } catch (e) {
       avvisa("Errore convocati", (e as Error).message);
     } finally {
@@ -124,11 +134,12 @@ export default function PreparaPartita() {
   }
 
   const atleteConvocate = atlete.filter((a) => convocateIds.has(a.id));
-  // Esclude dal selettore le convocate già posizionate in UN'ALTRA
-  // casella — richiesto esplicitamente: non deve essere possibile
-  // selezionarle due volte, nemmeno per errore.
+  // Il Libero non entra mai nella formazione INIZIALE: per regolamento
+  // entra solo durante il gioco, come rimpiazzo. Va quindi escluso qui
+  // a prescindere dalla posizione già occupata altrove.
   const atleteDisponibiliPerPosizione = atleteConvocate.filter(
-    (a) => !Object.entries(posizioni).some(([pos, athleteId]) => athleteId === a.id && Number(pos) !== posizioneInModifica),
+    (a) => !liberoIds.has(a.id)
+      && !Object.entries(posizioni).some(([pos, athleteId]) => athleteId === a.id && Number(pos) !== posizioneInModifica),
   );
 
   const occupantiCampo: OccupanteCampo[] = Object.entries(posizioni).map(([pos, athleteId]) => {
@@ -276,12 +287,14 @@ export default function PreparaPartita() {
         ) : (
           <View style={styles.card}>
             <Text style={styles.sottotitolo}>2. Formazione iniziale (tocca una posizione)</Text>
-            <Text style={styles.nota}>Tocca una casella del campo, poi scegli chi mettere lì. La posizione 1 è la zona di battuta. Chi è già posizionato non compare più tra le scelte per un'altra casella.</Text>
+            <Text style={styles.nota}>Tocca una casella del campo, poi scegli chi mettere lì. La posizione 1 è la zona di battuta. Chi è già posizionato non compare più tra le scelte per un'altra casella. Chi gioca da Libero non compare qui: entra solo durante il gioco, come rimpiazzo.</Text>
             <View style={styles.rigaAzioniCampo}>
               <Pressable onPress={svuotaFormazione} style={styles.bottoneAzioneCampo}><Text style={styles.bottoneAzioneCampoTesto}>🗑 Svuota tutto</Text></Pressable>
               <Pressable onPress={ruotaFormazioneDiUnaPosizione} style={styles.bottoneAzioneCampo}><Text style={styles.bottoneAzioneCampoTesto}>↻ Ruota di 1</Text></Pressable>
             </View>
-            <Campo9x9 occupanti={occupantiCampo} onTapPosizione={(p) => setPosizioneInModifica(p)} onRimuoviPosizione={rimuoviPosizione} consentiPosizioniVuote />
+            <View style={{ width: latoCampo, height: latoCampo, alignSelf: "center" }}>
+              <Campo9x9 occupanti={occupantiCampo} onTapPosizione={(p) => setPosizioneInModifica(p)} onRimuoviPosizione={rimuoviPosizione} consentiPosizioniVuote />
+            </View>
 
             <Text style={[styles.etichetta, { marginTop: 10 }]}>Chi serve per prima in questo set?</Text>
             {chiServeRichiesto ? (
@@ -300,9 +313,9 @@ export default function PreparaPartita() {
               <Text key={i} style={styles.avvisoRegolamento}>⚠ {a}</Text>
             ))}
 
-            <Pressable style={styles.bottoneSecondario} onPress={salvaFormazione} disabled={!formazioneCompleta}>
-              <Text style={styles.bottoneSecondarioTesto}>{formazioneCompleta ? "Salva formazione" : `Formazione incompleta (${Object.keys(posizioni).length}/6)`}</Text>
-            </Pressable>
+            {!formazioneCompleta && (
+              <Text style={styles.nota}>Formazione incompleta ({Object.keys(posizioni).length}/6): completala per poter avviare.</Text>
+            )}
           </View>
         )}
       </ScrollView>
@@ -364,7 +377,7 @@ const styles = StyleSheet.create({
   bottoneApriFormazione: { backgroundColor: brand.colors.surfaceSecondary, borderWidth: 1, borderColor: brand.colors.brandSecondary, borderRadius: 10, padding: 14, alignItems: "center" },
   bottoneApriFormazioneTesto: { color: brand.colors.brandSecondary, fontWeight: "700" },
   rigaAzioniCampo: { flexDirection: "row", gap: 8 },
-  bottoneAzioneCampo: { flex: 1, borderWidth: 1, borderColor: brand.colors.muted, borderRadius: 8, paddingVertical: 8, alignItems: "center" },
+  bottoneAzioneCampo: { flex: 1, borderWidth: 1, borderColor: brand.colors.muted, borderRadius: 8, paddingVertical: 12, alignItems: "center", minHeight: 44, justifyContent: "center" },
   bottoneAzioneCampoTesto: { color: brand.colors.onSurfaceSecondary, fontSize: 12, fontWeight: "600" },
   selettoreRiga: { flexDirection: "row", gap: 8 },
   chip: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 16, backgroundColor: brand.colors.surfaceTertiary },
@@ -379,6 +392,6 @@ const styles = StyleSheet.create({
   sfondoPopup: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "center", padding: 24 },
   cartaPopup: { backgroundColor: brand.colors.surfaceSecondary, borderRadius: 16, padding: 20, gap: 10, maxHeight: "70%" },
   titoloPopup: { color: brand.colors.onSurface, fontSize: 16, fontWeight: "700" },
-  rigaSceltaAtleta: { paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: brand.colors.border },
-  rigaSceltaAtletaTesto: { color: brand.colors.onSurface, fontSize: 14 },
+  rigaSceltaAtleta: { paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: brand.colors.border, minHeight: 52, justifyContent: "center" },
+  rigaSceltaAtletaTesto: { color: brand.colors.onSurface, fontSize: 15, fontWeight: "600" },
 });

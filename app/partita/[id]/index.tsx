@@ -30,6 +30,7 @@ import type { Athlete, Esito, Match, MatchEvent, MatchSet, MatchSetLineup, Skill
 import { supabaseClient } from "@/src/lib/supabase";
 import { confermaAzione, avvisa } from "@/src/lib/confermaAzione";
 import { Campo9x9, type OccupanteCampo } from "@/src/components/Campo9x9";
+import { useSincronizzazioneLive } from "@/src/hooks/useSincronizzazioneLive";
 
 type Passo = "giocatrice" | "fondamentale" | "esito";
 
@@ -64,7 +65,6 @@ export default function PartitaLive() {
   const [skillSel, setSkillSel] = useState<Skill | null>(null);
   const [modalitaEssenziale, setModalitaEssenziale] = useState(true);
   const [popupCambio, setPopupCambio] = useState(false);
-  const [cambioInSospeso, setCambioInSospeso] = useState<{ uscente: Athlete; entrante: Athlete } | null>(null);
   const [erroreVisibile, setErroreVisibile] = useState<string | null>(null);
   const [regolePunteggio, setRegolePunteggio] = useState({ puntiPerSet: 25, puntiSetDecisivo: 15 });
   const ultimoPunteggioSegnalato = useRef("");
@@ -85,15 +85,18 @@ export default function PartitaLive() {
   const orizzontale = larghezzaSchermo >= altezzaSchermo;
   // Il lato del quadrato è il minore tra lo spazio disponibile in
   // altezza e quello in larghezza, così il campo entra sempre per
-  // intero senza tagliare i comandi.
+  // intero senza tagliare i comandi. Ridotto del 20% (0.52->0.42,
+  // 0.40->0.32) perché su schermo da telefono il campo pieno lasciava
+  // troppo poco spazio ai pulsanti sottostanti.
   const latoCampo = orizzontale
-    ? Math.min(altezzaSchermo - 32, larghezzaSchermo * 0.52)
-    : Math.min(larghezzaSchermo - 16, altezzaSchermo * 0.40);
+    ? Math.min(altezzaSchermo - 32, larghezzaSchermo * 0.42)
+    : Math.min(larghezzaSchermo - 16, altezzaSchermo * 0.32);
   // I comandi si ridimensionano con lo spazio disponibile invece di
   // avere misure fisse che su schermi piccoli escono e su grandi
-  // sprecano spazio.
+  // sprecano spazio. Scala ridotta del 20% rispetto a prima, per lo
+  // stesso motivo del campo: tutto deve stare in una sola schermata.
   const spazioComandi = orizzontale ? larghezzaSchermo - latoCampo - 24 : larghezzaSchermo - 16;
-  const scala = Math.max(0.85, Math.min(1.35, spazioComandi / 340));
+  const scala = Math.max(0.68, Math.min(1.08, spazioComandi / 340)) * 0.8;
   const d = (valore: number) => Math.round(valore * scala);
 
   const carica = useCallback(async () => {
@@ -121,6 +124,18 @@ export default function PartitaLive() {
   }, [id]);
 
   useFocusEffect(useCallback(() => { carica(); }, [carica]));
+
+  // Se un'altra persona (vice, scout) registra da un altro
+  // dispositivo, questa schermata si aggiorna da sola invece di
+  // restare ferma finché non la si ricarica a mano.
+  useSincronizzazioneLive(
+    [
+      { nome: "match_events", colonnaFiltro: "match_id", valoreFiltro: match?.id },
+      { nome: "match_sets", colonnaFiltro: "match_id", valoreFiltro: match?.id },
+      { nome: "match_set_lineups", colonnaFiltro: "set_id", valoreFiltro: setCorrente?.id },
+    ],
+    carica,
+  );
 
   function nomeAtleta(athleteId: string): Athlete | undefined {
     return atlete.find((a) => a.id === athleteId);
@@ -247,11 +262,14 @@ export default function PartitaLive() {
     }, true);
   }
 
-  async function onChiudiCambio() {
-    if (!setCorrente || !cambioInSospeso) return;
+  /** Un solo passo: si sceglie chi entra e il cambio parte subito, senza una fase intermedia da confermare a parte. */
+  async function onSceglieCambio(entrante: Athlete) {
+    if (!setCorrente || !atletaSelId) return;
+    setPopupCambio(false);
     try {
-      await cambiaGiocatore(setCorrente.id, cambioInSospeso.uscente.id, cambioInSospeso.entrante.id);
-      setCambioInSospeso(null); setAtletaSelId(null); carica();
+      await cambiaGiocatore(setCorrente.id, atletaSelId, entrante.id);
+      setAtletaSelId(null);
+      carica();
     } catch (e) { avvisa("Cambio non riuscito", (e as Error).message); }
   }
 
@@ -381,18 +399,7 @@ export default function PartitaLive() {
           </Pressable>
         )}
 
-        {cambioInSospeso && (
-          <View style={styles.bannerCambio}>
-            <Text style={styles.bannerCambioTesto} numberOfLines={2}>
-              {cambioInSospeso.uscente.cognome} esce · {cambioInSospeso.entrante.cognome} entra
-            </Text>
-            <View style={styles.rigaBannerAzioni}>
-              <Pressable onPress={() => setCambioInSospeso(null)}><Text style={styles.nota}>Annulla</Text></Pressable>
-              <Pressable style={styles.bottoneChiudiCambio} onPress={onChiudiCambio}><Text style={styles.bottoneChiudiCambioTesto}>✓ Chiudi cambio</Text></Pressable>
-            </View>
-          </View>
-        )}
-
+  
         {puoScoutare ? (
           <>
           <ScrollView style={{ flex: 1 }} contentContainerStyle={{ gap: 8, paddingBottom: 8 }}>
@@ -508,11 +515,7 @@ export default function PartitaLive() {
               renderItem={({ item }) => (
                 <Pressable
                   style={styles.rigaScelta}
-                  onPress={() => {
-                    const uscente = atletaSelId ? nomeAtleta(atletaSelId) : undefined;
-                    if (uscente) setCambioInSospeso({ uscente, entrante: item });
-                    setPopupCambio(false);
-                  }}
+                  onPress={() => onSceglieCambio(item)}
                 >
                   <Text style={styles.rigaSceltaTesto}>#{item.numero_maglia ?? "-"} {item.nome} {item.cognome}</Text>
                 </Pressable>
@@ -661,11 +664,6 @@ const styles = StyleSheet.create({
 
   bannerErrore: { backgroundColor: "#4A1620", borderRadius: 8, padding: 8 },
   bannerErroreTesto: { color: "#fff", fontSize: 11 },
-  bannerCambio: { backgroundColor: brand.colors.surfaceSecondary, borderRadius: 8, padding: 8, gap: 6, borderWidth: 1, borderColor: brand.colors.brandSecondary },
-  bannerCambioTesto: { color: brand.colors.onSurface, fontSize: 12 },
-  rigaBannerAzioni: { flexDirection: "row", justifyContent: "flex-end", gap: 12, alignItems: "center" },
-  bottoneChiudiCambio: { backgroundColor: brand.colors.success, paddingVertical: 6, paddingHorizontal: 10, borderRadius: 8 },
-  bottoneChiudiCambioTesto: { color: "#000", fontWeight: "700", fontSize: 11 },
 
   bottoneSecondario: { borderColor: brand.colors.brand, borderWidth: 1, paddingVertical: 10, paddingHorizontal: 16, borderRadius: 8 },
   bottoneSecondarioTesto: { color: brand.colors.brand, fontWeight: "600" },

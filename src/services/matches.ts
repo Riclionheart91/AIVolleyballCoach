@@ -205,3 +205,56 @@ export async function faiUscireLibero(setId: string): Promise<void> {
   const { error } = await supabaseClient.rpc("fai_uscire_libero", { p_set_id: setId });
   if (error) throw error;
 }
+
+export interface AnalisiFondamentale {
+  fondamentale: string;
+  azioni: number;
+  punti: number;
+  errori: number;
+  efficienza: number | null;
+  quota_sul_totale: number | null;
+}
+
+export interface AnalisiPersona {
+  athlete_id: string;
+  nome_completo: string;
+  azioni: number;
+  punti: number;
+  errori: number;
+  saldo: number;
+  fondamentale_migliore: string | null;
+  fondamentale_peggiore: string | null;
+}
+
+export interface AndamentoPartita {
+  match_id: string;
+  avversario: string;
+  data: string;
+  set_vinti_noi: number;
+  set_vinti_avversario: number;
+  azioni: number;
+  punti: number;
+  errori: number;
+  efficienza: number | null;
+}
+
+/** Efficienza (punti-errori/azioni) per fondamentale in una partita: quanto RENDE ciascuno, non solo quante volte è stato usato. */
+export async function analisiFondamentaliPartita(matchId: string): Promise<AnalisiFondamentale[]> {
+  const { data, error } = await supabaseClient.rpc("analisi_fondamentali_partita", { p_match_id: matchId });
+  if (error) throw error;
+  return data ?? [];
+}
+
+/** Contributo di ciascuna persona in una partita. Chi non è staff vede solo le proprie righe (applicato dal database). */
+export async function analisiPersonePartita(matchId: string): Promise<AnalisiPersona[]> {
+  const { data, error } = await supabaseClient.rpc("analisi_persone_partita", { p_match_id: matchId });
+  if (error) throw error;
+  return data ?? [];
+}
+
+/** Andamento della squadra nelle ultime N partite concluse: una riga per partita, per vedere la tendenza. */
+export async function andamentoTraPartite(teamId: string, quante = 10): Promise<AndamentoPartita[]> {
+  const { data, error } = await supabaseClient.rpc("andamento_tra_partite", { p_team_id: teamId, p_quante: quante });
+  if (error) throw error;
+  return data ?? [];
+}

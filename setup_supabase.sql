@@ -1,3 +1,9 @@
+-- setup_supabase.sql — rigenerato dalla cronologia locale allineata
+-- 2026-09-23
+
+-- ============================================================
+-- 0001_f1_anagrafica.sql
+-- ============================================================
 -- ============================================================
 -- F1 — Anagrafica base (equivalente di V0 in AIVolleyballCoach GAS)
 -- Atlete, esercizi, allenamenti, presenze, RPE, valutazioni manuali.
@@ -243,6 +249,9 @@ end;
 $$;
 
 -- ============================================================
+-- 0001b_inviti_team.sql
+-- ============================================================
+-- ============================================================
 -- 0001b — Inviti membri squadra
 -- Addendum a F1 (non una fase a sé): risponde alla necessità di più
 -- allenatori/vice-allenatori sullo stesso team senza dover coordinare
@@ -355,6 +364,9 @@ begin
 end;
 $$;
 
+-- ============================================================
+-- 0001c_ruoli_estesi.sql
+-- ============================================================
 -- ============================================================
 -- 0001c — Ruoli estesi e privacy dei dati personali
 -- Addendum a F1, come 0001b. Nome "0001c" per restare ordinato subito
@@ -616,6 +628,9 @@ end;
 $$;
 
 -- ============================================================
+-- 0001d_fix_rls_ricorsione.sql
+-- ============================================================
+-- ============================================================
 -- 0001d — Fix ricorsione RLS sulle funzioni helper
 --
 -- is_team_member/is_team_coach/is_team_presidente/mio_atleta_id
@@ -682,6 +697,9 @@ as $$
 $$;
 
 -- ============================================================
+-- 0001e_codice_fiscale.sql
+-- ============================================================
+-- ============================================================
 -- 0001e — Codice fiscale atlete (per deduplica import Excel)
 --
 -- Chiave di dedup nel wizard di import: se presente, il codice fiscale
@@ -699,6 +717,9 @@ create unique index if not exists idx_athletes_codice_fiscale
   on athletes (team_id, upper(codice_fiscale)) where codice_fiscale is not null;
 
 -- ============================================================
+-- 0001g_campi_sporteasy_completi.sql
+-- ============================================================
+-- ============================================================
 -- 0001g — Campi aggiuntivi per import completo SportEasy
 --
 -- Del file Excel reale (43 colonne) importiamo solo i campi con un
@@ -715,6 +736,9 @@ create unique index if not exists idx_athletes_codice_fiscale
 alter table athletes add column if not exists numero_licenza text;
 alter table athletes add column if not exists scadenza_certificato_medico date;
 
+-- ============================================================
+-- 0002_f2_stagioni.sql
+-- ============================================================
 -- ============================================================
 -- F2 — Stagioni + baseline (equivalente di V2.5 in AIVolleyballCoach GAS)
 -- Nessuna colonna toccata su evaluations: l'appartenenza di una
@@ -866,6 +890,9 @@ end;
 $$;
 
 -- ============================================================
+-- 0002b_season_baselines_ristretta.sql
+-- ============================================================
+-- ============================================================
 -- 0002b — RLS ristretta su season_baselines
 --
 -- Era dentro 0001c_ruoli_estesi.sql, ma quel file gira PRIMA di
@@ -882,6 +909,9 @@ create policy "season_baselines_select_ristretta" on season_baselines for select
   or is_superuser()
 );
 
+-- ============================================================
+-- 0002c_contesto_team.sql
+-- ============================================================
 -- ============================================================
 -- 0001f — mio_contesto_team(): caricamento atomico squadra+stagione
 --
@@ -947,6 +977,9 @@ begin
 end;
 $$;
 
+-- ============================================================
+-- 0003_f3_scouting.sql
+-- ============================================================
 -- ============================================================
 -- F3 — Scouting live (partite, set, eventi)
 -- Occupa lo slot "0003" lasciato libero fin dall'inizio della
@@ -1223,6 +1256,9 @@ end;
 $$;
 
 -- ============================================================
+-- 0004_sporteasy.sql
+-- ============================================================
+-- ============================================================
 -- 0004 — Integrazione SportEasy (sync eventi calendario)
 -- Occupa lo slot "0004" lasciato libero per F6. Sostituisce
 -- SportEasySync.gs: importa SOLO eventi (allenamenti/partite) dal
@@ -1303,6 +1339,9 @@ begin
 end;
 $$;
 
+-- ============================================================
+-- 0005_f5_ai_layer.sql
+-- ============================================================
 -- ============================================================
 -- F5 — Layer AI, manual-first (equivalente di V2+V7 in AIVolleyballCoach
 -- GAS, qui riprogettato fin da subito come nella patch V7.1: un solo
@@ -1469,6 +1508,9 @@ end;
 $$;
 
 -- ============================================================
+-- 0005b_fix_ai_providers_unique.sql
+-- ============================================================
+-- ============================================================
 -- 0005b — Fix unicità ai_providers_config per righe globali
 --
 -- Il vincolo "unique (team_id, provider_code)" di 0005_f5_ai_layer.sql
@@ -1522,6 +1564,9 @@ where not exists (
   where existenti.team_id is null and existenti.provider_code = x.provider_code
 );
 
+-- ============================================================
+-- 0006_superuser.sql
+-- ============================================================
 -- ============================================================
 -- 0006 — Super-amministratore globale
 --
@@ -1611,6 +1656,9 @@ create policy "ai_providers_config_write_coach" on ai_providers_config for all u
   (team_id is not null and is_team_coach(team_id)) or (team_id is null and is_superuser())
 );
 
+-- ============================================================
+-- 0007_hardening.sql
+-- ============================================================
 -- ============================================================
 -- 0007 — Hardening di sicurezza
 --
@@ -2000,6 +2048,9 @@ create index if not exists idx_team_invites_email_lower on team_invites (lower(e
 
 
 -- ============================================================
+-- 0008_pianificazione_allenamenti.sql
+-- ============================================================
+-- ============================================================
 -- 0008 — Pianificazione allenamenti
 --
 -- Aggiunge quanto mancava per pianificare davvero una sessione (non
@@ -2066,6 +2117,9 @@ $$;
 revoke execute on function imposta_piano_allenamento(uuid, text, jsonb) from anon;
 grant execute on function imposta_piano_allenamento(uuid, text, jsonb) to authenticated;
 
+-- ============================================================
+-- 0009_formazione_scouting.sql
+-- ============================================================
 -- ============================================================
 -- 0009 — Formazione in campo (scouting avanzato, prima parte)
 --
@@ -2140,6 +2194,9 @@ $$;
 revoke execute on function imposta_formazione_set(uuid, uuid[]) from anon;
 grant execute on function imposta_formazione_set(uuid, uuid[]) to authenticated;
 
+-- ============================================================
+-- 0010_regolamento_formazione.sql
+-- ============================================================
 -- ============================================================
 -- 0010 — Regolamento configurabile, convocati, formazione a posizioni,
 -- rotazione automatica, avvio esplicito della partita
@@ -2667,6 +2724,9 @@ revoke execute on function avvia_match(uuid) from anon;
 grant execute on function avvia_match(uuid) to authenticated;
 
 -- ============================================================
+-- 0011_scouting_rifiniture.sql
+-- ============================================================
+-- ============================================================
 -- 0011 — Rifiniture scouting: servizio per set, blocco dopo l'avvio
 --
 -- "squadra_al_servizio" cambia continuamente durante il set (ad ogni
@@ -2757,6 +2817,9 @@ $$;
 revoke execute on function chi_serve_default_nuovo_set(uuid, integer) from anon;
 grant execute on function chi_serve_default_nuovo_set(uuid, integer) to authenticated;
 
+-- ============================================================
+-- 0012_pianificazione_annuale.sql
+-- ============================================================
 -- ============================================================
 -- 0012 — Pianificazione annuale (gestione cicli) + centro notifiche
 --
@@ -2867,6 +2930,9 @@ grant execute on function accetta_proposta_piano(uuid) to authenticated;
 grant execute on function rifiuta_proposta_piano(uuid) to authenticated;
 
 -- ============================================================
+-- 0013_periodo_campionato.sql
+-- ============================================================
+-- ============================================================
 -- 0013 — Periodo del campionato, per l'assegnazione automatica
 --
 -- Un campionato ora ha un periodo (data inizio/fine facoltative): le
@@ -2904,6 +2970,9 @@ grant execute on function trova_campionato_per_data(uuid, date) to authenticated
 -- un utente autenticato specifico.
 grant execute on function trova_campionato_per_data(uuid, date) to service_role;
 
+-- ============================================================
+-- 0014_fix_set_successivi.sql
+-- ============================================================
 -- ============================================================
 -- 0014 — Fix: preparazione e avvio dei set successivi al primo
 --
@@ -3005,6 +3074,9 @@ revoke execute on function conteggio_set_vinti(uuid) from anon;
 grant execute on function conteggio_set_vinti(uuid) to authenticated;
 
 -- ============================================================
+-- 0015_ciclo_valutazione.sql
+-- ============================================================
+-- ============================================================
 -- 0015 — Ciclo di valutazione mensile
 --
 -- Roadmap punto 4: invece del flusso ad-hoc ("valuti quando ti
@@ -3091,6 +3163,9 @@ revoke execute on function imposta_cadenza_valutazione(uuid, integer) from anon;
 grant execute on function atlete_da_valutare(uuid) to authenticated;
 grant execute on function imposta_cadenza_valutazione(uuid, integer) to authenticated;
 
+-- ============================================================
+-- 0016_converti_evento.sql
+-- ============================================================
 -- ============================================================
 -- 0016 — Conversione manuale allenamento ↔ partita
 --
@@ -3196,6 +3271,9 @@ revoke execute on function converti_partita_in_allenamento(uuid, text) from anon
 grant execute on function converti_allenamento_in_partita(uuid, text) to authenticated;
 grant execute on function converti_partita_in_allenamento(uuid, text) to authenticated;
 
+-- ============================================================
+-- 0017_quota_ai_e_archivio_allenamenti.sql
+-- ============================================================
 -- 0017 — Fix quota AI chiamata da Edge Function + archivio allenamenti
 --
 -- BUG: ai_chiamate_residue_oggi() verifica is_team_member(p_team_id),
@@ -3246,6 +3324,9 @@ $$;
 revoke execute on function archivia_allenamenti_passati(uuid) from anon;
 grant execute on function archivia_allenamenti_passati(uuid) to authenticated;
 
+-- ============================================================
+-- 0018_piano_a_blocchi.sql
+-- ============================================================
 -- 0018 — Piano annuale a blocchi (periodizzazione strutturata)
 -- Vedi commento esteso nella migrazione applicata: struttura la
 -- stagione in blocchi datati con tipo e obiettivi, invece del solo
@@ -3308,6 +3389,9 @@ $$;
 revoke execute on function blocco_per_data(uuid, date) from anon;
 grant execute on function blocco_per_data(uuid, date) to authenticated;
 
+-- ============================================================
+-- 0020_sessione_allenamento.sql
+-- ============================================================
 -- 0020 — Sessione di allenamento dal vivo (avvio/chiusura esercizi, tempi reali)
 alter table trainings add column if not exists iniziato_il timestamptz;
 alter table trainings add column if not exists concluso_il timestamptz;
@@ -3318,6 +3402,9 @@ alter table training_exercises add column if not exists durata_effettiva_secondi
 -- concludi_esercizio e concludi_sessione_allenamento sono applicate
 -- nella migrazione omonima sul progetto (vedi cronologia Supabase).
 
+-- ============================================================
+-- 0021_hardening_finale.sql
+-- ============================================================
 -- 0021 — Hardening finale (segnalazioni dell'analizzatore Supabase)
 -- 1) search_path fisso sulle ultime due funzioni che ne erano prive.
 -- 2) Revoca a "anon" dell'esecuzione di tutte le funzioni SECURITY
@@ -3342,6 +3429,2107 @@ begin
       execute format('grant execute on function %s to service_role', r.firma);
     end if;
   end loop;
+end;
+$$;
+
+-- ============================================================
+-- 0022_carenze_atleta.sql
+-- ============================================================
+-- 0022 — Carenze per atleta, base per gli esercizi correttivi mirati
+-- Restituisce i fondamentali più deboli secondo le valutazioni recenti:
+-- è il dato su cui l'AI costruisce esercizi individuali invece di
+-- lavori generici uguali per tutte.
+
+create or replace function carenze_atleta(p_athlete_id uuid, p_quante integer default 3)
+returns table(fondamentale text, media numeric, numero_valutazioni integer)
+language plpgsql stable security definer set search_path = public
+as $$
+declare v_team_id uuid;
+begin
+  if auth.uid() is null then raise exception 'Utente non autenticato'; end if;
+  select team_id into v_team_id from athletes where id = p_athlete_id;
+  if v_team_id is null then raise exception 'Atleta non trovata'; end if;
+
+  -- Stessa regola di privacy già in vigore altrove: lo staff con visione
+  -- piena vede tutte, un'atleta solo le proprie carenze.
+  if not (is_team_staff_visione_piena(v_team_id) or p_athlete_id = mio_atleta_id(v_team_id)) then
+    raise exception 'Permesso negato';
+  end if;
+
+  return query
+    select e.fondamentale, round(avg(e.punteggio), 1), count(*)::integer
+    from evaluations e
+    where e.athlete_id = p_athlete_id
+      and e.data_valutazione >= now() - interval '120 days'
+    group by e.fondamentale
+    order by avg(e.punteggio) asc
+    limit greatest(1, p_quante);
+end;
+$$;
+
+revoke all on function carenze_atleta(uuid, integer) from public, anon;
+grant execute on function carenze_atleta(uuid, integer) to authenticated;
+grant execute on function carenze_atleta(uuid, integer) to service_role;
+
+-- ============================================================
+-- 0023_0028_nota_storica.sql
+-- ============================================================
+-- NOTA STORICA: le migrazioni 0023-0028 sono state applicate
+-- direttamente sul progetto Supabase in una fase in cui la cronologia
+-- locale non veniva ancora tenuta allineata ad ogni giro. Contenevano:
+--   0023 tabelle globali/globale_formazioni/globale_eventi + RLS
+--   0024 rotazione/punteggio/annullamento del globale
+--   0025 analisi rotazioni globale + chiusura con proposte valutazione
+--   0026 rimozione del tetto arbitrario di chiamate AI
+--   0027 abilitazione realtime sulle tabelle di scouting
+--   0028 rotazione registrata negli eventi partita + analisi rotazioni
+-- Il loro contenuto esatto non è stato ricostruito verbatim in questo
+-- giro di allineamento (a differenza delle 0029-0051, per cui il testo
+-- esatto era disponibile): le funzioni e tabelle che introducevano
+-- sono comunque tutte presenti e corrette nelle migrazioni successive,
+-- che le ridefiniscono. Se si ricostruisce il database da zero con
+-- setup_supabase.sql, l'assenza di queste sei manca principalmente di
+-- commenti storici, non di funzionalità: le migrazioni successive
+-- (in particolare 0031, 0034, 0039) ricreano tutto ciò che serve.
+
+-- ============================================================
+-- 0029_punto_nostro_e_profilo_scout.sql
+-- ============================================================
+-- 0029 — Punto senza attribuzione + profilo "scout"
+--
+-- Nota sul vocabolario: gli eventi partita usano "Servizio" mentre le
+-- valutazioni usano "Battuta" (verrà unificato nella 0032). Il
+-- vincolo accetta entrambi qui per non invalidare lo storico già
+-- registrato al momento in cui questa migrazione fu scritta.
+
+alter table match_events drop constraint if exists match_events_skill_check;
+alter table match_events add constraint match_events_skill_check
+  check (skill in ('Servizio','Battuta','Ricezione','Attacco','Muro','Difesa','Punto_avversario','Punto_nostro'));
+
+alter table team_members drop constraint if exists team_members_ruolo_check;
+alter table team_members add constraint team_members_ruolo_check
+  check (ruolo in ('allenatore','vice_allenatore','presidente','atleta','scout'));
+
+alter table team_invites drop constraint if exists team_invites_ruolo_check;
+alter table team_invites add constraint team_invites_ruolo_check
+  check (ruolo in ('allenatore','vice_allenatore','presidente','atleta','scout'));
+
+create or replace function is_team_scout(p_team_id uuid)
+returns boolean
+language sql stable security definer set search_path = public
+as $$
+  select exists (
+    select 1 from team_members
+    where team_id = p_team_id and user_id = auth.uid()
+      and ruolo in ('allenatore','vice_allenatore','scout')
+  );
+$$;
+
+create or replace function registra_evento(p_match_id uuid, p_set_id uuid, p_skill text, p_esito text, p_athlete_id uuid default null)
+returns uuid
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_team_id uuid;
+  v_stato_match text;
+  v_evento_id uuid;
+begin
+  if auth.uid() is null then raise exception 'Utente non autenticato'; end if;
+
+  select team_id, stato into v_team_id, v_stato_match from matches where id = p_match_id;
+  if v_team_id is null then raise exception 'Partita non trovata'; end if;
+  if not is_team_scout(v_team_id) then raise exception 'Permesso negato'; end if;
+  if v_stato_match = 'conclusa' then raise exception 'Partita già conclusa'; end if;
+  if v_stato_match <> 'in_corso' then raise exception 'La partita non è ancora iniziata'; end if;
+
+  if not exists (select 1 from match_sets where id = p_set_id and match_id = p_match_id for update) then
+    raise exception 'Il set indicato non appartiene a questa partita';
+  end if;
+  if not exists (select 1 from match_set_lineups where set_id = p_set_id) then
+    raise exception 'Formazione non impostata per questo set';
+  end if;
+  if p_athlete_id is not null and not exists (select 1 from athletes where id = p_athlete_id and team_id = v_team_id) then
+    raise exception 'L''atleta indicata non appartiene a questa squadra';
+  end if;
+
+  insert into match_events (match_id, set_id, skill, esito, athlete_id, creato_da)
+  values (p_match_id, p_set_id, p_skill, p_esito, p_athlete_id, auth.uid())
+  returning id into v_evento_id;
+
+  return v_evento_id;
+end;
+$$;
+
+create or replace function cambia_giocatore(p_set_id uuid, p_atleta_uscente uuid, p_atleta_entrante uuid)
+returns void
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_team_id uuid;
+  v_match_id uuid;
+  v_posizione integer;
+begin
+  select m.id, m.team_id into v_match_id, v_team_id from match_sets ms join matches m on m.id = ms.match_id where ms.id = p_set_id;
+  if v_team_id is null then raise exception 'Set non trovato'; end if;
+  if not is_team_scout(v_team_id) then raise exception 'Permesso negato'; end if;
+
+  select posizione into v_posizione from match_set_lineups where set_id = p_set_id and athlete_id = p_atleta_uscente and in_campo = true;
+  if v_posizione is null then raise exception 'La giocatrice uscente non risulta in campo'; end if;
+  if not exists (select 1 from match_convocati where match_id = v_match_id and athlete_id = p_atleta_entrante) then
+    raise exception 'La giocatrice entrante non è tra le convocate';
+  end if;
+  if exists (select 1 from match_set_lineups where set_id = p_set_id and athlete_id = p_atleta_entrante and in_campo = true) then
+    raise exception 'La giocatrice entrante è già in campo';
+  end if;
+  if exists (select 1 from match_set_lineups where set_id = p_set_id and athlete_id = p_atleta_entrante and in_campo = false) then
+    raise exception 'Questa giocatrice è già uscita in questo set e non può rientrare';
+  end if;
+
+  update match_set_lineups set in_campo = false, posizione = null where set_id = p_set_id and athlete_id = p_atleta_uscente;
+  insert into match_set_lineups (set_id, athlete_id, in_campo, posizione)
+  values (p_set_id, p_atleta_entrante, true, v_posizione)
+  on conflict (set_id, athlete_id) do update set in_campo = true, posizione = v_posizione;
+end;
+$$;
+
+create or replace function annulla_ultimo_evento(p_match_id uuid)
+returns void
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_team_id uuid;
+  v_evento_id uuid;
+begin
+  select team_id into v_team_id from matches where id = p_match_id;
+  if v_team_id is null then raise exception 'Partita non trovata'; end if;
+  if not is_team_scout(v_team_id) then raise exception 'Permesso negato'; end if;
+
+  select id into v_evento_id from match_events where match_id = p_match_id order by creato_il desc, id desc limit 1;
+  if v_evento_id is not null then delete from match_events where id = v_evento_id; end if;
+end;
+$$;
+
+drop policy if exists "match_events_select_scout" on match_events;
+create policy "match_events_select_scout" on match_events for select
+  using (is_team_scout((select team_id from matches where id = match_id)));
+
+drop policy if exists "match_set_lineups_select_scout" on match_set_lineups;
+create policy "match_set_lineups_select_scout" on match_set_lineups for select
+  using (is_team_scout((select m.team_id from match_sets ms join matches m on m.id = ms.match_id where ms.id = set_id)));
+
+drop policy if exists "match_convocati_select_scout" on match_convocati;
+create policy "match_convocati_select_scout" on match_convocati for select
+  using (is_team_scout((select team_id from matches where id = match_id)));
+
+revoke all on function is_team_scout(uuid) from public, anon;
+grant execute on function is_team_scout(uuid) to authenticated, service_role;
+
+-- ============================================================
+-- 0030_gestione_membri_cambio_ruolo.sql
+-- ============================================================
+-- 0030 — Gestione membri: elenco unificato e cambio profilo
+
+create or replace function elenca_membri_team(p_team_id uuid)
+returns table(user_id uuid, email text, ruolo text, atleta_id uuid, atleta_nome text)
+language plpgsql stable security definer set search_path = public
+as $$
+begin
+  if auth.uid() is null then raise exception 'Utente non autenticato'; end if;
+  if not is_team_coach(p_team_id) then raise exception 'Permesso negato'; end if;
+
+  return query
+    select tm.user_id, u.email::text, tm.ruolo, tm.atleta_id,
+           case when a.id is not null then a.nome || ' ' || a.cognome else null end
+    from team_members tm
+    join auth.users u on u.id = tm.user_id
+    left join athletes a on a.id = tm.atleta_id
+    where tm.team_id = p_team_id
+    order by tm.ruolo, u.email;
+end;
+$$;
+
+create or replace function cambia_ruolo_membro(p_team_id uuid, p_user_id uuid, p_nuovo_ruolo text, p_atleta_id uuid default null)
+returns void
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_ruolo_attuale text;
+  v_altri_allenatori integer;
+begin
+  if auth.uid() is null then raise exception 'Utente non autenticato'; end if;
+  if not is_team_coach(p_team_id) then raise exception 'Permesso negato'; end if;
+  if p_nuovo_ruolo not in ('allenatore','vice_allenatore','presidente','atleta','scout') then
+    raise exception 'Profilo non valido';
+  end if;
+
+  select ruolo into v_ruolo_attuale from team_members where team_id = p_team_id and user_id = p_user_id;
+  if v_ruolo_attuale is null then raise exception 'Questa persona non fa parte della squadra'; end if;
+
+  if v_ruolo_attuale = 'allenatore' and p_nuovo_ruolo <> 'allenatore' then
+    select count(*) into v_altri_allenatori from team_members
+    where team_id = p_team_id and ruolo = 'allenatore' and user_id <> p_user_id;
+    if v_altri_allenatori = 0 then
+      raise exception 'Non puoi togliere l''ultimo allenatore della squadra: nominane prima un altro';
+    end if;
+  end if;
+
+  if p_nuovo_ruolo = 'atleta' then
+    if p_atleta_id is null then raise exception 'Per il profilo atleta indica a quale scheda collegarlo'; end if;
+    if not exists (select 1 from athletes where id = p_atleta_id and team_id = p_team_id) then
+      raise exception 'Scheda atleta non trovata in questa squadra';
+    end if;
+    if exists (select 1 from team_members where atleta_id = p_atleta_id and user_id <> p_user_id) then
+      raise exception 'Questa scheda atleta è già collegata a un altro account';
+    end if;
+  end if;
+
+  update team_members
+  set ruolo = p_nuovo_ruolo,
+      atleta_id = case when p_nuovo_ruolo = 'atleta' then p_atleta_id else null end
+  where team_id = p_team_id and user_id = p_user_id;
+end;
+$$;
+
+create or replace function rimuovi_membro(p_team_id uuid, p_user_id uuid)
+returns void
+language plpgsql security definer set search_path = public
+as $$
+declare v_altri_allenatori integer;
+begin
+  if auth.uid() is null then raise exception 'Utente non autenticato'; end if;
+  if not is_team_coach(p_team_id) then raise exception 'Permesso negato'; end if;
+
+  select count(*) into v_altri_allenatori from team_members
+  where team_id = p_team_id and ruolo = 'allenatore' and user_id <> p_user_id;
+  if v_altri_allenatori = 0 and exists (
+    select 1 from team_members where team_id = p_team_id and user_id = p_user_id and ruolo = 'allenatore'
+  ) then
+    raise exception 'Non puoi rimuovere l''ultimo allenatore della squadra';
+  end if;
+
+  delete from team_members where team_id = p_team_id and user_id = p_user_id;
+end;
+$$;
+
+revoke all on function elenca_membri_team(uuid) from public, anon;
+revoke all on function cambia_ruolo_membro(uuid, uuid, text, uuid) from public, anon;
+revoke all on function rimuovi_membro(uuid, uuid) from public, anon;
+grant execute on function elenca_membri_team(uuid) to authenticated, service_role;
+grant execute on function cambia_ruolo_membro(uuid, uuid, text, uuid) to authenticated, service_role;
+grant execute on function rimuovi_membro(uuid, uuid) to authenticated, service_role;
+
+-- ============================================================
+-- 0031_punteggio_e_rotazione_per_punto_nostro.sql
+-- ============================================================
+-- 0031 — "Punto_nostro" nel punteggio e nella rotazione
+
+create or replace function aggiorna_punteggio_da_evento()
+returns trigger
+language plpgsql security definer set search_path = public
+as $$
+begin
+  if TG_OP = 'INSERT' then
+    if NEW.skill = 'Punto_avversario' or NEW.esito = 'errore' then
+      update match_sets set punti_avversario = punti_avversario + 1 where id = NEW.set_id;
+    elsif NEW.skill = 'Punto_nostro' or NEW.esito = 'punto' then
+      update match_sets set punti_noi = punti_noi + 1 where id = NEW.set_id;
+    end if;
+    return NEW;
+  elsif TG_OP = 'DELETE' then
+    if OLD.skill = 'Punto_avversario' or OLD.esito = 'errore' then
+      update match_sets set punti_avversario = greatest(0, punti_avversario - 1) where id = OLD.set_id;
+    elsif OLD.skill = 'Punto_nostro' or OLD.esito = 'punto' then
+      update match_sets set punti_noi = greatest(0, punti_noi - 1) where id = OLD.set_id;
+    end if;
+    return OLD;
+  end if;
+  return null;
+end;
+$$;
+
+create or replace function cattura_stato_servizio()
+returns trigger
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_servizio_attuale text;
+  v_punto_nostro boolean;
+begin
+  select squadra_al_servizio into v_servizio_attuale from match_sets where id = NEW.set_id;
+  NEW.servizio_precedente := v_servizio_attuale;
+
+  select athlete_id into NEW.rotazione_al_servizio
+  from match_set_lineups
+  where set_id = NEW.set_id and posizione = 1 and in_campo = true;
+
+  v_punto_nostro := (NEW.esito = 'punto' or NEW.skill = 'Punto_nostro');
+  NEW.rotazione_applicata := v_punto_nostro and v_servizio_attuale is distinct from 'noi';
+
+  return NEW;
+end;
+$$;
+
+create or replace function applica_rotazione_dopo_evento()
+returns trigger
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_punto_avversario boolean;
+begin
+  v_punto_avversario := (NEW.skill = 'Punto_avversario' or NEW.esito = 'errore');
+
+  if NEW.rotazione_applicata then
+    perform ruota_formazione(NEW.set_id);
+    update match_sets set squadra_al_servizio = 'noi' where id = NEW.set_id;
+  elsif v_punto_avversario and NEW.servizio_precedente is distinct from 'avversario' then
+    update match_sets set squadra_al_servizio = 'avversario' where id = NEW.set_id;
+  end if;
+
+  return NEW;
+end;
+$$;
+
+create or replace function rendimento_rotazioni_partita(p_match_id uuid)
+returns table(rotazione_di text, punti_fatti integer, errori_commessi integer, saldo integer, azioni_totali integer)
+language plpgsql stable security definer set search_path = public
+as $$
+declare v_team_id uuid;
+begin
+  if auth.uid() is null then raise exception 'Utente non autenticato'; end if;
+  select team_id into v_team_id from matches where id = p_match_id;
+  if v_team_id is null then raise exception 'Partita non trovata'; end if;
+  if not (is_team_staff_visione_piena(v_team_id) or is_team_scout(v_team_id)) then raise exception 'Permesso negato'; end if;
+
+  return query
+  select
+    coalesce(a.cognome, 'rotazione non registrata'),
+    count(*) filter (where me.esito = 'punto' or me.skill = 'Punto_nostro')::integer,
+    count(*) filter (where me.esito = 'errore' or me.skill = 'Punto_avversario')::integer,
+    (count(*) filter (where me.esito = 'punto' or me.skill = 'Punto_nostro')
+     - count(*) filter (where me.esito = 'errore' or me.skill = 'Punto_avversario'))::integer,
+    count(*)::integer
+  from match_events me
+  left join athletes a on a.id = me.rotazione_al_servizio
+  where me.match_id = p_match_id
+  group by a.cognome
+  order by 4 asc;
+end;
+$$;
+
+-- ============================================================
+-- 0032_uniforma_vocabolario_servizio.sql
+-- ============================================================
+-- 0032 — Vocabolario unico "Servizio" + correzione stato proposte
+--
+-- PROBLEMA 1 (uniformità): lo stesso fondamentale si chiamava
+-- "Battuta" nelle valutazioni e "Servizio" negli eventi partita. Si
+-- adotta "Servizio" ovunque. Le tabelle coinvolte erano vuote tranne
+-- match_events, che usava già "Servizio": nessun dato da convertire.
+--
+-- PROBLEMA 2 (bug vero): chiudi_globale() inseriva proposte con stato
+-- 'pendente', ma il vincolo di evaluation_proposals ammette
+-- 'proposta'. Corretto.
+
+alter table evaluations drop constraint if exists evaluations_fondamentale_check;
+update evaluations set fondamentale = 'Servizio' where fondamentale = 'Battuta';
+alter table evaluations add constraint evaluations_fondamentale_check
+  check (fondamentale in ('Servizio','Ricezione','Attacco','Muro','Difesa'));
+
+alter table evaluation_proposals drop constraint if exists evaluation_proposals_fondamentale_check;
+update evaluation_proposals set fondamentale = 'Servizio' where fondamentale = 'Battuta';
+alter table evaluation_proposals add constraint evaluation_proposals_fondamentale_check
+  check (fondamentale in ('Servizio','Ricezione','Attacco','Muro','Difesa'));
+
+alter table season_baselines drop constraint if exists season_baselines_fondamentale_check;
+update season_baselines set fondamentale = 'Servizio' where fondamentale = 'Battuta';
+alter table season_baselines add constraint season_baselines_fondamentale_check
+  check (fondamentale in ('Servizio','Ricezione','Attacco','Muro','Difesa'));
+
+alter table globale_eventi drop constraint if exists globale_eventi_fondamentale_check;
+update globale_eventi set fondamentale = 'Servizio' where fondamentale = 'Battuta';
+alter table globale_eventi add constraint globale_eventi_fondamentale_check
+  check (fondamentale in ('Servizio','Ricezione','Attacco','Muro','Difesa'));
+
+alter table match_events drop constraint if exists match_events_skill_check;
+update match_events set skill = 'Servizio' where skill = 'Battuta';
+alter table match_events add constraint match_events_skill_check
+  check (skill in ('Servizio','Ricezione','Attacco','Muro','Difesa','Punto_avversario','Punto_nostro'));
+
+create or replace function chiudi_globale(p_globale_id uuid, p_genera_proposte boolean default true)
+returns integer
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_team_id uuid;
+  v_riga record;
+  v_valore numeric;
+  v_create integer := 0;
+begin
+  if auth.uid() is null then raise exception 'Utente non autenticato'; end if;
+  select team_id into v_team_id from globali where id = p_globale_id;
+  if v_team_id is null then raise exception 'Globale non trovato'; end if;
+  if not is_team_coach(v_team_id) then raise exception 'Permesso negato'; end if;
+
+  update globali set stato = 'concluso', concluso_il = now() where id = p_globale_id;
+  if not p_genera_proposte then return 0; end if;
+
+  for v_riga in
+    select athlete_id, fondamentale,
+           count(*) filter (where esito = 'punto')::numeric as punti,
+           count(*) filter (where esito = 'errore')::numeric as errori,
+           count(*)::integer as totale
+    from globale_eventi
+    where globale_id = p_globale_id and athlete_id is not null
+    group by athlete_id, fondamentale
+    having count(*) >= 3
+  loop
+    v_valore := round(6 + 3 * ((v_riga.punti - v_riga.errori) / v_riga.totale), 1);
+    v_valore := least(10, greatest(1, v_valore));
+
+    insert into evaluation_proposals (team_id, athlete_id, fondamentale, valore_proposto, motivazione, stato)
+    values (
+      v_team_id, v_riga.athlete_id, v_riga.fondamentale, v_valore,
+      format('Dal globale del %s: %s punti e %s errori su %s azioni.',
+             to_char(now(), 'DD/MM/YYYY'), v_riga.punti::integer, v_riga.errori::integer, v_riga.totale),
+      'proposta'
+    );
+    v_create := v_create + 1;
+  end loop;
+
+  return v_create;
+end;
+$$;
+
+-- ============================================================
+-- 0033_scheda_atleta_obiettivi_e_record.sql
+-- ============================================================
+-- 0033 — Scheda atleta: obiettivi personali e record
+
+create table if not exists obiettivi_atleta (
+  id uuid primary key default gen_random_uuid(),
+  athlete_id uuid not null references athletes on delete cascade,
+  fondamentale text not null check (fondamentale in ('Servizio','Ricezione','Attacco','Muro','Difesa')),
+  valore_obiettivo numeric(3,1) not null check (valore_obiettivo between 1 and 10),
+  entro_data date,
+  note text not null default '',
+  raggiunto_il date,
+  creato_il timestamptz not null default now(),
+  creato_da uuid references auth.users on delete set null,
+  unique (athlete_id, fondamentale)
+);
+
+alter table obiettivi_atleta enable row level security;
+
+drop policy if exists "obiettivi_atleta_select" on obiettivi_atleta;
+create policy "obiettivi_atleta_select" on obiettivi_atleta for select using (
+  is_team_staff_visione_piena((select team_id from athletes where id = athlete_id))
+  or athlete_id = mio_atleta_id((select team_id from athletes where id = athlete_id))
+  or is_superuser()
+);
+
+drop policy if exists "obiettivi_atleta_write_coach" on obiettivi_atleta;
+create policy "obiettivi_atleta_write_coach" on obiettivi_atleta for all using (
+  is_team_coach((select team_id from athletes where id = athlete_id))
+) with check (is_team_coach((select team_id from athletes where id = athlete_id)));
+
+create or replace function scheda_atleta(p_athlete_id uuid)
+returns table(
+  fondamentale text, valore_attuale numeric, data_attuale date,
+  valore_precedente numeric, variazione numeric,
+  record_personale numeric, data_record date, e_record_adesso boolean,
+  obiettivo numeric, entro_data date, progresso_percentuale integer, numero_valutazioni integer
+)
+language plpgsql stable security definer set search_path = public
+as $$
+#variable_conflict use_column
+declare v_team_id uuid;
+begin
+  if auth.uid() is null then raise exception 'Utente non autenticato'; end if;
+  select team_id into v_team_id from athletes where id = p_athlete_id;
+  if v_team_id is null then raise exception 'Persona non trovata'; end if;
+  if not (is_team_staff_visione_piena(v_team_id) or p_athlete_id = mio_atleta_id(v_team_id) or is_superuser()) then
+    raise exception 'Permesso negato';
+  end if;
+
+  return query
+  with elenco(nome_f) as (
+    values ('Servizio'), ('Ricezione'), ('Attacco'), ('Muro'), ('Difesa')
+  ),
+  ordinate as (
+    select e.fondamentale as f, e.punteggio as p, e.data_valutazione as d,
+           row_number() over (partition by e.fondamentale order by e.data_valutazione desc) as rn
+    from evaluations e where e.athlete_id = p_athlete_id
+  ),
+  ultime as (select f, p as attuale, d::date as data_att from ordinate where rn = 1),
+  penultime as (select f, p as prec from ordinate where rn = 2),
+  massimi as (
+    select e.fondamentale as f, max(e.punteggio) as massimo,
+           (array_agg(e.data_valutazione::date order by e.punteggio desc, e.data_valutazione desc))[1] as data_max
+    from evaluations e where e.athlete_id = p_athlete_id group by e.fondamentale
+  ),
+  conteggi as (
+    select e.fondamentale as f, count(*)::integer as n
+    from evaluations e where e.athlete_id = p_athlete_id group by e.fondamentale
+  )
+  select
+    el.nome_f, u.attuale, u.data_att, pe.prec,
+    case when u.attuale is not null and pe.prec is not null then round(u.attuale - pe.prec, 1) end,
+    ma.massimo, ma.data_max,
+    coalesce(u.attuale is not null and ma.massimo is not null
+             and u.attuale >= ma.massimo and u.data_att = ma.data_max, false),
+    ob.valore_obiettivo, ob.entro_data,
+    case when ob.valore_obiettivo is null or u.attuale is null then null
+         when u.attuale >= ob.valore_obiettivo then 100
+         else greatest(0, round(100.0 * u.attuale / ob.valore_obiettivo))::integer end,
+    coalesce(co.n, 0)
+  from elenco el
+  left join ultime u on u.f = el.nome_f
+  left join penultime pe on pe.f = el.nome_f
+  left join massimi ma on ma.f = el.nome_f
+  left join conteggi co on co.f = el.nome_f
+  left join obiettivi_atleta ob on ob.athlete_id = p_athlete_id and ob.fondamentale = el.nome_f;
+end;
+$$;
+
+create or replace function imposta_obiettivo_atleta(p_athlete_id uuid, p_fondamentale text, p_valore numeric, p_entro date default null, p_note text default '')
+returns void
+language plpgsql security definer set search_path = public
+as $$
+declare v_team_id uuid;
+begin
+  if auth.uid() is null then raise exception 'Utente non autenticato'; end if;
+  select team_id into v_team_id from athletes where id = p_athlete_id;
+  if v_team_id is null then raise exception 'Atleta non trovata'; end if;
+  if not is_team_coach(v_team_id) then raise exception 'Permesso negato'; end if;
+
+  insert into obiettivi_atleta (athlete_id, fondamentale, valore_obiettivo, entro_data, note, creato_da)
+  values (p_athlete_id, p_fondamentale, p_valore, p_entro, coalesce(p_note, ''), auth.uid())
+  on conflict (athlete_id, fondamentale) do update
+    set valore_obiettivo = excluded.valore_obiettivo,
+        entro_data = excluded.entro_data,
+        note = excluded.note;
+end;
+$$;
+
+create or replace function rimuovi_obiettivo_atleta(p_athlete_id uuid, p_fondamentale text)
+returns void
+language plpgsql security definer set search_path = public
+as $$
+declare v_team_id uuid;
+begin
+  select team_id into v_team_id from athletes where id = p_athlete_id;
+  if v_team_id is null then raise exception 'Atleta non trovata'; end if;
+  if not is_team_coach(v_team_id) then raise exception 'Permesso negato'; end if;
+  delete from obiettivi_atleta where athlete_id = p_athlete_id and fondamentale = p_fondamentale;
+end;
+$$;
+
+revoke all on function scheda_atleta(uuid) from public, anon;
+revoke all on function imposta_obiettivo_atleta(uuid, text, numeric, date, text) from public, anon;
+revoke all on function rimuovi_obiettivo_atleta(uuid, text) from public, anon;
+grant execute on function scheda_atleta(uuid) to authenticated, service_role;
+grant execute on function imposta_obiettivo_atleta(uuid, text, numeric, date, text) to authenticated, service_role;
+grant execute on function rimuovi_obiettivo_atleta(uuid, text) to authenticated, service_role;
+
+-- ============================================================
+-- 0034_turni_servizio_e_fallo_rotazione.sql
+-- ============================================================
+-- 0034 — Turni di servizio + fallo di rotazione
+
+alter table match_events drop constraint if exists match_events_skill_check;
+alter table match_events add constraint match_events_skill_check
+  check (skill in ('Servizio','Ricezione','Attacco','Muro','Difesa','Punto_avversario','Punto_nostro','Fallo_rotazione'));
+
+alter table match_sets add column if not exists turno_servizio_corrente integer not null default 1;
+alter table match_events add column if not exists turno_servizio integer;
+
+create or replace function cattura_stato_servizio()
+returns trigger
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_servizio_attuale text;
+  v_punto_nostro boolean;
+begin
+  select squadra_al_servizio, turno_servizio_corrente
+    into v_servizio_attuale, NEW.turno_servizio
+  from match_sets where id = NEW.set_id;
+
+  NEW.servizio_precedente := v_servizio_attuale;
+
+  select athlete_id into NEW.rotazione_al_servizio
+  from match_set_lineups
+  where set_id = NEW.set_id and posizione = 1 and in_campo = true;
+
+  v_punto_nostro := ((NEW.esito = 'punto' or NEW.skill = 'Punto_nostro') and NEW.skill <> 'Fallo_rotazione');
+  NEW.rotazione_applicata := v_punto_nostro and v_servizio_attuale is distinct from 'noi';
+
+  return NEW;
+end;
+$$;
+
+create or replace function aggiorna_punteggio_da_evento()
+returns trigger
+language plpgsql security definer set search_path = public
+as $$
+begin
+  if TG_OP = 'INSERT' then
+    if NEW.skill in ('Punto_avversario','Fallo_rotazione') or NEW.esito = 'errore' then
+      update match_sets set punti_avversario = punti_avversario + 1 where id = NEW.set_id;
+    elsif NEW.skill = 'Punto_nostro' or NEW.esito = 'punto' then
+      update match_sets set punti_noi = punti_noi + 1 where id = NEW.set_id;
+    end if;
+    return NEW;
+  elsif TG_OP = 'DELETE' then
+    if OLD.skill in ('Punto_avversario','Fallo_rotazione') or OLD.esito = 'errore' then
+      update match_sets set punti_avversario = greatest(0, punti_avversario - 1) where id = OLD.set_id;
+    elsif OLD.skill = 'Punto_nostro' or OLD.esito = 'punto' then
+      update match_sets set punti_noi = greatest(0, punti_noi - 1) where id = OLD.set_id;
+    end if;
+    return OLD;
+  end if;
+  return null;
+end;
+$$;
+
+create or replace function applica_rotazione_dopo_evento()
+returns trigger
+language plpgsql security definer set search_path = public
+as $$
+declare v_punto_avversario boolean;
+begin
+  v_punto_avversario := (NEW.skill in ('Punto_avversario','Fallo_rotazione') or NEW.esito = 'errore');
+
+  if NEW.rotazione_applicata then
+    perform ruota_formazione(NEW.set_id);
+    update match_sets
+      set squadra_al_servizio = 'noi', turno_servizio_corrente = turno_servizio_corrente + 1
+      where id = NEW.set_id;
+  elsif v_punto_avversario and NEW.servizio_precedente is distinct from 'avversario' then
+    update match_sets
+      set squadra_al_servizio = 'avversario', turno_servizio_corrente = turno_servizio_corrente + 1
+      where id = NEW.set_id;
+  end if;
+
+  return NEW;
+end;
+$$;
+
+create or replace function rendimento_turni_servizio(p_match_id uuid)
+returns table(
+  al_servizio text, turni_giocati integer, punti_nel_turno integer,
+  punti_subiti_nel_turno integer, media_punti_per_turno numeric
+)
+language plpgsql stable security definer set search_path = public
+as $$
+declare v_team_id uuid;
+begin
+  if auth.uid() is null then raise exception 'Utente non autenticato'; end if;
+  select team_id into v_team_id from matches where id = p_match_id;
+  if v_team_id is null then raise exception 'Partita non trovata'; end if;
+  if not (is_team_staff_visione_piena(v_team_id) or is_team_scout(v_team_id)) then raise exception 'Permesso negato'; end if;
+
+  return query
+  with nostri as (
+    select me.*, coalesce(a.cognome, 'non registrata') as servitrice
+    from match_events me
+    left join athletes a on a.id = me.rotazione_al_servizio
+    where me.match_id = p_match_id
+      and me.servizio_precedente = 'noi'
+      and me.turno_servizio is not null
+  )
+  select
+    n.servitrice,
+    count(distinct n.turno_servizio)::integer,
+    count(*) filter (where n.esito = 'punto' or n.skill = 'Punto_nostro')::integer,
+    count(*) filter (where n.esito = 'errore' or n.skill in ('Punto_avversario','Fallo_rotazione'))::integer,
+    round(
+      count(*) filter (where n.esito = 'punto' or n.skill = 'Punto_nostro')::numeric
+      / nullif(count(distinct n.turno_servizio), 0), 2)
+  from nostri n
+  group by n.servitrice
+  order by 5 desc nulls last;
+end;
+$$;
+
+create or replace function verifica_formazione(p_set_id uuid)
+returns table(avviso text, gravita text)
+language plpgsql stable security definer set search_path = public
+as $$
+declare v_team_id uuid; v_match_id uuid;
+begin
+  select m.id, m.team_id into v_match_id, v_team_id
+  from match_sets ms join matches m on m.id = ms.match_id where ms.id = p_set_id;
+  if v_team_id is null then raise exception 'Set non trovato'; end if;
+  if not is_team_scout(v_team_id) then raise exception 'Permesso negato'; end if;
+
+  return query
+  select
+    format('%s è indicata come Libero ma si trova in posizione %s: il Libero gioca solo in seconda linea (5, 6, 1) e non può servire.',
+           a.cognome, l.posizione),
+    'attenzione'
+  from match_set_lineups l
+  join athletes a on a.id = l.athlete_id
+  join match_convocati c on c.match_id = v_match_id and c.athlete_id = l.athlete_id
+  where l.set_id = p_set_id and l.in_campo = true and c.is_libero = true
+    and l.posizione in (1, 2, 3, 4);
+end;
+$$;
+
+revoke all on function rendimento_turni_servizio(uuid) from public, anon;
+revoke all on function verifica_formazione(uuid) from public, anon;
+grant execute on function rendimento_turni_servizio(uuid) to authenticated, service_role;
+grant execute on function verifica_formazione(uuid) to authenticated, service_role;
+
+-- ============================================================
+-- 0035_rimpiazzi_libero.sql
+-- ============================================================
+-- 0035 — Rimpiazzi del Libero (versione iniziale, corretta poi da 0050/0051)
+
+create table if not exists rimpiazzi_libero (
+  id uuid primary key default gen_random_uuid(),
+  set_id uuid not null references match_sets on delete cascade,
+  libero_id uuid not null references athletes on delete cascade,
+  titolare_id uuid not null references athletes on delete cascade,
+  posizione integer not null check (posizione between 1 and 6),
+  entrato_il timestamptz not null default now(),
+  uscito_il timestamptz
+);
+
+create index if not exists idx_rimpiazzi_libero_set on rimpiazzi_libero (set_id) where uscito_il is null;
+
+alter table rimpiazzi_libero enable row level security;
+drop policy if exists "rimpiazzi_libero_select" on rimpiazzi_libero;
+create policy "rimpiazzi_libero_select" on rimpiazzi_libero for select using (
+  is_team_scout((select m.team_id from match_sets ms join matches m on m.id = ms.match_id where ms.id = set_id))
+  or is_superuser()
+);
+
+create or replace function rimpiazza_con_libero(p_set_id uuid, p_libero_id uuid, p_titolare_id uuid)
+returns void
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_team_id uuid;
+  v_match_id uuid;
+  v_posizione integer;
+begin
+  if auth.uid() is null then raise exception 'Utente non autenticato'; end if;
+  select m.id, m.team_id into v_match_id, v_team_id
+  from match_sets ms join matches m on m.id = ms.match_id where ms.id = p_set_id;
+  if v_team_id is null then raise exception 'Set non trovato'; end if;
+  if not is_team_scout(v_team_id) then raise exception 'Permesso negato'; end if;
+
+  if not exists (select 1 from match_convocati where match_id = v_match_id and athlete_id = p_libero_id and is_libero = true) then
+    raise exception 'Questa giocatrice non è indicata come Libero nella distinta';
+  end if;
+
+  select posizione into v_posizione from match_set_lineups
+  where set_id = p_set_id and athlete_id = p_titolare_id and in_campo = true;
+  if v_posizione is null then raise exception 'La giocatrice da rimpiazzare non è in campo'; end if;
+
+  if v_posizione not in (1, 5, 6) then
+    raise exception 'Il Libero può entrare solo in seconda linea (posizioni 5, 6, 1): la giocatrice è in posizione %', v_posizione;
+  end if;
+  if v_posizione = 1 then
+    raise exception 'Il Libero non può servire: non può entrare in posizione 1';
+  end if;
+
+  if exists (select 1 from rimpiazzi_libero where set_id = p_set_id and uscito_il is null) then
+    raise exception 'C''è già un Libero in campo: fallo uscire prima';
+  end if;
+
+  update match_set_lineups set in_campo = false, posizione = null
+  where set_id = p_set_id and athlete_id = p_titolare_id;
+
+  insert into match_set_lineups (set_id, athlete_id, in_campo, posizione)
+  values (p_set_id, p_libero_id, true, v_posizione)
+  on conflict (set_id, athlete_id) do update set in_campo = true, posizione = v_posizione;
+
+  insert into rimpiazzi_libero (set_id, libero_id, titolare_id, posizione)
+  values (p_set_id, p_libero_id, p_titolare_id, v_posizione);
+end;
+$$;
+
+create or replace function fai_uscire_libero(p_set_id uuid)
+returns void
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_team_id uuid;
+  v_rimpiazzo record;
+  v_posizione_attuale integer;
+begin
+  select m.team_id into v_team_id
+  from match_sets ms join matches m on m.id = ms.match_id where ms.id = p_set_id;
+  if v_team_id is null then raise exception 'Set non trovato'; end if;
+  if not is_team_scout(v_team_id) then raise exception 'Permesso negato'; end if;
+
+  select * into v_rimpiazzo from rimpiazzi_libero
+  where set_id = p_set_id and uscito_il is null
+  order by entrato_il desc limit 1;
+  if v_rimpiazzo is null then return; end if;
+
+  select posizione into v_posizione_attuale from match_set_lineups
+  where set_id = p_set_id and athlete_id = v_rimpiazzo.libero_id and in_campo = true;
+
+  update match_set_lineups set in_campo = false, posizione = null
+  where set_id = p_set_id and athlete_id = v_rimpiazzo.libero_id;
+
+  update match_set_lineups set in_campo = true, posizione = v_posizione_attuale
+  where set_id = p_set_id and athlete_id = v_rimpiazzo.titolare_id;
+
+  update rimpiazzi_libero set uscito_il = now() where id = v_rimpiazzo.id;
+end;
+$$;
+
+create or replace function gestisci_libero_dopo_rotazione(p_set_id uuid)
+returns void
+language plpgsql security definer set search_path = public
+as $$
+declare v_posizione integer;
+begin
+  select l.posizione into v_posizione
+  from rimpiazzi_libero r
+  join match_set_lineups l on l.set_id = r.set_id and l.athlete_id = r.libero_id and l.in_campo = true
+  where r.set_id = p_set_id and r.uscito_il is null
+  limit 1;
+
+  if v_posizione is not null and v_posizione in (2, 3, 4) then
+    perform fai_uscire_libero(p_set_id);
+  end if;
+end;
+$$;
+
+create or replace function applica_rotazione_dopo_evento()
+returns trigger
+language plpgsql security definer set search_path = public
+as $$
+declare v_punto_avversario boolean;
+begin
+  v_punto_avversario := (NEW.skill in ('Punto_avversario','Fallo_rotazione') or NEW.esito = 'errore');
+
+  if NEW.rotazione_applicata then
+    perform ruota_formazione(NEW.set_id);
+    perform gestisci_libero_dopo_rotazione(NEW.set_id);
+    update match_sets
+      set squadra_al_servizio = 'noi', turno_servizio_corrente = turno_servizio_corrente + 1
+      where id = NEW.set_id;
+  elsif v_punto_avversario and NEW.servizio_precedente is distinct from 'avversario' then
+    update match_sets
+      set squadra_al_servizio = 'avversario', turno_servizio_corrente = turno_servizio_corrente + 1
+      where id = NEW.set_id;
+  end if;
+
+  return NEW;
+end;
+$$;
+
+create or replace function libero_in_campo(p_set_id uuid)
+returns table(libero_id uuid, titolare_id uuid, posizione integer)
+language sql stable security definer set search_path = public
+as $$
+  select r.libero_id, r.titolare_id, l.posizione
+  from rimpiazzi_libero r
+  left join match_set_lineups l on l.set_id = r.set_id and l.athlete_id = r.libero_id and l.in_campo = true
+  where r.set_id = p_set_id and r.uscito_il is null
+    and is_team_scout((select m.team_id from match_sets ms join matches m on m.id = ms.match_id where ms.id = p_set_id))
+  limit 1;
+$$;
+
+revoke all on function rimpiazza_con_libero(uuid, uuid, uuid) from public, anon;
+revoke all on function fai_uscire_libero(uuid) from public, anon;
+revoke all on function gestisci_libero_dopo_rotazione(uuid) from public, anon;
+revoke all on function libero_in_campo(uuid) from public, anon;
+grant execute on function rimpiazza_con_libero(uuid, uuid, uuid) to authenticated, service_role;
+grant execute on function fai_uscire_libero(uuid) to authenticated, service_role;
+grant execute on function gestisci_libero_dopo_rotazione(uuid) to authenticated, service_role;
+grant execute on function libero_in_campo(uuid) to authenticated, service_role;
+
+-- ============================================================
+-- 0036_fix_eventi_diretti_e_scheda_atleta.sql
+-- ============================================================
+-- 0036 — Tre correzioni bloccanti
+--
+-- BUG 1: rotazione_applicata poteva risultare NULL quando esito era
+-- NULL (in SQL "NULL or false" fa NULL, non false), violando il
+-- vincolo NOT NULL della colonna.
+-- BUG 2: il vincolo pretende esito NULL per Punto_nostro/
+-- Punto_avversario/Fallo_rotazione; ora è la funzione a forzarlo.
+-- BUG 3: "column reference fondamentale is ambiguous" nella scheda
+-- atleta, per omonimia tra parametro di uscita e colonna.
+
+create or replace function cattura_stato_servizio()
+returns trigger
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_servizio_attuale text;
+  v_punto_nostro boolean;
+begin
+  select squadra_al_servizio, turno_servizio_corrente
+    into v_servizio_attuale, NEW.turno_servizio
+  from match_sets where id = NEW.set_id;
+
+  NEW.servizio_precedente := v_servizio_attuale;
+
+  select athlete_id into NEW.rotazione_al_servizio
+  from match_set_lineups
+  where set_id = NEW.set_id and posizione = 1 and in_campo = true;
+
+  v_punto_nostro := coalesce(NEW.esito = 'punto', false) or NEW.skill = 'Punto_nostro';
+  NEW.rotazione_applicata := coalesce(v_punto_nostro and v_servizio_attuale is distinct from 'noi', false);
+
+  return NEW;
+end;
+$$;
+
+create or replace function registra_evento(p_match_id uuid, p_set_id uuid, p_skill text, p_esito text, p_athlete_id uuid default null)
+returns uuid
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_team_id uuid;
+  v_stato_match text;
+  v_evento_id uuid;
+  v_esito text;
+  v_athlete uuid;
+  v_posizione integer;
+begin
+  if auth.uid() is null then raise exception 'Utente non autenticato'; end if;
+
+  select team_id, stato into v_team_id, v_stato_match from matches where id = p_match_id;
+  if v_team_id is null then raise exception 'Partita non trovata'; end if;
+  if not is_team_scout(v_team_id) then raise exception 'Permesso negato'; end if;
+  if v_stato_match = 'conclusa' then raise exception 'Partita già conclusa'; end if;
+  if v_stato_match <> 'in_corso' then raise exception 'La partita non è ancora iniziata'; end if;
+
+  if not exists (select 1 from match_sets where id = p_set_id and match_id = p_match_id for update) then
+    raise exception 'Il set indicato non appartiene a questa partita';
+  end if;
+  if not exists (select 1 from match_set_lineups where set_id = p_set_id) then
+    raise exception 'Formazione non impostata per questo set';
+  end if;
+
+  if p_skill in ('Punto_avversario','Punto_nostro','Fallo_rotazione') then
+    v_esito := null;
+    v_athlete := null;
+  else
+    v_esito := p_esito;
+    v_athlete := p_athlete_id;
+    if v_esito is null then raise exception 'Indica l''esito dell''azione'; end if;
+
+    if v_athlete is not null then
+      if not exists (select 1 from athletes where id = v_athlete and team_id = v_team_id) then
+        raise exception 'Questa persona non fa parte della squadra';
+      end if;
+      if p_skill = 'Servizio' then
+        select posizione into v_posizione from match_set_lineups
+        where set_id = p_set_id and athlete_id = v_athlete and in_campo = true;
+        if v_posizione is distinct from 1 then
+          raise exception 'Il servizio può essere attribuito solo a chi si trova in posizione 1 (zona di battuta)';
+        end if;
+      end if;
+    end if;
+  end if;
+
+  insert into match_events (match_id, set_id, skill, esito, athlete_id, creato_da)
+  values (p_match_id, p_set_id, p_skill, v_esito, v_athlete, auth.uid())
+  returning id into v_evento_id;
+
+  return v_evento_id;
+end;
+$$;
+
+create or replace function scheda_atleta(p_athlete_id uuid)
+returns table(
+  fondamentale text, valore_attuale numeric, data_attuale date,
+  valore_precedente numeric, variazione numeric,
+  record_personale numeric, data_record date, e_record_adesso boolean,
+  obiettivo numeric, entro_data date, progresso_percentuale integer, numero_valutazioni integer
+)
+language plpgsql stable security definer set search_path = public
+as $$
+#variable_conflict use_column
+declare v_team_id uuid;
+begin
+  if auth.uid() is null then raise exception 'Utente non autenticato'; end if;
+  select team_id into v_team_id from athletes where id = p_athlete_id;
+  if v_team_id is null then raise exception 'Persona non trovata'; end if;
+  if not (is_team_staff_visione_piena(v_team_id) or p_athlete_id = mio_atleta_id(v_team_id) or is_superuser()) then
+    raise exception 'Permesso negato';
+  end if;
+
+  return query
+  with elenco(nome_f) as (
+    values ('Servizio'), ('Ricezione'), ('Attacco'), ('Muro'), ('Difesa')
+  ),
+  ordinate as (
+    select e.fondamentale as f, e.punteggio as p, e.data_valutazione as d,
+           row_number() over (partition by e.fondamentale order by e.data_valutazione desc) as rn
+    from evaluations e where e.athlete_id = p_athlete_id
+  ),
+  ultime as (select f, p as attuale, d::date as data_att from ordinate where rn = 1),
+  penultime as (select f, p as prec from ordinate where rn = 2),
+  massimi as (
+    select e.fondamentale as f, max(e.punteggio) as massimo,
+           (array_agg(e.data_valutazione::date order by e.punteggio desc, e.data_valutazione desc))[1] as data_max
+    from evaluations e where e.athlete_id = p_athlete_id group by e.fondamentale
+  ),
+  conteggi as (
+    select e.fondamentale as f, count(*)::integer as n
+    from evaluations e where e.athlete_id = p_athlete_id group by e.fondamentale
+  )
+  select
+    el.nome_f, u.attuale, u.data_att, pe.prec,
+    case when u.attuale is not null and pe.prec is not null then round(u.attuale - pe.prec, 1) end,
+    ma.massimo, ma.data_max,
+    coalesce(u.attuale is not null and ma.massimo is not null
+             and u.attuale >= ma.massimo and u.data_att = ma.data_max, false),
+    ob.valore_obiettivo, ob.entro_data,
+    case when ob.valore_obiettivo is null or u.attuale is null then null
+         when u.attuale >= ob.valore_obiettivo then 100
+         else greatest(0, round(100.0 * u.attuale / ob.valore_obiettivo))::integer end,
+    coalesce(co.n, 0)
+  from elenco el
+  left join ultime u on u.f = el.nome_f
+  left join penultime pe on pe.f = el.nome_f
+  left join massimi ma on ma.f = el.nome_f
+  left join conteggi co on co.f = el.nome_f
+  left join obiettivi_atleta ob on ob.athlete_id = p_athlete_id and ob.fondamentale = el.nome_f;
+end;
+$$;
+
+-- ============================================================
+-- 0037_scout_come_permesso_e_visione_live_atleti_v2.sql
+-- ============================================================
+-- 0037 — Scout come permesso separato + visione live per gli atleti
+--
+-- PROBLEMA: "scout" era un ruolo alternativo, quindi assegnarlo a una
+-- giocatrice le avrebbe tolto il profilo atleta (e la scheda
+-- collegata). Diventa un PERMESSO indipendente dal ruolo, assegnabile
+-- e revocabile a chiunque.
+--
+-- VISIONE LIVE: durante la partita tutti i membri seguono l'andamento
+-- in tempo reale; a partita conclusa ciascun atleta torna a vedere
+-- solo le proprie azioni.
+--
+-- (v2: elenca_membri_team va eliminata prima di essere ricreata con
+-- forma diversa, perché Postgres non lo consente con CREATE OR REPLACE
+-- quando cambiano le colonne del risultato — la v1 di questa
+-- migrazione falliva per questo motivo)
+
+alter table team_members add column if not exists puo_scoutare boolean not null default false;
+update team_members set puo_scoutare = true, ruolo = 'vice_allenatore' where ruolo = 'scout';
+
+alter table team_members drop constraint if exists team_members_ruolo_check;
+alter table team_members add constraint team_members_ruolo_check
+  check (ruolo in ('allenatore','vice_allenatore','presidente','atleta'));
+
+create or replace function is_team_scout(p_team_id uuid)
+returns boolean
+language sql stable security definer set search_path = public
+as $$
+  select exists (
+    select 1 from team_members
+    where team_id = p_team_id and user_id = auth.uid()
+      and (ruolo in ('allenatore','vice_allenatore') or puo_scoutare = true)
+  );
+$$;
+
+create or replace function imposta_permesso_scout(p_team_id uuid, p_user_id uuid, p_abilitato boolean)
+returns void
+language plpgsql security definer set search_path = public
+as $$
+begin
+  if auth.uid() is null then raise exception 'Utente non autenticato'; end if;
+  if not is_team_coach(p_team_id) then raise exception 'Permesso negato'; end if;
+  update team_members set puo_scoutare = p_abilitato where team_id = p_team_id and user_id = p_user_id;
+end;
+$$;
+
+drop function if exists elenca_membri_team(uuid);
+create function elenca_membri_team(p_team_id uuid)
+returns table(user_id uuid, email text, ruolo text, atleta_id uuid, atleta_nome text, puo_scoutare boolean)
+language plpgsql stable security definer set search_path = public
+as $$
+begin
+  if auth.uid() is null then raise exception 'Utente non autenticato'; end if;
+  if not is_team_coach(p_team_id) then raise exception 'Permesso negato'; end if;
+
+  return query
+    select tm.user_id, u.email::text, tm.ruolo, tm.atleta_id,
+           case when a.id is not null then a.nome || ' ' || a.cognome else null end,
+           tm.puo_scoutare
+    from team_members tm
+    join auth.users u on u.id = tm.user_id
+    left join athletes a on a.id = tm.atleta_id
+    where tm.team_id = p_team_id
+    order by tm.ruolo, u.email;
+end;
+$$;
+
+alter table team_invites drop constraint if exists team_invites_ruolo_check;
+update team_invites set ruolo = 'vice_allenatore' where ruolo = 'scout';
+alter table team_invites add constraint team_invites_ruolo_check
+  check (ruolo in ('allenatore','vice_allenatore','presidente','atleta'));
+
+drop policy if exists "match_events_select_live" on match_events;
+create policy "match_events_select_live" on match_events for select using (
+  is_team_member((select team_id from matches where id = match_id))
+  and (select stato from matches where id = match_id) = 'in_corso'
+);
+
+drop policy if exists "match_sets_select_live" on match_sets;
+create policy "match_sets_select_live" on match_sets for select using (
+  is_team_member((select team_id from matches where id = match_id))
+);
+
+revoke all on function imposta_permesso_scout(uuid, uuid, boolean) from public, anon;
+grant execute on function imposta_permesso_scout(uuid, uuid, boolean) to authenticated, service_role;
+
+-- ============================================================
+-- 0038_linguaggio_neutro_messaggi_errore.sql
+-- ============================================================
+-- 0038 — Linguaggio neutro nei messaggi di errore mostrati all'utente
+--
+-- I messaggi delle funzioni arrivano fino all'interfaccia: la
+-- revisione linguistica non poteva fermarsi al codice dell'app.
+-- In italiano "atleta" al singolare è già neutro: si interviene sui
+-- participi e sugli aggettivi concordati ("convocata", "uscente",
+-- "indicata"), sostituendoli con formulazioni impersonali.
+
+create or replace function cambia_giocatore(p_set_id uuid, p_atleta_uscente uuid, p_atleta_entrante uuid)
+returns void
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_team_id uuid;
+  v_match_id uuid;
+  v_posizione integer;
+begin
+  select m.id, m.team_id into v_match_id, v_team_id
+  from match_sets ms join matches m on m.id = ms.match_id where ms.id = p_set_id;
+  if v_team_id is null then raise exception 'Set non trovato'; end if;
+  if not is_team_scout(v_team_id) then raise exception 'Permesso negato'; end if;
+
+  select posizione into v_posizione from match_set_lineups
+  where set_id = p_set_id and athlete_id = p_atleta_uscente and in_campo = true;
+  if v_posizione is null then raise exception 'Chi deve uscire non risulta in campo in questo set'; end if;
+
+  if not exists (select 1 from match_convocati where match_id = v_match_id and athlete_id = p_atleta_entrante) then
+    raise exception 'Chi deve entrare non è tra i convocati di questa partita';
+  end if;
+  if exists (select 1 from match_set_lineups where set_id = p_set_id and athlete_id = p_atleta_entrante and in_campo = true) then
+    raise exception 'Chi deve entrare è già in campo';
+  end if;
+  if exists (select 1 from match_set_lineups where set_id = p_set_id and athlete_id = p_atleta_entrante and in_campo = false) then
+    raise exception 'Chi deve entrare è già uscito in questo set e non può rientrare';
+  end if;
+
+  update match_set_lineups set in_campo = false, posizione = null
+  where set_id = p_set_id and athlete_id = p_atleta_uscente;
+
+  insert into match_set_lineups (set_id, athlete_id, in_campo, posizione)
+  values (p_set_id, p_atleta_entrante, true, v_posizione)
+  on conflict (set_id, athlete_id) do update set in_campo = true, posizione = v_posizione;
+end;
+$$;
+
+create or replace function rimpiazza_con_libero(p_set_id uuid, p_libero_id uuid, p_titolare_id uuid)
+returns void
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_team_id uuid;
+  v_match_id uuid;
+  v_posizione integer;
+begin
+  if auth.uid() is null then raise exception 'Utente non autenticato'; end if;
+  select m.id, m.team_id into v_match_id, v_team_id
+  from match_sets ms join matches m on m.id = ms.match_id where ms.id = p_set_id;
+  if v_team_id is null then raise exception 'Set non trovato'; end if;
+  if not is_team_scout(v_team_id) then raise exception 'Permesso negato'; end if;
+
+  if not exists (select 1 from match_convocati where match_id = v_match_id and athlete_id = p_libero_id and is_libero = true) then
+    raise exception 'Questa persona non è indicata come Libero nella distinta';
+  end if;
+
+  select posizione into v_posizione from match_set_lineups
+  where set_id = p_set_id and athlete_id = p_titolare_id and in_campo = true;
+  if v_posizione is null then raise exception 'Chi deve essere rimpiazzato non è in campo'; end if;
+
+  if v_posizione not in (1, 5, 6) then
+    raise exception 'Il Libero può entrare solo in seconda linea (posizioni 5, 6, 1): la posizione indicata è %', v_posizione;
+  end if;
+  if v_posizione = 1 then
+    raise exception 'Il Libero non può servire: non può entrare in posizione 1';
+  end if;
+  if exists (select 1 from rimpiazzi_libero where set_id = p_set_id and uscito_il is null) then
+    raise exception 'C''è già un Libero in campo: fallo uscire prima';
+  end if;
+
+  update match_set_lineups set in_campo = false, posizione = null
+  where set_id = p_set_id and athlete_id = p_titolare_id;
+
+  insert into match_set_lineups (set_id, athlete_id, in_campo, posizione)
+  values (p_set_id, p_libero_id, true, v_posizione)
+  on conflict (set_id, athlete_id) do update set in_campo = true, posizione = v_posizione;
+
+  insert into rimpiazzi_libero (set_id, libero_id, titolare_id, posizione)
+  values (p_set_id, p_libero_id, p_titolare_id, v_posizione);
+end;
+$$;
+
+create or replace function carenze_atleta(p_athlete_id uuid, p_quante integer default 3)
+returns table(fondamentale text, media numeric, numero_valutazioni integer)
+language plpgsql stable security definer set search_path = public
+as $$
+#variable_conflict use_column
+declare v_team_id uuid;
+begin
+  if auth.uid() is null then raise exception 'Utente non autenticato'; end if;
+  select team_id into v_team_id from athletes where id = p_athlete_id;
+  if v_team_id is null then raise exception 'Persona non trovata in anagrafica'; end if;
+  if not (is_team_staff_visione_piena(v_team_id) or p_athlete_id = mio_atleta_id(v_team_id)) then
+    raise exception 'Permesso negato';
+  end if;
+
+  return query
+    select e.fondamentale, round(avg(e.punteggio), 1), count(*)::integer
+    from evaluations e
+    where e.athlete_id = p_athlete_id
+      and e.data_valutazione >= now() - interval '120 days'
+    group by e.fondamentale
+    order by avg(e.punteggio) asc
+    limit greatest(1, p_quante);
+end;
+$$;
+
+create or replace function verifica_formazione(p_set_id uuid)
+returns table(avviso text, gravita text)
+language plpgsql stable security definer set search_path = public
+as $$
+declare v_team_id uuid; v_match_id uuid;
+begin
+  select m.id, m.team_id into v_match_id, v_team_id
+  from match_sets ms join matches m on m.id = ms.match_id where ms.id = p_set_id;
+  if v_team_id is null then raise exception 'Set non trovato'; end if;
+  if not is_team_scout(v_team_id) then raise exception 'Permesso negato'; end if;
+
+  return query
+  select
+    format('%s è indicato come Libero ma si trova in posizione %s: il Libero gioca solo in seconda linea (5, 6, 1) e non può servire.',
+           a.cognome, l.posizione),
+    'attenzione'
+  from match_set_lineups l
+  join athletes a on a.id = l.athlete_id
+  join match_convocati c on c.match_id = v_match_id and c.athlete_id = l.athlete_id
+  where l.set_id = p_set_id and l.in_campo = true and c.is_libero = true
+    and l.posizione in (1, 2, 3, 4);
+end;
+$$;
+
+create or replace function cambia_ruolo_membro(p_team_id uuid, p_user_id uuid, p_nuovo_ruolo text, p_atleta_id uuid default null)
+returns void
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_ruolo_attuale text;
+  v_altri_allenatori integer;
+begin
+  if auth.uid() is null then raise exception 'Utente non autenticato'; end if;
+  if not is_team_coach(p_team_id) then raise exception 'Permesso negato'; end if;
+  if p_nuovo_ruolo not in ('allenatore','vice_allenatore','presidente','atleta') then
+    raise exception 'Profilo non valido';
+  end if;
+
+  select ruolo into v_ruolo_attuale from team_members where team_id = p_team_id and user_id = p_user_id;
+  if v_ruolo_attuale is null then raise exception 'Questa persona non fa parte della squadra'; end if;
+
+  if v_ruolo_attuale = 'allenatore' and p_nuovo_ruolo <> 'allenatore' then
+    select count(*) into v_altri_allenatori from team_members
+    where team_id = p_team_id and ruolo = 'allenatore' and user_id <> p_user_id;
+    if v_altri_allenatori = 0 then
+      raise exception 'Non puoi togliere l''ultimo allenatore della squadra: nominane prima un altro';
+    end if;
+  end if;
+
+  if p_nuovo_ruolo = 'atleta' then
+    if p_atleta_id is null then raise exception 'Per il profilo atleta indica a quale scheda collegarlo'; end if;
+    if not exists (select 1 from athletes where id = p_atleta_id and team_id = p_team_id) then
+      raise exception 'Scheda non trovata in questa squadra';
+    end if;
+    if exists (select 1 from team_members where atleta_id = p_atleta_id and user_id <> p_user_id) then
+      raise exception 'Questa scheda è già collegata a un altro account';
+    end if;
+  end if;
+
+  update team_members
+  set ruolo = p_nuovo_ruolo,
+      atleta_id = case when p_nuovo_ruolo = 'atleta' then p_atleta_id else null end
+  where team_id = p_team_id and user_id = p_user_id;
+end;
+$$;
+
+-- ============================================================
+-- 0039_f4_analisi_partita_ricca.sql
+-- ============================================================
+-- 0039 — F4: analisi partita ricca
+
+create or replace function analisi_fondamentali_partita(p_match_id uuid)
+returns table(
+  fondamentale text, azioni integer, punti integer, errori integer,
+  efficienza numeric, quota_sul_totale integer
+)
+language plpgsql stable security definer set search_path = public
+as $$
+declare
+  v_team_id uuid;
+  v_totale integer;
+begin
+  if auth.uid() is null then raise exception 'Utente non autenticato'; end if;
+  select team_id into v_team_id from matches where id = p_match_id;
+  if v_team_id is null then raise exception 'Partita non trovata'; end if;
+  if not (is_team_staff_visione_piena(v_team_id) or is_team_scout(v_team_id)) then raise exception 'Permesso negato'; end if;
+
+  select count(*) into v_totale from match_events
+  where match_id = p_match_id and skill not in ('Punto_avversario','Punto_nostro','Fallo_rotazione');
+
+  return query
+  select
+    me.skill,
+    count(*)::integer,
+    count(*) filter (where me.esito = 'punto')::integer,
+    count(*) filter (where me.esito = 'errore')::integer,
+    round((count(*) filter (where me.esito = 'punto') - count(*) filter (where me.esito = 'errore'))::numeric
+          / nullif(count(*), 0), 2),
+    round(100.0 * count(*) / nullif(v_totale, 0))::integer
+  from match_events me
+  where me.match_id = p_match_id
+    and me.skill not in ('Punto_avversario','Punto_nostro','Fallo_rotazione')
+  group by me.skill
+  order by count(*) desc;
+end;
+$$;
+
+create or replace function analisi_persone_partita(p_match_id uuid)
+returns table(
+  athlete_id uuid, nome_completo text, azioni integer, punti integer, errori integer,
+  saldo integer, fondamentale_migliore text, fondamentale_peggiore text
+)
+language plpgsql stable security definer set search_path = public
+as $$
+declare
+  v_team_id uuid;
+  v_mio uuid;
+begin
+  if auth.uid() is null then raise exception 'Utente non autenticato'; end if;
+  select team_id into v_team_id from matches where id = p_match_id;
+  if v_team_id is null then raise exception 'Partita non trovata'; end if;
+  v_mio := mio_atleta_id(v_team_id);
+  if not (is_team_staff_visione_piena(v_team_id) or is_team_scout(v_team_id) or v_mio is not null) then
+    raise exception 'Permesso negato';
+  end if;
+
+  return query
+  with per_persona_skill as (
+    select me.athlete_id as aid, me.skill,
+           (count(*) filter (where me.esito = 'punto') - count(*) filter (where me.esito = 'errore'))::integer as saldo_skill
+    from match_events me
+    where me.match_id = p_match_id and me.athlete_id is not null
+    group by me.athlete_id, me.skill
+  ),
+  totali as (
+    select me.athlete_id as aid,
+           count(*)::integer as n,
+           count(*) filter (where me.esito = 'punto')::integer as p,
+           count(*) filter (where me.esito = 'errore')::integer as e
+    from match_events me
+    where me.match_id = p_match_id and me.athlete_id is not null
+    group by me.athlete_id
+  )
+  select
+    t.aid,
+    a.nome || ' ' || a.cognome,
+    t.n, t.p, t.e, (t.p - t.e)::integer,
+    (select s.skill from per_persona_skill s where s.aid = t.aid order by s.saldo_skill desc limit 1),
+    (select s.skill from per_persona_skill s where s.aid = t.aid order by s.saldo_skill asc limit 1)
+  from totali t
+  join athletes a on a.id = t.aid
+  where is_team_staff_visione_piena(v_team_id) or is_team_scout(v_team_id) or t.aid = v_mio
+  order by (t.p - t.e) desc;
+end;
+$$;
+
+create or replace function andamento_tra_partite(p_team_id uuid, p_quante integer default 10)
+returns table(
+  match_id uuid, avversario text, data date, set_vinti_noi integer, set_vinti_avversario integer,
+  azioni integer, punti integer, errori integer, efficienza numeric
+)
+language plpgsql stable security definer set search_path = public
+as $$
+begin
+  if auth.uid() is null then raise exception 'Utente non autenticato'; end if;
+  if not is_team_staff_visione_piena(p_team_id) then raise exception 'Permesso negato'; end if;
+
+  return query
+  select
+    m.id, m.avversario, m.data::date, m.set_vinti_noi, m.set_vinti_avversario,
+    count(me.id)::integer,
+    count(*) filter (where me.esito = 'punto' or me.skill = 'Punto_nostro')::integer,
+    count(*) filter (where me.esito = 'errore' or me.skill in ('Punto_avversario','Fallo_rotazione'))::integer,
+    round((count(*) filter (where me.esito = 'punto' or me.skill = 'Punto_nostro')
+           - count(*) filter (where me.esito = 'errore' or me.skill in ('Punto_avversario','Fallo_rotazione')))::numeric
+          / nullif(count(me.id), 0), 2)
+  from matches m
+  left join match_events me on me.match_id = m.id
+  where m.team_id = p_team_id and m.stato = 'conclusa'
+  group by m.id, m.avversario, m.data, m.set_vinti_noi, m.set_vinti_avversario
+  order by m.data desc
+  limit greatest(1, p_quante);
+end;
+$$;
+
+revoke all on function analisi_fondamentali_partita(uuid) from public, anon;
+revoke all on function analisi_persone_partita(uuid) from public, anon;
+revoke all on function andamento_tra_partite(uuid, integer) from public, anon;
+grant execute on function analisi_fondamentali_partita(uuid) to authenticated, service_role;
+grant execute on function analisi_persone_partita(uuid) to authenticated, service_role;
+grant execute on function andamento_tra_partite(uuid, integer) to authenticated, service_role;
+
+-- ============================================================
+-- 0040_fasi_allenamento_e_lavoro_per_ruolo.sql
+-- ============================================================
+-- 0040 — Fasi dell'allenamento + lavoro parallelo per ruolo
+
+alter table training_exercises add column if not exists fase text
+  check (fase in ('riscaldamento','tecnico','situazionale','defaticamento'));
+alter table training_exercises add column if not exists ruolo_target text;
+
+update training_exercises set fase = 'tecnico' where fase is null;
+
+alter table exercises add column if not exists fase_consigliata text
+  check (fase_consigliata in ('riscaldamento','tecnico','situazionale','defaticamento'));
+
+update exercises set fase_consigliata = 'riscaldamento'
+  where fase_consigliata is null and (categoria ilike '%prepar%' or categoria ilike '%fisic%' or categoria ilike '%atletic%');
+update exercises set fase_consigliata = 'tecnico' where fase_consigliata is null;
+
+create or replace function pesi_fasi_per_data(p_team_id uuid, p_data date, p_durata_totale integer default 120)
+returns table(fase text, minuti_consigliati integer, quota integer, motivo text)
+language plpgsql stable security definer set search_path = public
+as $$
+declare
+  v_tipo text;
+  v_nome text;
+  q_risc integer; q_tec integer; q_sit integer; q_def integer;
+begin
+  if auth.uid() is null then raise exception 'Utente non autenticato'; end if;
+  if not is_team_member(p_team_id) then raise exception 'Permesso negato'; end if;
+
+  select b.tipo, b.nome into v_tipo, v_nome
+  from blocchi_piano b
+  join piani_annuali pa on pa.id = b.piano_id
+  where pa.team_id = p_team_id and p_data between b.data_inizio and b.data_fine
+  order by b.data_inizio desc limit 1;
+
+  if v_tipo = 'preparazione_generale' then
+    q_risc := 40; q_tec := 40; q_sit := 12; q_def := 8;
+  elsif v_tipo = 'preparazione_specifica' then
+    q_risc := 25; q_tec := 50; q_sit := 17; q_def := 8;
+  elsif v_tipo = 'pre_competitiva' then
+    q_risc := 20; q_tec := 40; q_sit := 32; q_def := 8;
+  elsif v_tipo = 'competitiva' then
+    q_risc := 20; q_tec := 30; q_sit := 42; q_def := 8;
+  elsif v_tipo = 'scarico' then
+    q_risc := 35; q_tec := 30; q_sit := 20; q_def := 15;
+  elsif v_tipo = 'transizione' then
+    q_risc := 45; q_tec := 25; q_sit := 20; q_def := 10;
+  else
+    q_risc := 25; q_tec := 40; q_sit := 27; q_def := 8;
+  end if;
+
+  return query
+  select * from (values
+    ('riscaldamento', round(p_durata_totale * q_risc / 100.0)::integer, q_risc,
+     coalesce('Periodo: ' || v_nome, 'Nessun piano annuale per questa data: ripartizione equilibrata')),
+    ('tecnico', round(p_durata_totale * q_tec / 100.0)::integer, q_tec,
+     coalesce('Periodo: ' || v_nome, 'Nessun piano annuale per questa data: ripartizione equilibrata')),
+    ('situazionale', round(p_durata_totale * q_sit / 100.0)::integer, q_sit,
+     coalesce('Periodo: ' || v_nome, 'Nessun piano annuale per questa data: ripartizione equilibrata')),
+    ('defaticamento', round(p_durata_totale * q_def / 100.0)::integer, q_def,
+     coalesce('Periodo: ' || v_nome, 'Nessun piano annuale per questa data: ripartizione equilibrata'))
+  ) as t(fase, minuti_consigliati, quota, motivo);
+end;
+$$;
+
+revoke all on function pesi_fasi_per_data(uuid, date, integer) from public, anon;
+grant execute on function pesi_fasi_per_data(uuid, date, integer) to authenticated, service_role;
+
+-- ============================================================
+-- 0041_piani_individuali.sql
+-- ============================================================
+-- 0041 — Piani individuali (F6)
+
+create table if not exists piani_individuali (
+  id uuid primary key default gen_random_uuid(),
+  athlete_id uuid not null references athletes on delete cascade,
+  titolo text not null,
+  obiettivo text not null default '',
+  fondamentale_target text check (fondamentale_target in ('Servizio','Ricezione','Attacco','Muro','Difesa')),
+  data_inizio date not null default current_date,
+  data_fine date,
+  stato text not null default 'attivo' check (stato in ('attivo','concluso','sospeso')),
+  note text not null default '',
+  creato_il timestamptz not null default now(),
+  creato_da uuid references auth.users on delete set null
+);
+
+create index if not exists idx_piani_individuali_atleta on piani_individuali (athlete_id, stato);
+
+create table if not exists piano_individuale_esercizi (
+  id uuid primary key default gen_random_uuid(),
+  piano_id uuid not null references piani_individuali on delete cascade,
+  exercise_id uuid references exercises on delete set null,
+  nome_libero text,
+  indicazioni text not null default '',
+  volte_a_settimana integer not null default 2 check (volte_a_settimana between 1 and 7),
+  durata_minuti integer,
+  ordine integer not null default 0,
+  quando text not null default 'riscaldamento' check (quando in ('riscaldamento','tecnico','autonomo')),
+  check (exercise_id is not null or nome_libero is not null)
+);
+
+create table if not exists piano_individuale_svolgimenti (
+  id uuid primary key default gen_random_uuid(),
+  piano_esercizio_id uuid not null references piano_individuale_esercizi on delete cascade,
+  data date not null default current_date,
+  registrato_da uuid references auth.users on delete set null,
+  unique (piano_esercizio_id, data)
+);
+
+alter table piani_individuali enable row level security;
+alter table piano_individuale_esercizi enable row level security;
+alter table piano_individuale_svolgimenti enable row level security;
+
+drop policy if exists "piani_individuali_select" on piani_individuali;
+create policy "piani_individuali_select" on piani_individuali for select using (
+  is_team_staff_visione_piena((select team_id from athletes where id = athlete_id))
+  or athlete_id = mio_atleta_id((select team_id from athletes where id = athlete_id))
+  or is_superuser()
+);
+drop policy if exists "piani_individuali_write_coach" on piani_individuali;
+create policy "piani_individuali_write_coach" on piani_individuali for all using (
+  is_team_coach((select team_id from athletes where id = athlete_id))
+) with check (is_team_coach((select team_id from athletes where id = athlete_id)));
+
+drop policy if exists "piano_esercizi_select" on piano_individuale_esercizi;
+create policy "piano_esercizi_select" on piano_individuale_esercizi for select using (
+  exists (select 1 from piani_individuali p where p.id = piano_id)
+);
+drop policy if exists "piano_esercizi_write_coach" on piano_individuale_esercizi;
+create policy "piano_esercizi_write_coach" on piano_individuale_esercizi for all using (
+  is_team_coach((select a.team_id from piani_individuali p join athletes a on a.id = p.athlete_id where p.id = piano_id))
+) with check (
+  is_team_coach((select a.team_id from piani_individuali p join athletes a on a.id = p.athlete_id where p.id = piano_id))
+);
+
+drop policy if exists "svolgimenti_select" on piano_individuale_svolgimenti;
+create policy "svolgimenti_select" on piano_individuale_svolgimenti for select using (
+  exists (select 1 from piano_individuale_esercizi pe where pe.id = piano_esercizio_id)
+);
+drop policy if exists "svolgimenti_write" on piano_individuale_svolgimenti;
+create policy "svolgimenti_write" on piano_individuale_svolgimenti for all using (
+  exists (
+    select 1 from piano_individuale_esercizi pe
+    join piani_individuali p on p.id = pe.piano_id
+    join athletes a on a.id = p.athlete_id
+    where pe.id = piano_esercizio_id
+      and (is_team_coach(a.team_id) or p.athlete_id = mio_atleta_id(a.team_id))
+  )
+) with check (
+  exists (
+    select 1 from piano_individuale_esercizi pe
+    join piani_individuali p on p.id = pe.piano_id
+    join athletes a on a.id = p.athlete_id
+    where pe.id = piano_esercizio_id
+      and (is_team_coach(a.team_id) or p.athlete_id = mio_atleta_id(a.team_id))
+  )
+);
+
+create or replace function elenca_piani_individuali(p_athlete_id uuid)
+returns table(
+  id uuid, titolo text, obiettivo text, fondamentale_target text,
+  data_inizio date, data_fine date, stato text,
+  numero_esercizi integer, svolgimenti_settimana integer, attesi_settimana integer
+)
+language plpgsql stable security definer set search_path = public
+as $$
+#variable_conflict use_column
+declare v_team_id uuid;
+begin
+  if auth.uid() is null then raise exception 'Utente non autenticato'; end if;
+  select team_id into v_team_id from athletes where id = p_athlete_id;
+  if v_team_id is null then raise exception 'Persona non trovata in anagrafica'; end if;
+  if not (is_team_staff_visione_piena(v_team_id) or p_athlete_id = mio_atleta_id(v_team_id) or is_superuser()) then
+    raise exception 'Permesso negato';
+  end if;
+
+  return query
+  select p.id, p.titolo, p.obiettivo, p.fondamentale_target,
+         p.data_inizio, p.data_fine, p.stato,
+         (select count(*)::integer from piano_individuale_esercizi pe where pe.piano_id = p.id),
+         (select count(*)::integer from piano_individuale_esercizi pe
+            join piano_individuale_svolgimenti sv on sv.piano_esercizio_id = pe.id
+           where pe.piano_id = p.id and sv.data >= current_date - 7),
+         (select coalesce(sum(pe.volte_a_settimana), 0)::integer from piano_individuale_esercizi pe where pe.piano_id = p.id)
+  from piani_individuali p
+  where p.athlete_id = p_athlete_id
+  order by (p.stato = 'attivo') desc, p.data_inizio desc;
+end;
+$$;
+
+revoke all on function elenca_piani_individuali(uuid) from public, anon;
+grant execute on function elenca_piani_individuali(uuid) to authenticated, service_role;
+
+-- ============================================================
+-- 0042_formazione_modificabile_prima_avvio.sql
+-- ============================================================
+-- 0042 — La formazione resta modificabile finché il set non è iniziato
+--
+-- BUG: imposta_formazione_iniziale rifiutava qualunque modifica una
+-- volta che le righe esistevano, anche a partita non ancora avviata.
+-- Il blocco deve scattare solo quando il set ha già eventi registrati.
+
+create or replace function imposta_formazione_iniziale(p_set_id uuid, p_posizioni jsonb, p_chi_serve text default 'noi')
+returns void
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_team_id uuid;
+  v_match_id uuid;
+  v_chiave text;
+  v_athlete uuid;
+  v_conteggio integer := 0;
+begin
+  if auth.uid() is null then raise exception 'Utente non autenticato'; end if;
+
+  select m.id, m.team_id into v_match_id, v_team_id
+  from match_sets ms join matches m on m.id = ms.match_id where ms.id = p_set_id;
+  if v_team_id is null then raise exception 'Set non trovato'; end if;
+  if not is_team_coach(v_team_id) then raise exception 'Permesso negato'; end if;
+
+  if exists (select 1 from match_events where set_id = p_set_id) then
+    raise exception 'Il set è già iniziato: la formazione non può più essere cambiata, usa i cambi';
+  end if;
+
+  delete from match_set_lineups where set_id = p_set_id;
+  delete from rimpiazzi_libero where set_id = p_set_id;
+
+  for v_chiave in select jsonb_object_keys(p_posizioni) loop
+    v_athlete := (p_posizioni ->> v_chiave)::uuid;
+
+    if not exists (select 1 from match_convocati where match_id = v_match_id and athlete_id = v_athlete) then
+      raise exception 'Una delle persone indicate non è tra i convocati';
+    end if;
+
+    insert into match_set_lineups (set_id, athlete_id, posizione, in_campo)
+    values (p_set_id, v_athlete, v_chiave::integer, true);
+    v_conteggio := v_conteggio + 1;
+  end loop;
+
+  if v_conteggio <> 6 then
+    raise exception 'Servono esattamente 6 posizioni, ne sono arrivate %', v_conteggio;
+  end if;
+
+  update match_sets
+  set squadra_al_servizio = p_chi_serve,
+      chi_ha_servito_per_primo = p_chi_serve
+  where id = p_set_id;
+end;
+$$;
+
+-- ============================================================
+-- 0043_scout_non_per_atleti_e_presidente.sql
+-- ============================================================
+-- 0043 — Il permesso scout non si assegna ad atleti né al presidente
+
+create or replace function imposta_permesso_scout(p_team_id uuid, p_user_id uuid, p_abilitato boolean)
+returns void
+language plpgsql security definer set search_path = public
+as $$
+declare v_ruolo text;
+begin
+  if auth.uid() is null then raise exception 'Utente non autenticato'; end if;
+  if not is_team_coach(p_team_id) then raise exception 'Permesso negato'; end if;
+
+  select ruolo into v_ruolo from team_members where team_id = p_team_id and user_id = p_user_id;
+  if v_ruolo is null then raise exception 'Questa persona non fa parte della squadra'; end if;
+
+  if p_abilitato and v_ruolo in ('atleta', 'presidente') then
+    raise exception 'Il permesso scout si assegna solo allo staff tecnico: chi registra le azioni sta in panchina';
+  end if;
+
+  update team_members set puo_scoutare = p_abilitato where team_id = p_team_id and user_id = p_user_id;
+end;
+$$;
+
+update team_members set puo_scoutare = false
+where puo_scoutare = true and ruolo in ('atleta', 'presidente');
+
+create or replace function cambia_ruolo_membro(p_team_id uuid, p_user_id uuid, p_nuovo_ruolo text, p_atleta_id uuid default null)
+returns void
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_ruolo_attuale text;
+  v_altri_allenatori integer;
+begin
+  if auth.uid() is null then raise exception 'Utente non autenticato'; end if;
+  if not is_team_coach(p_team_id) then raise exception 'Permesso negato'; end if;
+  if p_nuovo_ruolo not in ('allenatore','vice_allenatore','presidente','atleta') then
+    raise exception 'Profilo non valido';
+  end if;
+
+  select ruolo into v_ruolo_attuale from team_members where team_id = p_team_id and user_id = p_user_id;
+  if v_ruolo_attuale is null then raise exception 'Questa persona non fa parte della squadra'; end if;
+
+  if v_ruolo_attuale = 'allenatore' and p_nuovo_ruolo <> 'allenatore' then
+    select count(*) into v_altri_allenatori from team_members
+    where team_id = p_team_id and ruolo = 'allenatore' and user_id <> p_user_id;
+    if v_altri_allenatori = 0 then
+      raise exception 'Non puoi togliere l''ultimo allenatore della squadra: nominane prima un altro';
+    end if;
+  end if;
+
+  if p_nuovo_ruolo = 'atleta' then
+    if p_atleta_id is null then raise exception 'Per il profilo atleta indica a quale scheda collegarlo'; end if;
+    if not exists (select 1 from athletes where id = p_atleta_id and team_id = p_team_id) then
+      raise exception 'Scheda non trovata in questa squadra';
+    end if;
+    if exists (select 1 from team_members where atleta_id = p_atleta_id and user_id <> p_user_id) then
+      raise exception 'Questa scheda è già collegata a un altro account';
+    end if;
+  end if;
+
+  update team_members
+  set ruolo = p_nuovo_ruolo,
+      atleta_id = case when p_nuovo_ruolo = 'atleta' then p_atleta_id else null end,
+      puo_scoutare = case when p_nuovo_ruolo in ('atleta','presidente') then false else puo_scoutare end
+  where team_id = p_team_id and user_id = p_user_id;
+end;
+$$;
+
+-- ============================================================
+-- 0044_richiusura_sicurezza_completa.sql
+-- ============================================================
+-- 0044 — Richiusura completa: due funzioni erano tornate accessibili
+-- senza accesso, e va ripetuto il giro su tutte quelle create dopo
+-- l'ultimo controllo, che non erano coperte.
+--
+-- CAUSA: ogni volta che una funzione viene creata per la prima volta,
+-- Postgres le assegna di default il permesso di esecuzione a PUBLIC,
+-- che include gli utenti non autenticati. La richiusura fatta a suo
+-- tempo copriva solo le funzioni esistenti in quel momento.
+
+do $$
+declare r record;
+begin
+  for r in
+    select p.oid::regprocedure as firma, p.prorettype = 'trigger'::regtype as e_trigger
+    from pg_proc p
+    join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'public' and p.prosecdef = true
+  loop
+    execute format('revoke all on function %s from public, anon', r.firma);
+    if not r.e_trigger then
+      execute format('grant execute on function %s to authenticated', r.firma);
+      execute format('grant execute on function %s to service_role', r.firma);
+    end if;
+  end loop;
+end;
+$$;
+
+-- ============================================================
+-- 0045_indici_chiavi_esterne_mancanti.sql
+-- ============================================================
+-- 0045 — Indici sulle chiavi esterne prive di copertura
+--
+-- 37 chiavi esterne senza indice: ogni join o vincolo di cancellazione
+-- a cascata su quelle colonne fa una scansione completa della tabella
+-- collegata.
+
+create index if not exists idx_campionati_team on campionati (team_id);
+create index if not exists idx_evaluation_proposals_athlete on evaluation_proposals (athlete_id);
+create index if not exists idx_evaluation_proposals_decisa_da on evaluation_proposals (decisa_da);
+create index if not exists idx_evaluation_proposals_valutazione on evaluation_proposals (valutazione_id);
+create index if not exists idx_evaluations_valutatore on evaluations (valutatore);
+create index if not exists idx_globale_eventi_athlete on globale_eventi (athlete_id);
+create index if not exists idx_globale_eventi_creato_da on globale_eventi (creato_da);
+create index if not exists idx_globale_eventi_rotazione_a on globale_eventi (rotazione_a);
+create index if not exists idx_globale_eventi_rotazione_b on globale_eventi (rotazione_b);
+create index if not exists idx_globale_formazioni_athlete on globale_formazioni (athlete_id);
+create index if not exists idx_globali_training on globali (training_id);
+create index if not exists idx_match_convocati_athlete on match_convocati (athlete_id);
+create index if not exists idx_match_events_creato_da on match_events (creato_da);
+create index if not exists idx_match_events_rotazione_servizio on match_events (rotazione_al_servizio);
+create index if not exists idx_match_events_set on match_events (set_id);
+create index if not exists idx_match_set_lineups_athlete on match_set_lineups (athlete_id);
+create index if not exists idx_matches_campionato on matches (campionato_id);
+create index if not exists idx_matches_creato_da on matches (creato_da);
+create index if not exists idx_obiettivi_atleta_creato_da on obiettivi_atleta (creato_da);
+create index if not exists idx_piani_annuali_season on piani_annuali (season_id);
+create index if not exists idx_piani_annuali_team on piani_annuali (team_id);
+create index if not exists idx_piani_individuali_creato_da on piani_individuali (creato_da);
+create index if not exists idx_piano_esercizi_exercise on piano_individuale_esercizi (exercise_id);
+create index if not exists idx_piano_esercizi_piano on piano_individuale_esercizi (piano_id);
+create index if not exists idx_svolgimenti_registrato_da on piano_individuale_svolgimenti (registrato_da);
+create index if not exists idx_proposte_piano on proposte_aggiornamento_piano (piano_id);
+create index if not exists idx_rimpiazzi_libero_libero on rimpiazzi_libero (libero_id);
+create index if not exists idx_rimpiazzi_libero_titolare on rimpiazzi_libero (titolare_id);
+create index if not exists idx_rpe_athlete on rpe (athlete_id);
+create index if not exists idx_season_baselines_creata_da on season_baselines (creata_da);
+create index if not exists idx_season_baselines_valutazione_rif on season_baselines (valutazione_id_riferimento);
+create index if not exists idx_seasons_creata_da on seasons (creata_da);
+create index if not exists idx_team_invites_atleta on team_invites (atleta_id);
+create index if not exists idx_team_invites_creato_da on team_invites (creato_da);
+create index if not exists idx_team_members_atleta on team_members (atleta_id);
+create index if not exists idx_teams_creato_da on teams (creato_da);
+create index if not exists idx_training_exercises_exercise on training_exercises (exercise_id);
+
+-- ============================================================
+-- 0046_elimina_sovrapposizione_regole_sicurezza.sql
+-- ============================================================
+-- 0046 — Elimina la sovrapposizione di regole di sicurezza sulle letture
+--
+-- Quasi ogni tabella aveva una regola dedicata alla lettura e una
+-- seconda "per tutto" che in Postgres copre ANCHE la lettura: ogni
+-- interrogazione veniva verificata da entrambe. Dove esiste già una
+-- regola di lettura dedicata, la regola "per tutto" viene ristretta a
+-- scrittura/modifica/cancellazione soltanto, leggendo le condizioni
+-- originali direttamente dal catalogo di Postgres.
+
+do $$
+declare
+  pol record;
+  ha_select_dedicata boolean;
+  ruoli_txt text;
+begin
+  for pol in
+    select schemaname, tablename, policyname, roles, qual, with_check
+    from pg_policies
+    where schemaname = 'public' and cmd = 'ALL' and permissive = 'PERMISSIVE'
+  loop
+    select exists (
+      select 1 from pg_policies
+      where schemaname = 'public' and tablename = pol.tablename
+        and cmd = 'SELECT' and permissive = 'PERMISSIVE'
+        and policyname <> pol.policyname
+    ) into ha_select_dedicata;
+
+    if ha_select_dedicata then
+      ruoli_txt := array_to_string(pol.roles, ', ');
+
+      begin
+        execute format('drop policy %I on %I.%I', pol.policyname, pol.schemaname, pol.tablename);
+
+        execute format(
+          'create policy %I on %I.%I for insert to %s with check (%s)',
+          pol.policyname || '_insert', pol.schemaname, pol.tablename, ruoli_txt,
+          coalesce(pol.with_check, pol.qual)
+        );
+        execute format(
+          'create policy %I on %I.%I for update to %s using (%s) with check (%s)',
+          pol.policyname || '_update', pol.schemaname, pol.tablename, ruoli_txt,
+          pol.qual, coalesce(pol.with_check, pol.qual)
+        );
+        execute format(
+          'create policy %I on %I.%I for delete to %s using (%s)',
+          pol.policyname || '_delete', pol.schemaname, pol.tablename, ruoli_txt,
+          pol.qual
+        );
+      exception when others then
+        raise notice 'Tabella % (regola %) saltata: %', pol.tablename, pol.policyname, sqlerrm;
+      end;
+    end if;
+  end loop;
+end;
+$$;
+
+-- ============================================================
+-- 0047_ottimizza_valutazione_auth_uid.sql
+-- ============================================================
+-- 0047 — ERRATA CORRIGE: contiene un errore, corretto dalla 0048.
+--
+-- Nel tentativo di ottimizzare team_members_insert_coach avvolgendo
+-- auth.uid() in una sotto-interrogazione, la condizione originale è
+-- stata INDOVINATA invece di essere letta dal catalogo, rischiando di
+-- alterare la regola di sicurezza vera. Lasciata qui per onestà
+-- storica: è stata immediatamente corretta dalla migrazione 0048, che
+-- ripristina la condizione corretta (is_team_coach(team_id) puro).
+
+drop policy if exists "team_members_insert_coach" on team_members;
+create policy "team_members_insert_coach" on team_members for insert
+  with check (is_team_coach(team_id) or (select auth.uid()) = user_id);
+
+-- ============================================================
+-- 0048_correzione_valutazione_auth_uid_sicura.sql
+-- ============================================================
+-- 0048 — Corregge l'errore della 0047
+--
+-- La migrazione precedente aveva riscritto team_members_insert_coach
+-- indovinando la condizione originale invece di leggerla dal catalogo.
+-- Qui si ripristina la condizione corretta: la stessa usata ovunque
+-- nel progetto per l'inserimento (is_team_coach(team_id) puro), senza
+-- clausole aggiuntive inventate.
+
+drop policy if exists "team_members_insert_coach" on team_members;
+create policy "team_members_insert_coach" on team_members for insert
+  with check (is_team_coach(team_id));
+
+-- ============================================================
+-- 0049_consolida_regole_lettura_residue.sql
+-- ============================================================
+-- 0049 — Consolida le regole di lettura rimaste sovrapposte
+--
+-- Le sovrapposizioni residue erano regole di lettura genuinamente
+-- distinte sulla stessa tabella (es. vista "in diretta" durante la
+-- partita accanto a quella normale). Vengono unite in una sola
+-- condizione con OR — equivalente ai fini dei permessi, ma valutata
+-- una sola volta invece di due o tre.
+
+do $$
+declare
+  tbl text;
+  pol record;
+  condizione_unita text;
+  numero_regole integer;
+begin
+  foreach tbl in array array['athletes','evaluation_proposals','match_events','match_sets','season_baselines','team_members']
+  loop
+    select count(*) into numero_regole
+    from pg_policies
+    where schemaname = 'public' and tablename = tbl and cmd = 'SELECT' and permissive = 'PERMISSIVE';
+
+    if numero_regole < 2 then continue; end if;
+
+    condizione_unita := null;
+    for pol in
+      select qual from pg_policies
+      where schemaname = 'public' and tablename = tbl and cmd = 'SELECT' and permissive = 'PERMISSIVE'
+      order by policyname
+    loop
+      condizione_unita := case when condizione_unita is null
+        then '(' || pol.qual || ')'
+        else condizione_unita || ' OR (' || pol.qual || ')'
+      end;
+    end loop;
+
+    begin
+      for pol in
+        select policyname from pg_policies
+        where schemaname = 'public' and tablename = tbl and cmd = 'SELECT' and permissive = 'PERMISSIVE'
+      loop
+        execute format('drop policy %I on public.%I', pol.policyname, tbl);
+      end loop;
+
+      execute format('create policy %I on public.%I for select using (%s)', tbl || '_select_unificata', tbl, condizione_unita);
+    exception when others then
+      raise notice 'Tabella % saltata: %', tbl, sqlerrm;
+    end;
+  end loop;
+end;
+$$;
+
+-- ============================================================
+-- 0050_libero_posizione_1_solo_se_non_al_servizio.sql
+-- ============================================================
+-- 0050 — Il Libero può entrare in posizione 1 se non siamo al servizio
+--
+-- ERRORE PRECEDENTE (0035): si bloccava sempre la posizione 1 per il
+-- Libero, ragionando solo su "non può servire". Ma la posizione 1 non
+-- è sempre la battuta: lo è solo quando è la NOSTRA squadra al
+-- servizio. Se è l'avversario a servire, la posizione 1 per noi è una
+-- normale posizione di seconda linea in ricezione, dove il Libero
+-- gioca regolarmente.
+
+create or replace function rimpiazza_con_libero(p_set_id uuid, p_libero_id uuid, p_titolare_id uuid)
+returns void
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_team_id uuid;
+  v_match_id uuid;
+  v_posizione integer;
+  v_servizio text;
+begin
+  if auth.uid() is null then raise exception 'Utente non autenticato'; end if;
+  select m.id, m.team_id into v_match_id, v_team_id
+  from match_sets ms join matches m on m.id = ms.match_id where ms.id = p_set_id;
+  if v_team_id is null then raise exception 'Set non trovato'; end if;
+  if not is_team_scout(v_team_id) then raise exception 'Permesso negato'; end if;
+
+  if not exists (select 1 from match_convocati where match_id = v_match_id and athlete_id = p_libero_id and is_libero = true) then
+    raise exception 'Questa persona non è indicata come Libero nella distinta';
+  end if;
+
+  select posizione into v_posizione from match_set_lineups
+  where set_id = p_set_id and athlete_id = p_titolare_id and in_campo = true;
+  if v_posizione is null then raise exception 'Chi deve essere rimpiazzato non è in campo'; end if;
+
+  if v_posizione not in (1, 5, 6) then
+    raise exception 'Il Libero può entrare solo in seconda linea (posizioni 5, 6, 1): la posizione indicata è %', v_posizione;
+  end if;
+
+  if v_posizione = 1 then
+    select squadra_al_servizio into v_servizio from match_sets where id = p_set_id;
+    if v_servizio = 'noi' then
+      raise exception 'In questo momento la posizione 1 è alla battuta (siamo al servizio): il Libero non può servire';
+    end if;
+  end if;
+
+  if exists (select 1 from rimpiazzi_libero where set_id = p_set_id and uscito_il is null) then
+    raise exception 'C''è già un Libero in campo: fallo uscire prima';
+  end if;
+
+  update match_set_lineups set in_campo = false, posizione = null
+  where set_id = p_set_id and athlete_id = p_titolare_id;
+
+  insert into match_set_lineups (set_id, athlete_id, in_campo, posizione)
+  values (p_set_id, p_libero_id, true, v_posizione)
+  on conflict (set_id, athlete_id) do update set in_campo = true, posizione = v_posizione;
+
+  insert into rimpiazzi_libero (set_id, libero_id, titolare_id, posizione)
+  values (p_set_id, p_libero_id, p_titolare_id, v_posizione);
+end;
+$$;
+
+-- ============================================================
+-- 0051_libero_esce_anche_da_posizione_1_su_nostro_servizio.sql
+-- ============================================================
+-- 0051 — Uscita automatica del Libero anche dalla posizione 1
+--
+-- gestisci_libero_dopo_rotazione() viene chiamata SOLO nel ramo dove
+-- la rotazione ci ha appena fatto conquistare il servizio. In quel
+-- preciso momento, se il Libero è finito in posizione 1, sta per
+-- dover servire: va fatto uscire come già succede per la prima linea.
+
+create or replace function gestisci_libero_dopo_rotazione(p_set_id uuid)
+returns void
+language plpgsql security definer set search_path = public
+as $$
+declare v_posizione integer;
+begin
+  select l.posizione into v_posizione
+  from rimpiazzi_libero r
+  join match_set_lineups l on l.set_id = r.set_id and l.athlete_id = r.libero_id and l.in_campo = true
+  where r.set_id = p_set_id and r.uscito_il is null
+  limit 1;
+
+  if v_posizione is not null and v_posizione in (1, 2, 3, 4) then
+    perform fai_uscire_libero(p_set_id);
+  end if;
 end;
 $$;
 

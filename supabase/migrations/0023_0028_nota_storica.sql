@@ -1,0 +1,17 @@
+-- NOTA STORICA: le migrazioni 0023-0028 sono state applicate
+-- direttamente sul progetto Supabase in una fase in cui la cronologia
+-- locale non veniva ancora tenuta allineata ad ogni giro. Contenevano:
+--   0023 tabelle globali/globale_formazioni/globale_eventi + RLS
+--   0024 rotazione/punteggio/annullamento del globale
+--   0025 analisi rotazioni globale + chiusura con proposte valutazione
+--   0026 rimozione del tetto arbitrario di chiamate AI
+--   0027 abilitazione realtime sulle tabelle di scouting
+--   0028 rotazione registrata negli eventi partita + analisi rotazioni
+-- Il loro contenuto esatto non è stato ricostruito verbatim in questo
+-- giro di allineamento (a differenza delle 0029-0051, per cui il testo
+-- esatto era disponibile): le funzioni e tabelle che introducevano
+-- sono comunque tutte presenti e corrette nelle migrazioni successive,
+-- che le ridefiniscono. Se si ricostruisce il database da zero con
+-- setup_supabase.sql, l'assenza di queste sei manca principalmente di
+-- commenti storici, non di funzionalità: le migrazioni successive
+-- (in particolare 0031, 0034, 0039) ricreano tutto ciò che serve.
