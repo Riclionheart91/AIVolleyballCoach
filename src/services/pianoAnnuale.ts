@@ -323,3 +323,95 @@ export async function aggiungiObiettivoCatalogo(teamId: string, categoria: "tecn
   const { error } = await supabaseClient.rpc("aggiungi_obiettivo_catalogo", { p_team_id: teamId, p_categoria: categoria, p_testo: testo });
   if (error) throw error;
 }
+
+export interface RigaPerformance {
+  fondamentale: string;
+  media_valutazioni: number | null;
+  numero_valutazioni: number;
+  efficienza_partite: number | null;
+  azioni_partite: number;
+}
+
+/** Media voti recenti ed efficienza nelle ultime partite, per fondamentale: la base su cui l'AI corregge il piano senza inventare valutazioni. */
+export async function leggiRiepilogoPerformance(teamId: string, partiteRecenti = 5): Promise<RigaPerformance[]> {
+  const { data, error } = await supabaseClient.rpc("riepilogo_performance_squadra", { p_team_id: teamId, p_partite_recenti: partiteRecenti });
+  if (error) throw error;
+  return data ?? [];
+}
+
+function testoRiepilogoPerformance(righe: RigaPerformance[]): string {
+  return righe.map((r) => {
+    const voto = r.media_valutazioni != null ? `voto medio ${r.media_valutazioni}/10 (${r.numero_valutazioni} valutazioni)` : "nessuna valutazione recente";
+    const eff = r.efficienza_partite != null ? `efficienza in partita ${r.efficienza_partite >= 0 ? "+" : ""}${r.efficienza_partite} su ${r.azioni_partite} azioni` : "nessun dato dalle partite recenti";
+    return `${r.fondamentale}: ${voto}; ${eff}.`;
+  }).join("\n");
+}
+
+/**
+ * Aggiorna la pianificazione SOLO da una data in poi: il passato non
+ * viene nemmeno descritto all'AI, per costruzione non può riscriverlo.
+ * Le ipotesi di base (livello, obiettivo, sedute) restano quelle
+ * dell'utente; cambia solo l'enfasi dei blocchi futuri, corretta sulle
+ * performance reali. Stesso formato di generaBlocchiGuidatoAI: la
+ * proposta resta sempre da rivedere ed eventualmente correggere prima
+ * di sostituire qualunque cosa.
+ */
+export async function generaAggiornamentoPianoAI(
+  teamId: string,
+  dataDaOggi: string,
+  dataFineStagione: string,
+  risposte: RisposteGuida,
+  performance: RigaPerformance[],
+  istruzioniExtra: string | undefined,
+  elenchiObiettivi: { tecnici: readonly string[]; fisici: readonly string[]; tattici: readonly string[] },
+): Promise<RisultatoGenerazioneBlocchi> {
+  const prompt =
+    `Sei un preparatore di pallavolo. Devi AGGIORNARE una pianificazione già in corso, non crearne una nuova da zero.\n\n` +
+    `Ricostruisci la periodizzazione SOLO dal ${dataDaOggi} al ${dataFineStagione}: tutto ciò che precede questa data è già stato allenato e non va toccato né descritto di nuovo.\n` +
+    `Le ipotesi di base della stagione NON cambiano: squadra livello "${risposte.livello}", ${risposte.seduteSettimana} sedute a settimana, obiettivo principale "${risposte.obiettivoStagione}".\n\n` +
+    `Questo però è il rendimento reale della squadra fin qui, da usare per correggere l'enfasi dei blocchi futuri (più lavoro dove serve, meno dove la squadra rende già bene):\n` +
+    `${testoRiepilogoPerformance(performance)}\n\n` +
+    `Gli obiettivi di ogni blocco devono essere scelti ESCLUSIVAMENTE da questi elenchi, copiati alla lettera:\n` +
+    `TECNICI: ${elenchiObiettivi.tecnici.join(" | ")}\n` +
+    `FISICI: ${elenchiObiettivi.fisici.join(" | ")}\n` +
+    `TATTICI: ${elenchiObiettivi.tattici.join(" | ")}\n\n` +
+    `Rispondi SOLO con JSON, senza altro testo:\n` +
+    `{"blocchi":[{"nome":"...","tipo":"preparazione_generale","data_inizio":"AAAA-MM-GG","data_fine":"AAAA-MM-GG","obiettivi_tecnici":["voce esatta"],"obiettivi_fisici":["..."],"obiettivi_tattici":["..."]}]}\n` +
+    `Valori ammessi per "tipo": preparazione_generale, preparazione_specifica, pre_competitiva, competitiva, scarico, transizione. ` +
+    `Massimo 3 obiettivi per categoria per blocco. I blocchi coprono per intero il periodo indicato, senza sovrapposizioni e senza uscirne.` +
+    istruzioniAggiuntive(istruzioniExtra);
+
+  const { data: sessione } = await supabaseClient.auth.getSession();
+  if (!sessione.session) return { errore: true, messaggio: "Sessione scaduta, effettua di nuovo l'accesso." };
+
+  const { data, error } = await supabaseClient.functions.invoke(cfg.aiRouterFunction, { body: { team_id: teamId, prompt } });
+  if (error) return { errore: true, messaggio: error.message };
+  if (data.errore) return { errore: true, messaggio: [data.messaggio, data.dettagli].filter(Boolean).join("\n\n") };
+
+  try {
+    const pulito = String(data.testo).trim().replace(/^```json\s*|```$/g, "");
+    const parsed = JSON.parse(pulito);
+    const tipiAmmessi = Object.keys(ETICHETTE_TIPO_BLOCCO);
+
+    const soloAmmessi = (valori: unknown, ammessi: readonly string[]) =>
+      (Array.isArray(valori) ? valori : []).map(String).filter((v) => ammessi.includes(v)).join(", ");
+
+    const blocchi: InputBlocco[] = (parsed.blocchi ?? [])
+      .filter((b: Record<string, unknown>) => b.data_inizio && b.data_fine && b.nome)
+      .map((b: Record<string, unknown>) => ({
+        nome: String(b.nome),
+        tipo: (tipiAmmessi.includes(String(b.tipo)) ? String(b.tipo) : "preparazione_generale") as TipoBlocco,
+        data_inizio: String(b.data_inizio).slice(0, 10),
+        data_fine: String(b.data_fine).slice(0, 10),
+        obiettivi_tecnici: soloAmmessi(b.obiettivi_tecnici, elenchiObiettivi.tecnici),
+        obiettivi_fisici: soloAmmessi(b.obiettivi_fisici, elenchiObiettivi.fisici),
+        obiettivi_tattici: soloAmmessi(b.obiettivi_tattici, elenchiObiettivi.tattici),
+        note: "",
+      }));
+
+    if (blocchi.length === 0) return { errore: true, messaggio: "L'AI non ha proposto un aggiornamento utilizzabile." };
+    return { errore: false, blocchi };
+  } catch {
+    return { errore: true, messaggio: "Risposta AI non nel formato atteso." };
+  }
+}

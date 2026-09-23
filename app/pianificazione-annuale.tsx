@@ -12,11 +12,14 @@ import {
   elencaBlocchi,
   elencaObiettiviCatalogo,
   eliminaBlocco,
+  generaAggiornamentoPianoAI,
   generaBlocchiAI,
   generaBlocchiGuidatoAI,
   leggiPianoAnnuale,
+  leggiRiepilogoPerformance,
   riepilogoBlocchi,
   type InputBlocco,
+  type RigaPerformance,
 } from "@/src/services/pianoAnnuale";
 import { elencaAtlete } from "@/src/services/athletes";
 import { confermaAzione, avvisa } from "@/src/lib/confermaAzione";
@@ -45,6 +48,11 @@ export default function PianificazioneAnnuale() {
   const [generando, setGenerando] = useState(false);
   const [percentuale, setPercentuale] = useState(0);
   const [bloccoInModifica, setBloccoInModifica] = useState<BloccoPiano | "nuovo" | null>(null);
+  const [performanceUiAperta, setPerformanceUiAperta] = useState(false);
+  const [generandoAggiornamento, setGenerandoAggiornamento] = useState(false);
+  const [performance, setPerformance] = useState<RigaPerformance[]>([]);
+  const [proposte, setProposte] = useState<(InputBlocco & { chiave: string })[] | null>(null);
+  const [propostaInModifica, setPropostaInModifica] = useState<string | null>(null);
   const [bozza, setBozza] = useState<InputBlocco>(bozzaVuota());
   const [guidaAperta, setGuidaAperta] = useState(false);
   const [livello, setLivello] = useState("amatoriale");
@@ -111,7 +119,82 @@ export default function PianificazioneAnnuale() {
     setBloccoInModifica(b);
   }
 
+  /** Apre una proposta (non ancora salvata) per correggerla, prima di accettare l'aggiornamento. */
+  function apriModificaProposta(p: InputBlocco & { chiave: string }) {
+    setBozza({ nome: p.nome, tipo: p.tipo, data_inizio: p.data_inizio, data_fine: p.data_fine, obiettivi_tecnici: p.obiettivi_tecnici, obiettivi_fisici: p.obiettivi_fisici, obiettivi_tattici: p.obiettivi_tattici, note: p.note });
+    setPropostaInModifica(p.chiave);
+  }
+
+  async function apriAggiornamentoPerformance() {
+    if (!team) return;
+    setPerformanceUiAperta(!performanceUiAperta);
+    if (!performanceUiAperta) {
+      setPerformance(await leggiRiepilogoPerformance(team.id).catch(() => []));
+    }
+  }
+
+  /**
+   * Rigenera SOLO da oggi in poi: i blocchi già chiusi (data_fine
+   * passata) non vengono nemmeno inclusi nel calcolo della data di
+   * fine pianificazione, e restano intoccati fino all'accettazione
+   * esplicita — che a sua volta cancella e ricrea solo i blocchi non
+   * ancora conclusi, mai quelli passati.
+   */
+  async function eseguiAggiornamentoPerformance() {
+    if (!team) return;
+    setGenerandoAggiornamento(true);
+    try {
+      const ultimoBlocco = blocchi[blocchi.length - 1];
+      const fineStagione = ultimoBlocco && ultimoBlocco.data_fine > oggi ? ultimoBlocco.data_fine : fraMesi(6);
+      const r = await generaAggiornamentoPianoAI(
+        team.id, oggi, fineStagione,
+        { livello, seduteSettimana, obiettivoStagione }, performance, istruzioniExtra,
+        { tecnici: vociTecnici, fisici: vociFisici, tattici: vociTattici },
+      );
+      if (r.errore || !r.blocchi) { avvisa("Aggiornamento non riuscito", r.messaggio ?? "Errore"); return; }
+      setProposte(r.blocchi.map((b, i) => ({ ...b, chiave: `proposta-${i}` })));
+      setPerformanceUiAperta(false);
+    } finally {
+      setGenerandoAggiornamento(false);
+    }
+  }
+
+  function rimuoviProposta(chiave: string) {
+    setProposte((prev) => (prev ? prev.filter((p) => p.chiave !== chiave) : prev));
+  }
+
+  /** Sostituisce SOLO i blocchi non ancora conclusi (data_fine >= oggi): quelli passati non vengono toccati, né letti, né inviati all'AI. */
+  async function accettaAggiornamento() {
+    if (!piano || !proposte || proposte.length === 0) return;
+    confermaAzione(
+      "Sostituire il piano da oggi in poi?",
+      `${proposte.length} blocchi sostituiranno quelli non ancora conclusi. I blocchi già passati restano invariati.`,
+      "Sostituisci",
+      async () => {
+        try {
+          const daRimuovere = blocchi.filter((b) => b.data_fine >= oggi);
+          for (const b of daRimuovere) await eliminaBlocco(b.id);
+          for (const p of proposte) {
+            const { chiave, ...input } = p;
+            await creaBlocco(piano.id, input);
+          }
+          setProposte(null);
+          carica();
+        } catch (e) { avvisa("Errore", (e as Error).message); }
+      },
+    );
+  }
+
   async function salvaBlocco() {
+    // Se si sta correggendo una proposta non ancora accettata, si
+    // aggiorna solo l'elenco in memoria: nessuna scrittura sul
+    // database finché non si preme "Accetta e sostituisci".
+    if (propostaInModifica) {
+      if (!bozza.nome.trim()) return;
+      setProposte((prev) => prev ? prev.map((p) => (p.chiave === propostaInModifica ? { ...bozza, chiave: propostaInModifica } : p)) : prev);
+      setPropostaInModifica(null);
+      return;
+    }
     if (!piano || !bozza.nome.trim()) return;
     try {
       if (bloccoInModifica === "nuovo") await creaBlocco(piano.id, bozza);
@@ -237,7 +320,111 @@ export default function PianificazioneAnnuale() {
             <Text style={styles.bottoneNuovoTesto}>+ Blocco</Text>
           </Pressable>
         </View>
+        {blocchi.length > 0 && (
+          <Pressable style={styles.bottonePerformance} onPress={apriAggiornamentoPerformance} disabled={generandoAggiornamento}>
+            <Text style={styles.bottonePerformanceTesto}>📊 Aggiorna con le performance (da oggi in poi)</Text>
+          </Pressable>
+        )}
         {generando && <View style={styles.barraSfondo}><View style={[styles.barraRiempimento, { width: `${percentuale}%` }]} /></View>}
+
+        {performanceUiAperta && (
+          <View style={styles.form}>
+            <Text style={styles.titoloForm}>Aggiorna il piano sulle performance reali</Text>
+            <Text style={styles.nota}>
+              Le ipotesi di base (livello, sedute, obiettivo stagione) restano quelle sotto — cambiale se serve. Verrà ricostruito solo da oggi in poi: quanto già passato non viene toccato.
+            </Text>
+
+            <Text style={styles.etichettaGuida}>Rendimento recente</Text>
+            {performance.length === 0 ? (
+              <Text style={styles.nota}>Nessun dato ancora da valutazioni o partite.</Text>
+            ) : performance.map((r) => (
+              <Text key={r.fondamentale} style={styles.rigaPerformance}>
+                {r.fondamentale}: {r.media_valutazioni != null ? `voto ${r.media_valutazioni}/10` : "nessun voto"}
+                {r.efficienza_partite != null ? ` · efficienza ${r.efficienza_partite >= 0 ? "+" : ""}${r.efficienza_partite}` : ""}
+              </Text>
+            ))}
+
+            <Text style={styles.etichettaGuida}>Livello della squadra</Text>
+            <View style={styles.selettoreTipi}>
+              {["giovanile", "amatoriale", "agonistico"].map((v) => (
+                <Pressable key={v} onPress={() => setLivello(v)} style={[styles.chipTipo, livello === v && styles.chipTipoAttivo]}>
+                  <Text style={[styles.chipTipoTesto, livello === v && styles.chipTipoTestoAttivo]}>{v}</Text>
+                </Pressable>
+              ))}
+            </View>
+            <Text style={styles.etichettaGuida}>Sedute a settimana</Text>
+            <View style={styles.selettoreTipi}>
+              {["1", "2", "3", "4+"].map((v) => (
+                <Pressable key={v} onPress={() => setSeduteSettimana(v)} style={[styles.chipTipo, seduteSettimana === v && styles.chipTipoAttivo]}>
+                  <Text style={[styles.chipTipoTesto, seduteSettimana === v && styles.chipTipoTestoAttivo]}>{v}</Text>
+                </Pressable>
+              ))}
+            </View>
+            <TextInput style={styles.input} placeholder="Obiettivo principale della stagione" placeholderTextColor={brand.colors.muted} value={obiettivoStagione} onChangeText={setObiettivoStagione} />
+            <TextInput style={[styles.input, { minHeight: 60 }]} multiline placeholder="Altro da tenere presente (facoltativo)" placeholderTextColor={brand.colors.muted} value={istruzioniExtra} onChangeText={setIstruzioniExtra} />
+
+            <View style={{ flexDirection: "row", gap: 8 }}>
+              <Pressable style={styles.bottoneAnnulla} onPress={() => setPerformanceUiAperta(false)}><Text style={styles.bottoneAnnullaTesto}>Annulla</Text></Pressable>
+              <Pressable style={styles.bottoneSalva} onPress={eseguiAggiornamentoPerformance} disabled={generandoAggiornamento}>
+                {generandoAggiornamento ? <ActivityIndicator color="#000" /> : <Text style={styles.bottoneSalvaTesto}>Genera proposta</Text>}
+              </Pressable>
+            </View>
+          </View>
+        )}
+
+        {proposte && (
+          <View style={styles.formRevisione}>
+            <Text style={styles.titoloForm}>Proposta da revisionare</Text>
+            <Text style={styles.nota}>Sostituirà solo i blocchi non ancora conclusi. Modifica o rimuovi ciò che non ti convince, poi accetta.</Text>
+            {proposte.map((p) => (
+              <View key={p.chiave} style={styles.propostaCard}>
+                <View style={[styles.barraTipo, { backgroundColor: COLORI_TIPO_BLOCCO[p.tipo] }]} />
+                <View style={{ flex: 1, gap: 2 }}>
+                  <Text style={styles.nomeBlocco}>{p.nome}</Text>
+                  <Text style={styles.tipoBlocco}>{ETICHETTE_TIPO_BLOCCO[p.tipo]}</Text>
+                  <Text style={styles.periodoBlocco}>{new Date(p.data_inizio).toLocaleDateString("it-IT")} → {new Date(p.data_fine).toLocaleDateString("it-IT")}</Text>
+                  {!!p.obiettivi_tecnici && <Text style={styles.obiettivo}><Text style={styles.etichettaObiettivo}>Tecnici: </Text>{p.obiettivi_tecnici}</Text>}
+                  {!!p.obiettivi_fisici && <Text style={styles.obiettivo}><Text style={styles.etichettaObiettivo}>Fisici: </Text>{p.obiettivi_fisici}</Text>}
+                  {!!p.obiettivi_tattici && <Text style={styles.obiettivo}><Text style={styles.etichettaObiettivo}>Tattici: </Text>{p.obiettivi_tattici}</Text>}
+                  <View style={styles.rigaAzioni}>
+                    <Pressable onPress={() => apriModificaProposta(p)}><Text style={styles.azione}>Modifica</Text></Pressable>
+                    <Pressable onPress={() => rimuoviProposta(p.chiave)}><Text style={styles.azioneDistruttiva}>Rimuovi</Text></Pressable>
+                  </View>
+                </View>
+              </View>
+            ))}
+            <View style={{ flexDirection: "row", gap: 8 }}>
+              <Pressable style={styles.bottoneAnnulla} onPress={() => setProposte(null)}><Text style={styles.bottoneAnnullaTesto}>Annulla proposta</Text></Pressable>
+              <Pressable style={styles.bottoneSalva} onPress={accettaAggiornamento} disabled={proposte.length === 0}><Text style={styles.bottoneSalvaTesto}>✓ Accetta e sostituisci</Text></Pressable>
+            </View>
+          </View>
+        )}
+
+        {(bloccoInModifica || propostaInModifica) && (
+          <View style={styles.form}>
+            <Text style={styles.titoloForm}>{propostaInModifica ? "Correggi la proposta" : bloccoInModifica === "nuovo" ? "Nuovo blocco" : "Modifica blocco"}</Text>
+            <TextInput style={styles.input} placeholder="Nome (es. Preparazione pre-campionato)" placeholderTextColor={brand.colors.muted} value={bozza.nome} onChangeText={(t) => setBozza({ ...bozza, nome: t })} />
+            <View style={styles.selettoreTipi}>
+              {TIPI.map((t) => (
+                <Pressable key={t} onPress={() => setBozza({ ...bozza, tipo: t })} style={[styles.chipTipo, bozza.tipo === t && { backgroundColor: COLORI_TIPO_BLOCCO[t] }]}>
+                  <Text style={[styles.chipTipoTesto, bozza.tipo === t && { color: "#fff", fontWeight: "700" }]}>{ETICHETTE_TIPO_BLOCCO[t]}</Text>
+                </Pressable>
+              ))}
+            </View>
+            <View style={{ flexDirection: "row", gap: 8 }}>
+              <TextInput style={[styles.input, { flex: 1 }]} placeholder="Inizio AAAA-MM-GG" placeholderTextColor={brand.colors.muted} value={bozza.data_inizio} onChangeText={(t) => setBozza({ ...bozza, data_inizio: t })} />
+              <TextInput style={[styles.input, { flex: 1 }]} placeholder="Fine AAAA-MM-GG" placeholderTextColor={brand.colors.muted} value={bozza.data_fine} onChangeText={(t) => setBozza({ ...bozza, data_fine: t })} />
+            </View>
+            <SelettoreObiettivi titolo="Obiettivi tecnici" voci={vociTecnici} campo="obiettivi_tecnici" selezionato={eSelezionato} commuta={commutaObiettivo} onNuovo={onNuovoObiettivo} />
+            <SelettoreObiettivi titolo="Obiettivi fisici" voci={vociFisici} campo="obiettivi_fisici" selezionato={eSelezionato} commuta={commutaObiettivo} onNuovo={onNuovoObiettivo} />
+            <SelettoreObiettivi titolo="Obiettivi tattici" voci={vociTattici} campo="obiettivi_tattici" selezionato={eSelezionato} commuta={commutaObiettivo} onNuovo={onNuovoObiettivo} />
+            <View style={{ flexDirection: "row", gap: 8 }}>
+              <Pressable style={styles.bottoneAnnulla} onPress={() => { setBloccoInModifica(null); setPropostaInModifica(null); }}><Text style={styles.bottoneAnnullaTesto}>Annulla</Text></Pressable>
+              <Pressable style={styles.bottoneSalva} onPress={salvaBlocco} disabled={!bozza.nome.trim()}><Text style={styles.bottoneSalvaTesto}>{propostaInModifica ? "Aggiorna proposta" : "Salva"}</Text></Pressable>
+            </View>
+          </View>
+        )}
+
 
         {guidaAperta && (
           <View style={styles.form}>
@@ -325,31 +512,6 @@ export default function PianificazioneAnnuale() {
             );
           })
         )}
-
-        {bloccoInModifica && (
-          <View style={styles.form}>
-            <Text style={styles.titoloForm}>{bloccoInModifica === "nuovo" ? "Nuovo blocco" : "Modifica blocco"}</Text>
-            <TextInput style={styles.input} placeholder="Nome (es. Preparazione pre-campionato)" placeholderTextColor={brand.colors.muted} value={bozza.nome} onChangeText={(t) => setBozza({ ...bozza, nome: t })} />
-            <View style={styles.selettoreTipi}>
-              {TIPI.map((t) => (
-                <Pressable key={t} onPress={() => setBozza({ ...bozza, tipo: t })} style={[styles.chipTipo, bozza.tipo === t && { backgroundColor: COLORI_TIPO_BLOCCO[t] }]}>
-                  <Text style={[styles.chipTipoTesto, bozza.tipo === t && { color: "#fff", fontWeight: "700" }]}>{ETICHETTE_TIPO_BLOCCO[t]}</Text>
-                </Pressable>
-              ))}
-            </View>
-            <View style={{ flexDirection: "row", gap: 8 }}>
-              <TextInput style={[styles.input, { flex: 1 }]} placeholder="Inizio AAAA-MM-GG" placeholderTextColor={brand.colors.muted} value={bozza.data_inizio} onChangeText={(t) => setBozza({ ...bozza, data_inizio: t })} />
-              <TextInput style={[styles.input, { flex: 1 }]} placeholder="Fine AAAA-MM-GG" placeholderTextColor={brand.colors.muted} value={bozza.data_fine} onChangeText={(t) => setBozza({ ...bozza, data_fine: t })} />
-            </View>
-            <SelettoreObiettivi titolo="Obiettivi tecnici" voci={vociTecnici} campo="obiettivi_tecnici" selezionato={eSelezionato} commuta={commutaObiettivo} onNuovo={onNuovoObiettivo} />
-            <SelettoreObiettivi titolo="Obiettivi fisici" voci={vociFisici} campo="obiettivi_fisici" selezionato={eSelezionato} commuta={commutaObiettivo} onNuovo={onNuovoObiettivo} />
-            <SelettoreObiettivi titolo="Obiettivi tattici" voci={vociTattici} campo="obiettivi_tattici" selezionato={eSelezionato} commuta={commutaObiettivo} onNuovo={onNuovoObiettivo} />
-            <View style={{ flexDirection: "row", gap: 8 }}>
-              <Pressable style={styles.bottoneAnnulla} onPress={() => setBloccoInModifica(null)}><Text style={styles.bottoneAnnullaTesto}>Annulla</Text></Pressable>
-              <Pressable style={styles.bottoneSalva} onPress={salvaBlocco} disabled={!bozza.nome.trim()}><Text style={styles.bottoneSalvaTesto}>Salva</Text></Pressable>
-            </View>
-          </View>
-        )}
       </ScrollView>
     </View>
   );
@@ -427,6 +589,11 @@ const styles = StyleSheet.create({
   bottoneAITesto: { color: brand.colors.brandSecondary, fontWeight: "700" },
   bottoneNuovo: { backgroundColor: brand.colors.brand, borderRadius: 10, paddingVertical: 12, paddingHorizontal: 18, alignItems: "center" },
   bottoneNuovoTesto: { color: "#000", fontWeight: "700" },
+  bottonePerformance: { borderWidth: 1, borderColor: brand.colors.brandSecondary, borderRadius: 10, paddingVertical: 10, alignItems: "center" },
+  bottonePerformanceTesto: { color: brand.colors.brandSecondary, fontWeight: "700", fontSize: 13 },
+  rigaPerformance: { color: brand.colors.onSurfaceSecondary, fontSize: 12.5 },
+  formRevisione: { backgroundColor: brand.colors.surfaceSecondary, borderRadius: 12, padding: 14, gap: 10, borderWidth: 1, borderColor: brand.colors.brandSecondary },
+  propostaCard: { flexDirection: "row", backgroundColor: brand.colors.surfaceTertiary, borderRadius: 10, overflow: "hidden" },
   barraSfondo: { height: 4, backgroundColor: brand.colors.surfaceTertiary, borderRadius: 2, overflow: "hidden" },
   barraRiempimento: { height: "100%", backgroundColor: brand.colors.brandSecondary },
   blocco: { flexDirection: "row", backgroundColor: brand.colors.surfaceSecondary, borderRadius: 12, overflow: "hidden", borderWidth: 1, borderColor: "transparent" },
