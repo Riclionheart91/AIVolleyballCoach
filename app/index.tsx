@@ -21,14 +21,18 @@ export default function Index() {
     // Instradamento:
     //  - nessuna squadra          -> creazione squadra (unico caso in cui va mostrata)
     //  - stagione non attiva      -> apertura stagione
-    //  - più squadre              -> scelta della squadra
-    //  - una sola squadra, tutto a posto -> dritti agli allenamenti
-    // La schermata "crea o scegli una squadra" non deve comparire
-    // quando l'utente ha già tutto pronto: era il passaggio a vuoto
-    // segnalato.
+    //  - altrimenti               -> dritti agli allenamenti, per la squadra già scelta
+    //
+    // BUG CORRETTO: qui c'era anche "più squadre -> seleziona-squadra",
+    // pensato per chi ne ha più di una. Ma squadreDisponibili conta
+    // TUTTE le squadre di cui si fa parte, non cambia mai scegliendone
+    // una: ogni volta che si sceglieva una squadra da quella schermata,
+    // questo effetto ripartiva, trovava ancora length > 1 e rimandava
+    // subito lì — un ciclo che non lasciava mai entrare nessuno con più
+    // di una squadra. La scelta resta comunque disponibile in ogni
+    // momento dal pulsante nell'intestazione delle tab.
     if (squadreDisponibili.length === 0) { router.replace("/crea-squadra"); return; }
     if (!stagioneAttiva) { router.replace("/apri-stagione"); return; }
-    if (squadreDisponibili.length > 1) { router.replace("/seleziona-squadra"); return; }
     // Le persone con profilo atleta non hanno accesso ad allenamenti,
     // anagrafica ed esercizi: entrano direttamente nella propria scheda.
     router.replace(ruolo === "atleta" ? "/(tabs)/scheda" : "/(tabs)/allenamenti");
