@@ -247,15 +247,24 @@ export async function generaBlocchiGuidatoAI(
   risposte: RisposteGuida,
   numeroRosa: number,
   istruzioniExtra?: string,
+  // Base + eventuali obiettivi aggiunti da "Altro" (propri o di altre
+  // squadre): senza questi, un obiettivo personalizzato già scelto in
+  // passato verrebbe scartato dal filtro soloAmmessi qui sotto, come
+  // se l'AI l'avesse inventato.
+  elenchiObiettivi?: { tecnici: readonly string[]; fisici: readonly string[]; tattici: readonly string[] },
 ): Promise<RisultatoGenerazioneBlocchi> {
+  const listaTecnici = elenchiObiettivi?.tecnici ?? obiettiviTecnici;
+  const listaFisici = elenchiObiettivi?.fisici ?? obiettiviFisici;
+  const listaTattici = elenchiObiettivi?.tattici ?? obiettiviTattici;
+
   const prompt =
     `Sei un preparatore di pallavolo. Costruisci la periodizzazione dal ${dataInizio} al ${dataFine}.\n` +
     `Squadra: ${numeroRosa} atlete, livello "${risposte.livello}", ${risposte.seduteSettimana} sedute a settimana. ` +
     `Obiettivo principale della stagione: "${risposte.obiettivoStagione}".\n\n` +
     `Gli obiettivi di ogni blocco devono essere scelti ESCLUSIVAMENTE da questi elenchi, copiati alla lettera:\n` +
-    `TECNICI: ${obiettiviTecnici.join(" | ")}\n` +
-    `FISICI: ${obiettiviFisici.join(" | ")}\n` +
-    `TATTICI: ${obiettiviTattici.join(" | ")}\n\n` +
+    `TECNICI: ${listaTecnici.join(" | ")}\n` +
+    `FISICI: ${listaFisici.join(" | ")}\n` +
+    `TATTICI: ${listaTattici.join(" | ")}\n\n` +
     `Rispondi SOLO con JSON, senza altro testo:\n` +
     `{"blocchi":[{"nome":"...","tipo":"preparazione_generale","data_inizio":"AAAA-MM-GG","data_fine":"AAAA-MM-GG","obiettivi_tecnici":["voce esatta","voce esatta"],"obiettivi_fisici":["..."],"obiettivi_tattici":["..."]}]}\n` +
     `Valori ammessi per "tipo": preparazione_generale, preparazione_specifica, pre_competitiva, competitiva, scarico, transizione. ` +
@@ -274,9 +283,6 @@ export async function generaBlocchiGuidatoAI(
     const parsed = JSON.parse(pulito);
     const tipiAmmessi = Object.keys(ETICHETTE_TIPO_BLOCCO);
 
-    // Le voci proposte vengono filtrate contro gli elenchi ufficiali:
-    // se l'AI ne inventa una che non esiste viene scartata, così i
-    // menù a tendina restano coerenti e non si popolano di varianti.
     const soloAmmessi = (valori: unknown, ammessi: readonly string[]) =>
       (Array.isArray(valori) ? valori : [])
         .map(String)
@@ -290,9 +296,9 @@ export async function generaBlocchiGuidatoAI(
         tipo: (tipiAmmessi.includes(String(b.tipo)) ? String(b.tipo) : "preparazione_generale") as TipoBlocco,
         data_inizio: String(b.data_inizio).slice(0, 10),
         data_fine: String(b.data_fine).slice(0, 10),
-        obiettivi_tecnici: soloAmmessi(b.obiettivi_tecnici, obiettiviTecnici),
-        obiettivi_fisici: soloAmmessi(b.obiettivi_fisici, obiettiviFisici),
-        obiettivi_tattici: soloAmmessi(b.obiettivi_tattici, obiettiviTattici),
+        obiettivi_tecnici: soloAmmessi(b.obiettivi_tecnici, listaTecnici),
+        obiettivi_fisici: soloAmmessi(b.obiettivi_fisici, listaFisici),
+        obiettivi_tattici: soloAmmessi(b.obiettivi_tattici, listaTattici),
         note: "",
       }));
 
@@ -301,4 +307,19 @@ export async function generaBlocchiGuidatoAI(
   } catch {
     return { errore: true, messaggio: "Risposta AI non nel formato atteso. Puoi comunque costruire i blocchi a mano." };
   }
+}
+
+export interface ObiettivoCatalogo { categoria: "tecnico" | "fisico" | "tattico"; testo: string }
+
+/** Obiettivi aggiunti da "Altro" da qualunque squadra: condivisi su tutta la piattaforma, si sommano a quelli fissi di src/config.ts. */
+export async function elencaObiettiviCatalogo(): Promise<ObiettivoCatalogo[]> {
+  const { data, error } = await supabaseClient.rpc("elenca_obiettivi_catalogo");
+  if (error) throw error;
+  return data ?? [];
+}
+
+/** Aggiunge un obiettivo al catalogo condiviso: da quel momento è selezionabile da qualunque squadra, in qualunque stagione. Se esiste già (stesso testo, maiuscole ignorate) non duplica. */
+export async function aggiungiObiettivoCatalogo(teamId: string, categoria: "tecnico" | "fisico" | "tattico", testo: string): Promise<void> {
+  const { error } = await supabaseClient.rpc("aggiungi_obiettivo_catalogo", { p_team_id: teamId, p_categoria: categoria, p_testo: testo });
+  if (error) throw error;
 }

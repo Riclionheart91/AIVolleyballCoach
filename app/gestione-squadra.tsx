@@ -153,14 +153,33 @@ export default function GestioneSquadra() {
             const collegata = atleteCollegate.has(a.id);
             const invitata = invitiPerAtleta.get(a.id);
             const haEmail = !!a.email_contatto?.trim();
+            // Serve a mostrare/attivare il permesso scout: le atlete non
+            // passano dal modale dei collaboratori (invito diverso), ma
+            // possono comunque tenerlo — es. un'infortunata che segue lo
+            // scouting da bordo campo invece di giocare.
+            const membro = collegata ? membri.find((x) => x.atleta_id === a.id) : undefined;
             return (
               <View key={a.id} style={styles.riga}>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.rigaTitolo}>{a.numero_maglia ? `#${a.numero_maglia} ` : ""}{a.nome} {a.cognome}</Text>
                   <Text style={styles.rigaSotto}>
                     {collegata ? "account collegato" : invitata ? `invito inviato a ${invitata.email}` : haEmail ? a.email_contatto : "nessuna email in anagrafica"}
+                    {membro?.puo_scoutare ? " · scout" : ""}
                   </Text>
                 </View>
+                {membro && (
+                  <Pressable
+                    style={[styles.chipScout, membro.puo_scoutare && styles.chipScoutAttivo]}
+                    onPress={async () => {
+                      if (!team) return;
+                      try { await impostaPermessoScout(team.id, membro.user_id, !membro.puo_scoutare); carica(); }
+                      catch (e) { avvisa("Errore", (e as Error).message); }
+                    }}
+                    hitSlop={6}
+                  >
+                    <Text style={[styles.chipScoutTesto, membro.puo_scoutare && styles.chipScoutTestoAttivo]}>Scout</Text>
+                  </Pressable>
+                )}
                 {collegata ? (
                   <Pressable
                     onPress={() => {
@@ -245,7 +264,7 @@ export default function GestioneSquadra() {
               </Pressable>
             ) : (
               <Text style={styles.nota}>
-                Il permesso scout si assegna solo ad allenatore e vice: chi registra le azioni sta in panchina.
+                Il permesso scout non è disponibile per questo profilo.
               </Text>
             )}
 
@@ -300,6 +319,10 @@ const styles = StyleSheet.create({
   azioneAnnulla: { color: brand.colors.error, fontSize: 12, fontWeight: "600" },
   bottonePiccolo: { backgroundColor: brand.colors.brand, paddingVertical: 8, paddingHorizontal: 14, borderRadius: 8 },
   bottonePiccoloTesto: { color: "#000", fontWeight: "700", fontSize: 12 },
+  chipScout: { borderWidth: 1, borderColor: brand.colors.muted, paddingVertical: 6, paddingHorizontal: 10, borderRadius: 14 },
+  chipScoutAttivo: { backgroundColor: brand.colors.brandSecondary, borderColor: brand.colors.brandSecondary },
+  chipScoutTesto: { color: brand.colors.muted, fontSize: 11, fontWeight: "600" },
+  chipScoutTestoAttivo: { color: "#000" },
   input: { backgroundColor: brand.colors.surfaceTertiary, color: brand.colors.onSurface, borderRadius: 8, padding: 10 },
   chipRiga: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
   chip: { paddingVertical: 8, paddingHorizontal: 12, borderRadius: 16, backgroundColor: brand.colors.surfaceTertiary },

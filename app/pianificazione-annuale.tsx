@@ -6,9 +6,11 @@ import {
   COLORI_TIPO_BLOCCO,
   ETICHETTE_TIPO_BLOCCO,
   aggiornaBlocco,
+  aggiungiObiettivoCatalogo,
   creaBlocco,
   creaPianoAnnuale,
   elencaBlocchi,
+  elencaObiettiviCatalogo,
   eliminaBlocco,
   generaBlocchiAI,
   generaBlocchiGuidatoAI,
@@ -49,6 +51,14 @@ export default function PianificazioneAnnuale() {
   const [seduteSettimana, setSeduteSettimana] = useState("2");
   const [obiettivoStagione, setObiettivoStagione] = useState("crescita tecnica del gruppo");
   const [istruzioniExtra, setIstruzioniExtra] = useState("");
+  // Obiettivi aggiunti tramite "Altro" da qualunque squadra: si sommano
+  // agli elenchi fissi di config.ts, senza sostituirli.
+  const [extraTecnici, setExtraTecnici] = useState<string[]>([]);
+  const [extraFisici, setExtraFisici] = useState<string[]>([]);
+  const [extraTattici, setExtraTattici] = useState<string[]>([]);
+  const vociTecnici = [...obiettiviTecnici, ...extraTecnici];
+  const vociFisici = [...obiettiviFisici, ...extraFisici];
+  const vociTattici = [...obiettiviTattici, ...extraTattici];
 
   function bozzaVuota(): InputBlocco {
     return {
@@ -69,6 +79,10 @@ export default function PianificazioneAnnuale() {
       setPiano(p);
       setBlocchi(await elencaBlocchi(p.id));
       setRiepilogo(await riepilogoBlocchi(p.id).catch(() => []));
+      const catalogo = await elencaObiettiviCatalogo().catch(() => []);
+      setExtraTecnici(catalogo.filter((o) => o.categoria === "tecnico").map((o) => o.testo));
+      setExtraFisici(catalogo.filter((o) => o.categoria === "fisico").map((o) => o.testo));
+      setExtraTattici(catalogo.filter((o) => o.categoria === "tattico").map((o) => o.testo));
     } catch (e) {
       avvisa("Errore", (e as Error).message);
     } finally {
@@ -154,7 +168,7 @@ export default function PianificazioneAnnuale() {
     try {
       const atlete = await elencaAtlete(team.id);
       const inizio = stagioneAttiva?.data_apertura?.slice(0, 10) || oggiIso();
-      const r = await generaBlocchiGuidatoAI(team.id, inizio, fraMesi(9), { livello, seduteSettimana, obiettivoStagione }, atlete.length, istruzioniExtra);
+      const r = await generaBlocchiGuidatoAI(team.id, inizio, fraMesi(9), { livello, seduteSettimana, obiettivoStagione }, atlete.length, istruzioniExtra, { tecnici: vociTecnici, fisici: vociFisici, tattici: vociTattici });
       if (r.errore || !r.blocchi) { avvisa("Generazione non riuscita", r.messaggio ?? "Errore sconosciuto"); return; }
       setPercentuale(100);
       for (const b of r.blocchi) await creaBlocco(piano.id, b);
@@ -174,6 +188,25 @@ export default function PianificazioneAnnuale() {
     const attuali = bozza[campo] ? bozza[campo].split(",").map((v) => v.trim()).filter(Boolean) : [];
     const nuovi = attuali.includes(voce) ? attuali.filter((v) => v !== voce) : [...attuali, voce];
     setBozza({ ...bozza, [campo]: nuovi.join(", ") });
+  }
+
+  const CATEGORIA_PER_CAMPO = {
+    obiettivi_tecnici: "tecnico", obiettivi_fisici: "fisico", obiettivi_tattici: "tattico",
+  } as const;
+  const SETTER_EXTRA = {
+    obiettivi_tecnici: setExtraTecnici, obiettivi_fisici: setExtraFisici, obiettivi_tattici: setExtraTattici,
+  } as const;
+
+  /** Un nuovo obiettivo da "Altro": selezionato subito per questo blocco, e proposto al catalogo condiviso perché resti selezionabile da chiunque, in futuro. */
+  async function onNuovoObiettivo(campo: "obiettivi_tecnici" | "obiettivi_fisici" | "obiettivi_tattici", testo: string) {
+    SETTER_EXTRA[campo]((prec) => (prec.includes(testo) ? prec : [...prec, testo]));
+    commutaObiettivo(campo, testo);
+    if (!team) return;
+    try {
+      await aggiungiObiettivoCatalogo(team.id, CATEGORIA_PER_CAMPO[campo], testo);
+    } catch (e) {
+      avvisa("Non salvato nel catalogo condiviso", `Resta selezionato per questo piano, ma non sarà visibile ad altre squadre: ${(e as Error).message}`);
+    }
   }
 
   function eSelezionato(campo: "obiettivi_tecnici" | "obiettivi_fisici" | "obiettivi_tattici", voce: string) {
@@ -308,9 +341,9 @@ export default function PianificazioneAnnuale() {
               <TextInput style={[styles.input, { flex: 1 }]} placeholder="Inizio AAAA-MM-GG" placeholderTextColor={brand.colors.muted} value={bozza.data_inizio} onChangeText={(t) => setBozza({ ...bozza, data_inizio: t })} />
               <TextInput style={[styles.input, { flex: 1 }]} placeholder="Fine AAAA-MM-GG" placeholderTextColor={brand.colors.muted} value={bozza.data_fine} onChangeText={(t) => setBozza({ ...bozza, data_fine: t })} />
             </View>
-            <SelettoreObiettivi titolo="Obiettivi tecnici" voci={obiettiviTecnici} campo="obiettivi_tecnici" selezionato={eSelezionato} commuta={commutaObiettivo} />
-            <SelettoreObiettivi titolo="Obiettivi fisici" voci={obiettiviFisici} campo="obiettivi_fisici" selezionato={eSelezionato} commuta={commutaObiettivo} />
-            <SelettoreObiettivi titolo="Obiettivi tattici" voci={obiettiviTattici} campo="obiettivi_tattici" selezionato={eSelezionato} commuta={commutaObiettivo} />
+            <SelettoreObiettivi titolo="Obiettivi tecnici" voci={vociTecnici} campo="obiettivi_tecnici" selezionato={eSelezionato} commuta={commutaObiettivo} onNuovo={onNuovoObiettivo} />
+            <SelettoreObiettivi titolo="Obiettivi fisici" voci={vociFisici} campo="obiettivi_fisici" selezionato={eSelezionato} commuta={commutaObiettivo} onNuovo={onNuovoObiettivo} />
+            <SelettoreObiettivi titolo="Obiettivi tattici" voci={vociTattici} campo="obiettivi_tattici" selezionato={eSelezionato} commuta={commutaObiettivo} onNuovo={onNuovoObiettivo} />
             <View style={{ flexDirection: "row", gap: 8 }}>
               <Pressable style={styles.bottoneAnnulla} onPress={() => setBloccoInModifica(null)}><Text style={styles.bottoneAnnullaTesto}>Annulla</Text></Pressable>
               <Pressable style={styles.bottoneSalva} onPress={salvaBlocco} disabled={!bozza.nome.trim()}><Text style={styles.bottoneSalvaTesto}>Salva</Text></Pressable>
@@ -323,15 +356,25 @@ export default function PianificazioneAnnuale() {
 }
 
 /** Menù a scelta multipla su elenco chiuso: sostituisce i campi a testo libero, più rapidi da sbagliare che da compilare. */
-function SelettoreObiettivi({ titolo, voci, campo, selezionato, commuta }: {
+function SelettoreObiettivi({ titolo, voci, campo, selezionato, commuta, onNuovo }: {
   titolo: string;
   voci: readonly string[];
   campo: "obiettivi_tecnici" | "obiettivi_fisici" | "obiettivi_tattici";
   selezionato: (campo: "obiettivi_tecnici" | "obiettivi_fisici" | "obiettivi_tattici", voce: string) => boolean;
   commuta: (campo: "obiettivi_tecnici" | "obiettivi_fisici" | "obiettivi_tattici", voce: string) => void;
+  /** Testo di "Altro" confermato: lo si seleziona subito e lo si propone al catalogo condiviso, valido anche per altre squadre e altre stagioni. */
+  onNuovo: (campo: "obiettivi_tecnici" | "obiettivi_fisici" | "obiettivi_tattici", testo: string) => void;
 }) {
   const [aperto, setAperto] = useState(false);
+  const [testoAltro, setTestoAltro] = useState("");
   const scelti = voci.filter((v) => selezionato(campo, v));
+
+  function confermaAltro() {
+    const pulito = testoAltro.trim();
+    if (!pulito) return;
+    onNuovo(campo, pulito);
+    setTestoAltro("");
+  }
 
   return (
     <View style={{ gap: 6 }}>
@@ -341,16 +384,33 @@ function SelettoreObiettivi({ titolo, voci, campo, selezionato, commuta }: {
       </Pressable>
       {!aperto && scelti.length > 0 && <Text style={styles.riepilogoScelti}>{scelti.join(" · ")}</Text>}
       {aperto && (
-        <View style={styles.selettoreTipi}>
-          {voci.map((v) => {
-            const attivo = selezionato(campo, v);
-            return (
-              <Pressable key={v} onPress={() => commuta(campo, v)} style={[styles.chipObiettivo, attivo && styles.chipObiettivoAttivo]}>
-                <Text style={[styles.chipTipoTesto, attivo && styles.chipTipoTestoAttivo]}>{attivo ? "✓ " : ""}{v}</Text>
-              </Pressable>
-            );
-          })}
-        </View>
+        <>
+          <View style={styles.selettoreTipi}>
+            {voci.map((v) => {
+              const attivo = selezionato(campo, v);
+              return (
+                <Pressable key={v} onPress={() => commuta(campo, v)} style={[styles.chipObiettivo, attivo && styles.chipObiettivoAttivo]}>
+                  <Text style={[styles.chipTipoTesto, attivo && styles.chipTipoTestoAttivo]}>{attivo ? "✓ " : ""}{v}</Text>
+                </Pressable>
+              );
+            })}
+          </View>
+          <View style={styles.rigaAltro}>
+            <TextInput
+              style={styles.inputAltro}
+              placeholder="Altro: scrivi un obiettivo non in elenco"
+              placeholderTextColor={brand.colors.muted}
+              value={testoAltro}
+              onChangeText={setTestoAltro}
+              onSubmitEditing={confermaAltro}
+              returnKeyType="done"
+            />
+            <Pressable style={styles.bottoneAltro} onPress={confermaAltro} disabled={!testoAltro.trim()}>
+              <Text style={styles.bottoneAltroTesto}>+ Aggiungi</Text>
+            </Pressable>
+          </View>
+          <Text style={styles.notaAltro}>Resta selezionabile anche da altre squadre e in altre stagioni.</Text>
+        </>
       )}
     </View>
   );
@@ -394,6 +454,11 @@ const styles = StyleSheet.create({
   chipTipoTestoAttivo: { color: "#000", fontWeight: "700" },
   chipObiettivo: { paddingVertical: 5, paddingHorizontal: 10, borderRadius: 14, backgroundColor: brand.colors.surfaceTertiary },
   chipObiettivoAttivo: { backgroundColor: brand.colors.brandSecondary },
+  rigaAltro: { flexDirection: "row", gap: 8, marginTop: 4 },
+  inputAltro: { flex: 1, backgroundColor: brand.colors.surfaceTertiary, color: brand.colors.onSurface, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10, fontSize: 13 },
+  bottoneAltro: { backgroundColor: brand.colors.brand, paddingHorizontal: 14, borderRadius: 8, alignItems: "center", justifyContent: "center" },
+  bottoneAltroTesto: { color: "#000", fontWeight: "700", fontSize: 12 },
+  notaAltro: { color: brand.colors.muted, fontSize: 11, marginTop: 2 },
   intestazioneSelettore: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: 4 },
   titoloSelettore: { color: brand.colors.onSurface, fontSize: 13, fontWeight: "600" },
   frecciaSelettore: { color: brand.colors.muted, fontSize: 13 },

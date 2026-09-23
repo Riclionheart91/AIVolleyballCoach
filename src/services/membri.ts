@@ -10,8 +10,8 @@ export interface MembroTeam {
   puo_scoutare: boolean;
 }
 
-/** Ruoli a cui si può aggiungere il permesso scout: chi registra le azioni sta in panchina con l'allenatore. */
-export const RUOLI_CON_SCOUT: Ruolo[] = ["allenatore", "vice_allenatore"];
+/** Ruoli a cui si può aggiungere il permesso scout: ora tutti, compresi presidente e atleti (es. un'atleta infortunata che segue lo scouting da bordo campo). */
+export const RUOLI_CON_SCOUT: Ruolo[] = ["allenatore", "vice_allenatore", "presidente", "atleta"];
 
 export async function elencaMembri(teamId: string): Promise<MembroTeam[]> {
   const { data, error } = await supabaseClient.rpc("elenca_membri_team", { p_team_id: teamId });
