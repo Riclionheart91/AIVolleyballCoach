@@ -2,11 +2,18 @@ import { useState } from "react";
 import { View, Text, TextInput, Pressable, StyleSheet } from "react-native";
 import { router } from "expo-router";
 import { useAuth } from "@/src/context/AuthContext";
-import { brand, uiStrings } from "@/src/config";
+import { brand } from "@/src/config";
 import { avvisa } from "@/src/lib/confermaAzione";
 
+/**
+ * Prima creare una squadra era libero per chiunque avesse fatto
+ * l'accesso: un problema di sicurezza reale, visto che chi crea una
+ * squadra ne diventa automaticamente allenatore a pieni poteri. Ora
+ * può farlo solo chi è presidente di una società — e una società
+ * nasce solo per mano dell'amministratore della piattaforma.
+ */
 export default function CreaSquadra() {
-  const { session, creaPrimaSquadra, squadreDisponibili } = useAuth();
+  const { session, societaPresidenza, creaPrimaSquadra, squadreDisponibili } = useAuth();
   const [nome, setNome] = useState("");
   const [inCorso, setInCorso] = useState(false);
 
@@ -23,15 +30,24 @@ export default function CreaSquadra() {
     }
   }
 
+  if (!societaPresidenza) {
+    return (
+      <View style={styles.container}>
+        <Text style={styles.title}>Nessuna squadra collegata</Text>
+        <Text style={styles.sottotitolo}>
+          Solo il presidente di una società può creare una nuova squadra. Se dovresti far parte di una squadra già esistente, chiedi un invito a chi la gestisce; se dovresti fondarne una nuova, contatta l'amministratore della piattaforma.
+        </Text>
+        {session?.user.email && <Text style={styles.account}>Connesso come: {session.user.email}</Text>}
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>{uiStrings.auth.createTeam}</Text>
-      <Text style={styles.sottotitolo}>{uiStrings.auth.noTeam} Diventerai automaticamente allenatore.</Text>
+      <Text style={styles.title}>Nuova squadra</Text>
+      <Text style={styles.sottotitolo}>Nella società "{societaPresidenza.nome}". Nascerà senza allenatore: lo assegni quando vuoi dalla Gestione società.</Text>
       {session?.user.email && <Text style={styles.account}>Connesso come: {session.user.email}</Text>}
 
-      {/* Rete di sicurezza: se per qualunque motivo sei arrivata qui pur
-          avendo già delle squadre (bug, dato non ancora ricaricato...),
-          non sei costretta a crearne una nuova per sbaglio. */}
       {squadreDisponibili.length > 0 && (
         <Pressable style={styles.bottoneSecondario} onPress={() => router.push("/seleziona-squadra")}>
           <Text style={styles.bottoneSecondarioTesto}>Ho già {squadreDisponibili.length === 1 ? "una squadra" : "delle squadre"} — falla vedere</Text>
@@ -46,7 +62,7 @@ export default function CreaSquadra() {
         onChangeText={setNome}
       />
       <Pressable style={styles.bottone} onPress={conferma} disabled={inCorso}>
-        <Text style={styles.bottoneTesto}>{inCorso ? uiStrings.common.loading : "Crea squadra"}</Text>
+        <Text style={styles.bottoneTesto}>{inCorso ? "Un attimo…" : "Crea squadra"}</Text>
       </Pressable>
     </View>
   );
@@ -55,7 +71,7 @@ export default function CreaSquadra() {
 const styles = StyleSheet.create({
   container: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: brand.colors.surface, padding: 24, gap: 16 },
   title: { color: brand.colors.onSurface, fontSize: 24, fontWeight: "700", textAlign: "center" },
-  sottotitolo: { color: brand.colors.muted, textAlign: "center", maxWidth: 320 },
+  sottotitolo: { color: brand.colors.muted, textAlign: "center", maxWidth: 340, lineHeight: 20 },
   account: { color: brand.colors.muted, fontSize: 12 },
   bottoneSecondario: { borderColor: brand.colors.brandSecondary, borderWidth: 1, paddingVertical: 10, paddingHorizontal: 16, borderRadius: 10 },
   bottoneSecondarioTesto: { color: brand.colors.brandSecondary, fontWeight: "600", fontSize: 13 },

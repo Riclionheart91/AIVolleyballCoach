@@ -4,6 +4,7 @@ import type { Session } from "@supabase/supabase-js";
 import { supabaseClient } from "@/src/lib/supabase";
 import { supabase as cfg } from "@/src/config";
 import { accettaInvitiPendenti } from "@/src/services/teamInvites";
+import { miaSocietaPresidenza, type MiaSocieta } from "@/src/services/societa";
 import type { Ruolo, Season, Team } from "@/src/types/database";
 
 const CHIAVE_ULTIMO_TEAM = "aivolleyballcoach:ultimo_team_id";
@@ -39,7 +40,11 @@ interface AuthState {
   puoScoutare: boolean;
   /** Le funzioni AI sono riservate allo staff: allenatore, vice e presidente. */
   puoUsareAI: boolean;
+  /** Aprire, attivare e chiudere una stagione: riservato al presidente. */
+  puoGestireStagioni: boolean;
   isSuperuser: boolean;
+  /** Se si è presidente di una società, questa: null altrimenti. Va controllata anche senza squadre (società appena fondata). */
+  societaPresidenza: MiaSocieta | null;
   squadreDisponibili: SquadraDisponibile[];
   cambiaSquadra: (teamId: string) => Promise<void>;
   /**
@@ -68,6 +73,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [atletaId, setAtletaId] = useState<string | null>(null);
   const [squadreDisponibili, setSquadreDisponibili] = useState<SquadraDisponibile[]>([]);
   const [isSuperuser, setIsSuperuser] = useState(false);
+  const [societaPresidenza, setSocietaPresidenza] = useState<MiaSocieta | null>(null);
   const [caricamentoContesto, setCaricamentoContesto] = useState(true);
   const [erroreTeam, setErroreTeam] = useState<string | null>(null);
   const [stagioneAttiva, setStagioneAttiva] = useState<Season | null>(null);
@@ -88,6 +94,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     supabaseClient.rpc("sono_superuser").then(({ data, error }) => {
       if (!error) setIsSuperuser(Boolean(data));
     });
+  }, [session?.user.id]);
+
+  useEffect(() => {
+    if (!session) { setSocietaPresidenza(null); return; }
+    miaSocietaPresidenza().then(setSocietaPresidenza).catch(() => setSocietaPresidenza(null));
   }, [session?.user.id]);
 
   /**
@@ -168,7 +179,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   async function creaPrimaSquadra(nome: string) {
-    const { data, error } = await supabaseClient.rpc("crea_team_e_diventa_allenatore", { p_nome: nome });
+    if (!societaPresidenza) throw new Error("Solo il presidente di una società può creare una squadra.");
+    const { data, error } = await supabaseClient.rpc("crea_squadra_in_societa", { p_nome: nome, p_societa_id: societaPresidenza.societa_id });
     if (error) throw error;
     if (data) await AsyncStorage.setItem(CHIAVE_ULTIMO_TEAM, data as string);
     await ricaricaContesto();
@@ -183,14 +195,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const puoScoutare = puoScrivere;
   const puoUsareAI = puoScrivere || ruolo === "presidente";
   const soloLettura = ruolo === "presidente";
+  /** Aprire, attivare e chiudere una stagione: riservato al presidente, non più all'allenatore. */
+  const puoGestireStagioni = ruolo === "presidente";
 
   const value = useMemo<AuthState>(
     () => ({
-      session, caricamento, team, ruolo, atletaId, puoScrivere, soloLettura, puoScoutare, puoUsareAI, isSuperuser,
-      squadreDisponibili, cambiaSquadra, caricamentoContesto, erroreTeam, stagioneAttiva,
+      session, caricamento, team, ruolo, atletaId, puoScrivere, soloLettura, puoScoutare, puoUsareAI, puoGestireStagioni, isSuperuser,
+      societaPresidenza, squadreDisponibili, cambiaSquadra, caricamentoContesto, erroreTeam, stagioneAttiva,
       accediConGoogle, esci, creaPrimaSquadra, ricaricaContesto,
     }),
-    [session, caricamento, team, ruolo, atletaId, isSuperuser, squadreDisponibili, caricamentoContesto, erroreTeam, stagioneAttiva],
+    [session, caricamento, team, ruolo, atletaId, isSuperuser, societaPresidenza, squadreDisponibili, caricamentoContesto, erroreTeam, stagioneAttiva],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

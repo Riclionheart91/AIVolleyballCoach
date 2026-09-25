@@ -10,7 +10,7 @@ import { brand } from "@/src/config";
 import type { Season } from "@/src/types/database";
 
 export default function Stagioni() {
-  const { team, puoScrivere, ricaricaContesto } = useAuth();
+  const { team, puoScrivere, puoGestireStagioni, ricaricaContesto } = useAuth();
   const [stagioni, setStagioni] = useState<Season[]>([]);
   const [caricamento, setCaricamento] = useState(true);
   const [popupAperto, setPopupAperto] = useState(false);
@@ -91,28 +91,28 @@ export default function Stagioni() {
               <Text style={[styles.badge, item.stato === "attiva" && styles.badgeAttiva]}>{item.stato}</Text>
             </View>
             <Text style={styles.cardSotto}>Apertura: {item.data_apertura}</Text>
-            {puoScrivere && (
-              <View style={styles.azioni}>
-                {item.stato !== "attiva" && item.stato !== "conclusa" && (
-                  <Pressable style={styles.bottoneSecondario} onPress={() => attiva(item.id)}>
-                    <Text style={styles.bottoneSecondarioTesto}>Attiva</Text>
-                  </Pressable>
-                )}
+            <View style={styles.azioni}>
+              {puoGestireStagioni && item.stato !== "attiva" && item.stato !== "conclusa" && (
+                <Pressable style={styles.bottoneSecondario} onPress={() => attiva(item.id)}>
+                  <Text style={styles.bottoneSecondarioTesto}>Attiva</Text>
+                </Pressable>
+              )}
+              {puoScrivere && (
                 <Pressable style={styles.bottoneSecondario} onPress={() => generaBaseline(item.id)}>
                   <Text style={styles.bottoneSecondarioTesto}>Genera baseline</Text>
                 </Pressable>
-                {item.stato !== "conclusa" && (
-                  <Pressable style={styles.bottoneSecondarioDistruttivo} onPress={() => conferimaConclusione(item.id, item.nome)}>
-                    <Text style={styles.bottoneSecondarioDistruttivoTesto}>Termina</Text>
-                  </Pressable>
-                )}
-              </View>
-            )}
+              )}
+              {puoGestireStagioni && item.stato !== "conclusa" && (
+                <Pressable style={styles.bottoneSecondarioDistruttivo} onPress={() => conferimaConclusione(item.id, item.nome)}>
+                  <Text style={styles.bottoneSecondarioDistruttivoTesto}>Termina</Text>
+                </Pressable>
+              )}
+            </View>
           </View>
         )}
       />
 
-      {puoScrivere && <FabAggiungi onPress={() => setPopupAperto(true)} />}
+      {puoGestireStagioni && <FabAggiungi onPress={() => setPopupAperto(true)} />}
 
       <PopupForm visibile={popupAperto} titolo="Nuova stagione" haModifiche={nome.trim().length > 0} onChiudi={() => { setPopupAperto(false); setNome(""); }}>
         <TextInput style={styles.input} placeholder="Nome stagione (es. 2026/2027)" placeholderTextColor={brand.colors.muted} value={nome} onChangeText={setNome} autoFocus />

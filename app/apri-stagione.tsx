@@ -16,7 +16,7 @@ import type { Season } from "@/src/types/database";
  * n'è una, la propone direttamente qui con un pulsante "Attiva questa".
  */
 export default function ApriStagione() {
-  const { team, puoScrivere, ricaricaContesto } = useAuth();
+  const { team, puoGestireStagioni, ricaricaContesto } = useAuth();
   const [stagioni, setStagioni] = useState<Season[]>([]);
   const [nome, setNome] = useState("");
   const [inCorso, setInCorso] = useState(false);
@@ -75,7 +75,7 @@ export default function ApriStagione() {
     <View style={styles.container}>
       <Text style={styles.title}>Nessuna stagione attiva</Text>
 
-      {puoScrivere ? (
+      {puoGestireStagioni ? (
         <>
           {stagioniPianificate.length > 0 && (
             <View style={styles.form}>
@@ -104,7 +104,7 @@ export default function ApriStagione() {
           )}
         </>
       ) : (
-        <Text style={styles.sottotitolo}>L'allenatore non ha ancora aperto la stagione corrente. Puoi consultare in sola lettura le stagioni passate qui sotto.</Text>
+        <Text style={styles.sottotitolo}>Il presidente della società non ha ancora aperto la stagione corrente. Puoi consultare in sola lettura le stagioni passate qui sotto.</Text>
       )}
 
       {stagioniConcluse.length > 0 && (

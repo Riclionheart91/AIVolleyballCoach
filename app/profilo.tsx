@@ -8,7 +8,7 @@ import type { Athlete } from "@/src/types/database";
 import { avvisa } from "@/src/lib/confermaAzione";
 
 export default function Profilo() {
-  const { session, team, ruolo, atletaId, puoScrivere, isSuperuser, esci } = useAuth();
+  const { session, team, ruolo, atletaId, puoScrivere, isSuperuser, societaPresidenza, esci } = useAuth();
   const [mieDati, setMieDati] = useState<Athlete | null>(null);
   const [telefono, setTelefono] = useState("");
   const [emailContatto, setEmailContatto] = useState("");
@@ -80,6 +80,12 @@ export default function Profilo() {
         <View style={styles.card}>
           <Text style={styles.nota}>Il tuo accesso è in sola lettura su tutti i dati della squadra. Trovi l'andamento aggregato nella tab Valutazioni.</Text>
         </View>
+      )}
+
+      {societaPresidenza && (
+        <Pressable style={styles.bottoneSecondario} onPress={() => router.push("/gestione-societa")}>
+          <Text style={styles.bottoneSecondarioTesto}>🏛️ Gestione società ({societaPresidenza.nome})</Text>
+        </Pressable>
       )}
 
       {puoScrivere && (

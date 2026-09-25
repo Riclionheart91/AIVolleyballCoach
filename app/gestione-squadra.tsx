@@ -9,7 +9,7 @@ import { confermaAzione, avvisa } from "@/src/lib/confermaAzione";
 import { brand, etichetteRuolo } from "@/src/config";
 import type { Athlete, Ruolo } from "@/src/types/database";
 
-const RUOLI_COLLABORATORE: Ruolo[] = ["allenatore", "vice_allenatore", "presidente"];
+const RUOLI_COLLABORATORE: Ruolo[] = ["allenatore", "vice_allenatore"];
 
 /**
  * Gestione della squadra: chi ha accesso e con quale profilo.
