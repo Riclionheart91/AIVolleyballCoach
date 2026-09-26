@@ -13,6 +13,7 @@ interface RigaContesto {
   team_id: string;
   team_nome: string;
   team_creato_il: string;
+  team_societa_id: string | null;
   ruolo: Ruolo;
   atleta_id: string | null;
   stagione_id: string | null;
@@ -142,7 +143,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // RPC stessa: niente più dipendenza dall'ordine, non garantito, con
     // cui il database potrebbe restituire i risultati).
     const opzioni: SquadraDisponibile[] = righe.map((r) => ({
-      team: { id: r.team_id, nome: r.team_nome, creato_il: r.team_creato_il, creato_da: null },
+      team: { id: r.team_id, nome: r.team_nome, creato_il: r.team_creato_il, creato_da: null, societaId: r.team_societa_id },
       ruolo: r.ruolo,
       atletaId: r.atleta_id,
     }));
@@ -191,12 +192,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await ricaricaContesto();
   }
 
+  /**
+   * Un presidente può anche avere un ruolo diretto sulla squadra che sta
+   * guardando (es. è anche giocatore o allenatore di una delle squadre
+   * della propria società): in quel caso `ruolo` riflette il ruolo
+   * diretto (es. "allenatore"), non "presidente". I permessi da
+   * presidente vanno comunque riconosciuti per QUALSIASI squadra della
+   * propria società, non solo quando la riga corrente ha ruolo
+   * letteralmente "presidente" (caso raggiunto solo tramite il ramo
+   * sintetico, cioè quando non si ha nessun'altra riga diretta su quella
+   * squadra).
+   */
+  const ePresidenteDiQuestaSquadra =
+    ruolo === "presidente" || (!!societaPresidenza && !!team?.societaId && team.societaId === societaPresidenza.societa_id);
+
   const puoScrivere = ruolo === "allenatore" || ruolo === "vice_allenatore";
   const puoScoutare = puoScrivere;
-  const puoUsareAI = puoScrivere || ruolo === "presidente";
+  const puoUsareAI = puoScrivere || ePresidenteDiQuestaSquadra;
   const soloLettura = ruolo === "presidente";
   /** Aprire, attivare e chiudere una stagione: riservato al presidente, non più all'allenatore. */
-  const puoGestireStagioni = ruolo === "presidente";
+  const puoGestireStagioni = ePresidenteDiQuestaSquadra;
 
   const value = useMemo<AuthState>(
     () => ({

@@ -2,7 +2,7 @@ import { useState } from "react";
 import { View, Text, TextInput, Pressable, StyleSheet } from "react-native";
 import { router } from "expo-router";
 import { useAuth } from "@/src/context/AuthContext";
-import { brand } from "@/src/config";
+import { brand, contattoAmministratore } from "@/src/config";
 import { avvisa } from "@/src/lib/confermaAzione";
 
 /**
@@ -35,7 +35,7 @@ export default function CreaSquadra() {
       <View style={styles.container}>
         <Text style={styles.title}>Nessuna squadra collegata</Text>
         <Text style={styles.sottotitolo}>
-          Solo il presidente di una società può creare una nuova squadra. Se dovresti far parte di una squadra già esistente, chiedi un invito a chi la gestisce; se dovresti fondarne una nuova, contatta l'amministratore della piattaforma.
+          Solo il presidente di una società può creare una nuova squadra. Se dovresti far parte di una squadra già esistente, chiedi un invito a chi la gestisce; se dovresti fondarne una nuova, contatta l'amministratore della piattaforma: {contattoAmministratore.nome} ({contattoAmministratore.email}).
         </Text>
         {session?.user.email && <Text style={styles.account}>Connesso come: {session.user.email}</Text>}
       </View>

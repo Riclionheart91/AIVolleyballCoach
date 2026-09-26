@@ -13,6 +13,8 @@ export interface Team {
   nome: string;
   creato_da: string | null;
   creato_il: string;
+  /** Società di appartenenza (null solo per dati storici pre-modello società). */
+  societaId?: string | null;
 }
 
 export interface TeamMember {

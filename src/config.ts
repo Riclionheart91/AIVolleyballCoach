@@ -16,6 +16,12 @@ export const brand = {
   breakpoints: { mobile: 0, tablet: 768, desktop: 1024 },
 };
 
+/** Contatto reale per chi deve chiedere la fondazione di una nuova società (schermata crea-squadra.tsx). */
+export const contattoAmministratore = {
+  nome: "Liu",
+  email: "lil.liu91@gmail.com",
+};
+
 export const supabase = {
   url: process.env.EXPO_PUBLIC_SUPABASE_URL ?? "",
   anonKey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? "",

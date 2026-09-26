@@ -35,3 +35,24 @@ export async function assegnaAllenatoreSquadra(teamId: string, email: string): P
   const { error } = await supabaseClient.rpc("assegna_allenatore_squadra", { p_team_id: teamId, p_email: email });
   if (error) throw error;
 }
+
+export interface Societa { id: string; nome: string; creato_il: string }
+
+/** Solo per l'amministratore della piattaforma: elenca tutte le società esistenti. */
+export async function elencaSocieta(): Promise<Societa[]> {
+  const { data, error } = await supabaseClient.from("societa").select("id, nome, creato_il").order("creato_il", { ascending: false });
+  if (error) throw error;
+  return data ?? [];
+}
+
+/**
+ * Solo per l'amministratore della piattaforma: fonda una nuova società e
+ * ne nomina il presidente indicandone l'email. Se la persona ha già un
+ * account diventa presidente subito, altrimenti l'invito resta in
+ * sospeso e si applica da solo al suo primo accesso.
+ */
+export async function creaSocieta(nome: string, emailPresidente: string): Promise<string> {
+  const { data, error } = await supabaseClient.rpc("crea_societa_con_presidente", { p_nome: nome, p_email_presidente: emailPresidente });
+  if (error) throw error;
+  return data as string;
+}

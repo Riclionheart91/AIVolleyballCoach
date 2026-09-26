@@ -24,6 +24,7 @@ export default function RootLayout() {
         <Stack.Screen name="campionati" options={{ headerShown: false }} />
         <Stack.Screen name="gestione-squadra" options={{ headerShown: false }} />
         <Stack.Screen name="gestione-societa" options={{ headerShown: false }} />
+        <Stack.Screen name="crea-societa" options={{ headerShown: false }} />
         <Stack.Screen name="analisi-partita/[id]" options={{ headerShown: false }} />
         <Stack.Screen name="importa-atlete" options={{ headerShown: true, title: "Importa rosa" }} />
       </Stack>

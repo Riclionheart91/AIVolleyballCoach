@@ -82,35 +82,50 @@ export default function Profilo() {
         </View>
       )}
 
-      {societaPresidenza && (
-        <Pressable style={styles.bottoneSecondario} onPress={() => router.push("/gestione-societa")}>
-          <Text style={styles.bottoneSecondarioTesto}>🏛️ Gestione società ({societaPresidenza.nome})</Text>
-        </Pressable>
-      )}
-
       {puoScrivere && (
-        <>
+        <View style={styles.gruppo}>
+          <Text style={styles.titoloGruppo}>Squadra</Text>
+          <Pressable style={styles.bottoneSecondario} onPress={() => router.push("/gestione-squadra")}>
+            <Text style={styles.bottoneSecondarioTesto}>👥 Gestione squadra e accessi</Text>
+          </Pressable>
           <Pressable style={styles.bottoneSecondario} onPress={() => router.push("/pianificazione-annuale")}>
             <Text style={styles.bottoneSecondarioTesto}>📋 Pianificazione annuale (cicli)</Text>
           </Pressable>
           <Pressable style={styles.bottoneSecondario} onPress={() => router.push("/campionati")}>
             <Text style={styles.bottoneSecondarioTesto}>🏆 Campionati</Text>
           </Pressable>
-          <Pressable style={styles.bottoneSecondario} onPress={() => router.push("/gestione-squadra")}>
-            <Text style={styles.bottoneSecondarioTesto}>👥 Gestione squadra e accessi</Text>
+        </View>
+      )}
+
+      {societaPresidenza && (
+        <View style={styles.gruppo}>
+          <Text style={styles.titoloGruppo}>Società</Text>
+          <Pressable style={styles.bottoneSecondario} onPress={() => router.push("/gestione-societa")}>
+            <Text style={styles.bottoneSecondarioTesto}>🏛️ Gestione società ({societaPresidenza.nome})</Text>
           </Pressable>
-        </>
+        </View>
       )}
 
-      {(puoScrivere || isSuperuser) && (
-        <Pressable style={styles.bottoneSecondario} onPress={() => router.push("/impostazioni")}>
-          <Text style={styles.bottoneSecondarioTesto}>Impostazioni</Text>
+      {isSuperuser && (
+        <View style={styles.gruppo}>
+          <Text style={styles.titoloGruppo}>Amministrazione piattaforma</Text>
+          <Pressable style={styles.bottoneSecondario} onPress={() => router.push("/crea-societa")}>
+            <Text style={styles.bottoneSecondarioTesto}>➕ Crea società</Text>
+          </Pressable>
+        </View>
+      )}
+
+      <View style={styles.gruppo}>
+        <Text style={styles.titoloGruppo}>Sistema</Text>
+        {(puoScrivere || isSuperuser) && (
+          <Pressable style={styles.bottoneSecondario} onPress={() => router.push("/impostazioni")}>
+            <Text style={styles.bottoneSecondarioTesto}>⚙️ Impostazioni</Text>
+          </Pressable>
+        )}
+        <Pressable style={styles.bottoneEsci} onPress={onEsci}>
+          <Text style={styles.bottoneEsciTesto}>Esci</Text>
         </Pressable>
-      )}
-
-      <Pressable style={styles.bottoneEsci} onPress={onEsci}>
-        <Text style={styles.bottoneEsciTesto}>Esci</Text>
-      </Pressable>
+      </View>
     </ScrollView>
   );
 }
@@ -118,6 +133,8 @@ export default function Profilo() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: brand.colors.surface },
   card: { backgroundColor: brand.colors.surfaceSecondary, borderRadius: 12, padding: 14, gap: 6 },
+  gruppo: { gap: 8 },
+  titoloGruppo: { color: brand.colors.muted, fontSize: 12, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 2 },
   label: { color: brand.colors.muted, fontSize: 12, textTransform: "uppercase", marginTop: 6 },
   valore: { color: brand.colors.onSurface, fontSize: 16, fontWeight: "600" },
   nota: { color: brand.colors.muted, fontSize: 13 },
