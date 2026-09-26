@@ -9,7 +9,11 @@ import {
   rimuoviCollaboratoreSquadra,
   rinominaSquadra,
   eliminaSquadra,
+  elencaPresidentiSocieta,
+  invitaPresidenteSocieta,
+  rimuoviPresidenteSocieta,
   type SquadraSocieta,
+  type Presidente,
 } from "@/src/services/societa";
 import {
   apriPrimaStagioneSocieta,
@@ -36,6 +40,10 @@ export default function GestioneSocieta() {
   const { societaPresidenza, stagioneSocietaEsiste, cambiaSquadra, ricaricaContesto } = useAuth();
   const [squadre, setSquadre] = useState<SquadraSocieta[]>([]);
   const [caricamento, setCaricamento] = useState(true);
+
+  const [presidenti, setPresidenti] = useState<Presidente[]>([]);
+  const [emailNuovoPresidente, setEmailNuovoPresidente] = useState("");
+  const [invitandoPresidente, setInvitandoPresidente] = useState(false);
 
   const [nomeNuova, setNomeNuova] = useState("");
   const [creando, setCreando] = useState(false);
@@ -71,9 +79,18 @@ export default function GestioneSocieta() {
   const carica = useCallback(async () => {
     if (!societaPresidenza) return;
     setCaricamento(true);
-    try { setSquadre(await elencaSquadreSocieta(societaPresidenza.societa_id)); }
-    catch (e) { avvisa("Errore", (e as Error).message); }
-    finally { setCaricamento(false); }
+    try {
+      const [s, p] = await Promise.all([
+        elencaSquadreSocieta(societaPresidenza.societa_id),
+        elencaPresidentiSocieta(societaPresidenza.societa_id),
+      ]);
+      setSquadre(s);
+      setPresidenti(p);
+    } catch (e) {
+      avvisa("Errore", (e as Error).message);
+    } finally {
+      setCaricamento(false);
+    }
   }, [societaPresidenza]);
 
   useFocusEffect(useCallback(() => { carica(); }, [carica]));
@@ -91,6 +108,39 @@ export default function GestioneSocieta() {
     } finally {
       setCreando(false);
     }
+  }
+
+  async function onInvitaPresidente() {
+    if (!societaPresidenza || !emailNuovoPresidente.trim()) return;
+    setInvitandoPresidente(true);
+    try {
+      await invitaPresidenteSocieta(societaPresidenza.societa_id, emailNuovoPresidente.trim());
+      avvisa("Invito inviato", `${emailNuovoPresidente.trim()} diventerà presidente insieme a voi al primo accesso con quell'email. Nessuno degli attuali presidenti perde il ruolo.`);
+      setEmailNuovoPresidente("");
+      carica();
+    } catch (e) {
+      avvisa("Errore", (e as Error).message);
+    } finally {
+      setInvitandoPresidente(false);
+    }
+  }
+
+  function onRimuoviPresidente(p: Presidente) {
+    if (!societaPresidenza) return;
+    confermaAzione(
+      `Rimuovere ${p.nome} dalla presidenza?`,
+      "Perderà tutti i permessi di presidente su questa società. Gli altri presidenti restano invariati.",
+      "Rimuovi",
+      async () => {
+        try {
+          await rimuoviPresidenteSocieta(societaPresidenza.societa_id, p.user_id);
+          carica();
+        } catch (e) {
+          avvisa("Errore", (e as Error).message);
+        }
+      },
+      true,
+    );
   }
 
   /** La società non ha mai avuto una stagione: senza una stagione aperta nessuna squadra può essere attivata. */
@@ -132,10 +182,10 @@ export default function GestioneSocieta() {
 
   function onRimuoviCollaboratore(s: SquadraSocieta, ruolo: "allenatore" | "vice_allenatore") {
     const etichetta = ruolo === "allenatore" ? "allenatore" : "vice-allenatore";
-    const emailAttuale = ruolo === "allenatore" ? s.allenatore_email : s.vice_allenatore_email;
+    const nomeAttuale = ruolo === "allenatore" ? s.allenatore_nome : s.vice_allenatore_nome;
     confermaAzione(
       `Rimuovere l'${etichetta} di ${s.nome}?`,
-      `${emailAttuale} perderà l'accesso a questa squadra. Nessuno prenderà il suo posto finché non ne assegni uno nuovo.`,
+      `${nomeAttuale} perderà l'accesso a questa squadra. Nessuno prenderà il suo posto finché non ne assegni uno nuovo.`,
       "Rimuovi",
       async () => {
         try {
@@ -284,6 +334,36 @@ export default function GestioneSocieta() {
       </View>
 
       <ScrollView contentContainerStyle={{ padding: 16, gap: 14, paddingBottom: 60 }}>
+        <View style={styles.card}>
+          <Text style={styles.sezione}>Presidenti della società</Text>
+          {presidenti.map((p) => (
+            <View key={p.user_id} style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+              <View>
+                <Text style={styles.dettaglioSquadra}>{p.nome}</Text>
+                {p.nome !== p.email && <Text style={styles.nota}>{p.email}</Text>}
+              </View>
+              <Pressable onPress={() => onRimuoviPresidente(p)}>
+                <Text style={styles.bottoneSecondarioDistruttivoTesto}>Rimuovi</Text>
+              </Pressable>
+            </View>
+          ))}
+          <Text style={styles.nota}>Aggiungerne uno non toglie il ruolo a chi c'è già: possono coesistere più presidenti.</Text>
+          <View style={{ flexDirection: "row", gap: 8 }}>
+            <TextInput
+              style={[styles.input, { flex: 1 }]}
+              placeholder="Email del nuovo presidente"
+              placeholderTextColor={brand.colors.muted}
+              autoCapitalize="none"
+              keyboardType="email-address"
+              value={emailNuovoPresidente}
+              onChangeText={setEmailNuovoPresidente}
+            />
+            <Pressable style={styles.bottone} onPress={onInvitaPresidente} disabled={invitandoPresidente || !emailNuovoPresidente.trim()}>
+              {invitandoPresidente ? <ActivityIndicator color="#000" /> : <Text style={styles.bottoneTesto}>Aggiungi</Text>}
+            </Pressable>
+          </View>
+        </View>
+
         {!stagioneSocietaEsiste && (
           <View style={styles.card}>
             <Text style={styles.sezione}>Apri la prima stagione</Text>
@@ -342,8 +422,8 @@ export default function GestioneSocieta() {
                 {s.numero_membri} {s.numero_membri === 1 ? "persona" : "persone"}
                 {s.stagione_attiva ? ` · stagione ${s.stagione_attiva}` : " · nessuna stagione aperta"}
               </Text>
-              <Text style={styles.dettaglioSquadra}>Allenatore: {s.allenatore_email ?? "nessuno assegnato"}</Text>
-              <Text style={styles.dettaglioSquadra}>Vice: {s.vice_allenatore_email ?? "nessuno assegnato"}</Text>
+              <Text style={styles.dettaglioSquadra}>Allenatore: {s.allenatore_nome ?? "nessuno assegnato"}</Text>
+              <Text style={styles.dettaglioSquadra}>Vice: {s.vice_allenatore_nome ?? "nessuno assegnato"}</Text>
 
               {s.squadra_attivata && (
                 <Pressable style={styles.bottonePrimarioPieno} onPress={() => onEntraSquadra(s)}>

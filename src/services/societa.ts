@@ -14,7 +14,10 @@ export interface SquadraSocieta {
   nome: string;
   numero_membri: number;
   allenatore_email: string | null;
+  /** Nome reale (da Google) se disponibile, altrimenti coincide con l'email. */
+  allenatore_nome: string | null;
   vice_allenatore_email: string | null;
+  vice_allenatore_nome: string | null;
   stagione_attiva: string | null;
   /** Questa squadra è stata confermata dal presidente per la stagione attiva della società. */
   squadra_attivata: boolean;
@@ -53,6 +56,33 @@ export async function rinominaSquadra(teamId: string, nomeNuovo: string): Promis
 /** Cancellazione totale e irreversibile: richiede di ridigitare esattamente il nome della squadra come conferma. */
 export async function eliminaSquadra(teamId: string, nomeConferma: string): Promise<void> {
   const { error } = await supabaseClient.rpc("elimina_squadra", { p_team_id: teamId, p_nome_conferma: nomeConferma });
+  if (error) throw error;
+}
+
+export interface Presidente {
+  user_id: string;
+  email: string;
+  /** Nome reale (da Google) se disponibile, altrimenti coincide con l'email. */
+  nome: string;
+  inizio_mandato: string;
+}
+
+/** Presidenti attualmente in carica per una società: possono coesistere più persone insieme. */
+export async function elencaPresidentiSocieta(societaId: string): Promise<Presidente[]> {
+  const { data, error } = await supabaseClient.rpc("elenca_presidenti_societa", { p_societa_id: societaId });
+  if (error) throw error;
+  return data ?? [];
+}
+
+/** Aggiunge un presidente in più (non sostituisce chi c'è già): se la persona ha già un account lo diventa subito, altrimenti al primo accesso con quell'email. */
+export async function invitaPresidenteSocieta(societaId: string, email: string): Promise<void> {
+  const { error } = await supabaseClient.rpc("invita_presidente_societa", { p_societa_id: societaId, p_email: email });
+  if (error) throw error;
+}
+
+/** Rimuove esplicitamente un presidente dalla società. Impossibile farlo se resta l'unico, a meno di essere l'amministratore della piattaforma. */
+export async function rimuoviPresidenteSocieta(societaId: string, userId: string): Promise<void> {
+  const { error } = await supabaseClient.rpc("rimuovi_presidente_societa", { p_societa_id: societaId, p_user_id: userId });
   if (error) throw error;
 }
 

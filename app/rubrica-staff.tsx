@@ -8,14 +8,16 @@ import { brand } from "@/src/config";
 
 interface VoceRubrica {
   email: string;
+  nome: string;
   ruoli: { squadra: string; ruolo: string }[];
 }
 
 /**
- * Rubrica dello staff della società: raggruppa per email chi allena o
- * fa da vice in quali squadre, usando i dati già raccolti da
- * elenca_squadre_societa — nessun nuovo dato di contatto, solo una
- * vista d'insieme comoda quando le squadre sono tante.
+ * Rubrica dello staff della società: raggruppa per email (identificatore
+ * univoco) chi allena o fa da vice in quali squadre, mostrando il nome
+ * reale recuperato da Google — usando dati già raccolti da
+ * elenca_squadre_societa, nessun nuovo dato di contatto, solo una vista
+ * d'insieme comoda quando le squadre sono tante.
  */
 export default function RubricaStaff() {
   const { societaPresidenza } = useAuth();
@@ -30,17 +32,17 @@ export default function RubricaStaff() {
       const mappa = new Map<string, VoceRubrica>();
       for (const s of squadre) {
         if (s.allenatore_email) {
-          const voce = mappa.get(s.allenatore_email) ?? { email: s.allenatore_email, ruoli: [] };
+          const voce = mappa.get(s.allenatore_email) ?? { email: s.allenatore_email, nome: s.allenatore_nome ?? s.allenatore_email, ruoli: [] };
           voce.ruoli.push({ squadra: s.nome, ruolo: "Allenatore" });
           mappa.set(s.allenatore_email, voce);
         }
         if (s.vice_allenatore_email) {
-          const voce = mappa.get(s.vice_allenatore_email) ?? { email: s.vice_allenatore_email, ruoli: [] };
+          const voce = mappa.get(s.vice_allenatore_email) ?? { email: s.vice_allenatore_email, nome: s.vice_allenatore_nome ?? s.vice_allenatore_email, ruoli: [] };
           voce.ruoli.push({ squadra: s.nome, ruolo: "Vice-allenatore" });
           mappa.set(s.vice_allenatore_email, voce);
         }
       }
-      setVoci(Array.from(mappa.values()).sort((a, b) => a.email.localeCompare(b.email)));
+      setVoci(Array.from(mappa.values()).sort((a, b) => a.nome.localeCompare(b.nome)));
     } catch (e) {
       avvisa("Errore", (e as Error).message);
     } finally {
@@ -73,7 +75,8 @@ export default function RubricaStaff() {
         ) : (
           voci.map((voce) => (
             <View key={voce.email} style={styles.card}>
-              <Text style={styles.email}>{voce.email}</Text>
+              <Text style={styles.email}>{voce.nome}</Text>
+              {voce.nome !== voce.email && <Text style={styles.riga}>{voce.email}</Text>}
               {voce.ruoli.map((r, i) => (
                 <Text key={i} style={styles.riga}>{r.ruolo} · {r.squadra}</Text>
               ))}

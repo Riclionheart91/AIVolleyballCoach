@@ -2,8 +2,16 @@ import { useCallback, useState } from "react";
 import { View, Text, TextInput, Pressable, StyleSheet, ScrollView, ActivityIndicator } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { useAuth } from "@/src/context/AuthContext";
-import { elencaSocieta, creaSocieta, type Societa } from "@/src/services/societa";
-import { avvisa } from "@/src/lib/confermaAzione";
+import {
+  elencaSocieta,
+  creaSocieta,
+  elencaPresidentiSocieta,
+  invitaPresidenteSocieta,
+  rimuoviPresidenteSocieta,
+  type Societa,
+  type Presidente,
+} from "@/src/services/societa";
+import { confermaAzione, avvisa } from "@/src/lib/confermaAzione";
 import { brand } from "@/src/config";
 
 /**
@@ -21,6 +29,12 @@ export default function CreaSocieta() {
   const [nome, setNome] = useState("");
   const [emailPresidente, setEmailPresidente] = useState("");
   const [creando, setCreando] = useState(false);
+
+  const [societaEspansa, setSocietaEspansa] = useState<string | null>(null);
+  const [presidenti, setPresidenti] = useState<Presidente[]>([]);
+  const [caricandoPresidenti, setCaricandoPresidenti] = useState(false);
+  const [emailNuovoPresidente, setEmailNuovoPresidente] = useState("");
+  const [invitandoPresidente, setInvitandoPresidente] = useState(false);
 
   const carica = useCallback(async () => {
     if (!isSuperuser) return;
@@ -49,6 +63,51 @@ export default function CreaSocieta() {
     } finally {
       setCreando(false);
     }
+  }
+
+  async function apriPresidenti(s: Societa) {
+    if (societaEspansa === s.id) { setSocietaEspansa(null); return; }
+    setSocietaEspansa(s.id);
+    setEmailNuovoPresidente("");
+    setCaricandoPresidenti(true);
+    try {
+      setPresidenti(await elencaPresidentiSocieta(s.id));
+    } catch (e) {
+      avvisa("Errore", (e as Error).message);
+    } finally {
+      setCaricandoPresidenti(false);
+    }
+  }
+
+  async function onInvitaPresidente(societaId: string) {
+    if (!emailNuovoPresidente.trim()) return;
+    setInvitandoPresidente(true);
+    try {
+      await invitaPresidenteSocieta(societaId, emailNuovoPresidente.trim());
+      setEmailNuovoPresidente("");
+      setPresidenti(await elencaPresidentiSocieta(societaId));
+    } catch (e) {
+      avvisa("Errore", (e as Error).message);
+    } finally {
+      setInvitandoPresidente(false);
+    }
+  }
+
+  function onRimuoviPresidente(societaId: string, p: Presidente) {
+    confermaAzione(
+      `Rimuovere ${p.nome} dalla presidenza?`,
+      "Perderà tutti i permessi di presidente su questa società.",
+      "Rimuovi",
+      async () => {
+        try {
+          await rimuoviPresidenteSocieta(societaId, p.user_id);
+          setPresidenti(await elencaPresidentiSocieta(societaId));
+        } catch (e) {
+          avvisa("Errore", (e as Error).message);
+        }
+      },
+      true,
+    );
   }
 
   if (!isSuperuser) {
@@ -99,8 +158,44 @@ export default function CreaSocieta() {
         ) : (
           elenco.map((s) => (
             <View key={s.id} style={styles.card}>
-              <Text style={styles.nomeSquadra}>{s.nome}</Text>
-              <Text style={styles.dettaglioSquadra}>Creata il {s.creato_il?.slice(0, 10)}</Text>
+              <Pressable onPress={() => apriPresidenti(s)}>
+                <Text style={styles.nomeSquadra}>{s.nome}</Text>
+                <Text style={styles.dettaglioSquadra}>Creata il {s.creato_il?.slice(0, 10)} · tocca per gestire i presidenti</Text>
+              </Pressable>
+
+              {societaEspansa === s.id && (
+                <View style={{ gap: 6, marginTop: 4 }}>
+                  {caricandoPresidenti ? (
+                    <ActivityIndicator color={brand.colors.brand} />
+                  ) : (
+                    presidenti.map((p) => (
+                      <View key={p.user_id} style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                        <View>
+                          <Text style={styles.dettaglioSquadra}>{p.nome}</Text>
+                          {p.nome !== p.email && <Text style={styles.nota}>{p.email}</Text>}
+                        </View>
+                        <Pressable onPress={() => onRimuoviPresidente(s.id, p)}>
+                          <Text style={styles.rimuoviTesto}>Rimuovi</Text>
+                        </Pressable>
+                      </View>
+                    ))
+                  )}
+                  <View style={{ flexDirection: "row", gap: 8 }}>
+                    <TextInput
+                      style={[styles.input, { flex: 1 }]}
+                      placeholder="Email del nuovo presidente"
+                      placeholderTextColor={brand.colors.muted}
+                      autoCapitalize="none"
+                      keyboardType="email-address"
+                      value={emailNuovoPresidente}
+                      onChangeText={setEmailNuovoPresidente}
+                    />
+                    <Pressable style={styles.bottone} onPress={() => onInvitaPresidente(s.id)} disabled={invitandoPresidente || !emailNuovoPresidente.trim()}>
+                      {invitandoPresidente ? <ActivityIndicator color="#000" /> : <Text style={styles.bottoneTesto}>Aggiungi</Text>}
+                    </Pressable>
+                  </View>
+                </View>
+              )}
             </View>
           ))
         )}
@@ -122,4 +217,5 @@ const styles = StyleSheet.create({
   input: { backgroundColor: brand.colors.surfaceTertiary, color: brand.colors.onSurface, borderRadius: 8, padding: 12 },
   bottone: { backgroundColor: brand.colors.brand, paddingHorizontal: 18, paddingVertical: 12, borderRadius: 8, alignItems: "center", justifyContent: "center" },
   bottoneTesto: { color: "#000", fontWeight: "700" },
+  rimuoviTesto: { color: brand.colors.error, fontWeight: "700", fontSize: 12.5 },
 });
