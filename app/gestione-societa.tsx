@@ -12,6 +12,7 @@ import {
   type SquadraSocieta,
 } from "@/src/services/societa";
 import {
+  apriPrimaStagioneSocieta,
   attivaSquadraInStagione,
   disattivaSquadraInStagione,
   spostaAtletaSquadra,
@@ -32,12 +33,15 @@ import type { Athlete } from "@/src/types/database";
  * cambiando prima la squadra corrente.
  */
 export default function GestioneSocieta() {
-  const { societaPresidenza, cambiaSquadra } = useAuth();
+  const { societaPresidenza, stagioneSocietaEsiste, cambiaSquadra, ricaricaContesto } = useAuth();
   const [squadre, setSquadre] = useState<SquadraSocieta[]>([]);
   const [caricamento, setCaricamento] = useState(true);
 
   const [nomeNuova, setNomeNuova] = useState("");
   const [creando, setCreando] = useState(false);
+
+  const [nomeStagione, setNomeStagione] = useState("");
+  const [apertura, setApertura] = useState(false);
 
   const [squadraPerCollaboratore, setSquadraPerCollaboratore] = useState<SquadraSocieta | null>(null);
   const [ruoloCollaboratore, setRuoloCollaboratore] = useState<"allenatore" | "vice_allenatore">("allenatore");
@@ -86,6 +90,23 @@ export default function GestioneSocieta() {
       avvisa("Errore", (e as Error).message);
     } finally {
       setCreando(false);
+    }
+  }
+
+  /** La società non ha mai avuto una stagione: senza una stagione aperta nessuna squadra può essere attivata. */
+  async function onApriPrimaStagione() {
+    if (!societaPresidenza || !nomeStagione.trim()) return;
+    setApertura(true);
+    try {
+      await apriPrimaStagioneSocieta(societaPresidenza.societa_id, nomeStagione.trim());
+      setNomeStagione("");
+      await ricaricaContesto();
+      carica();
+      avvisa("Stagione aperta", "Ora puoi attivare le squadre una per una qui sotto.");
+    } catch (e) {
+      avvisa("Errore", (e as Error).message);
+    } finally {
+      setApertura(false);
     }
   }
 
@@ -173,6 +194,13 @@ export default function GestioneSocieta() {
     );
   }
 
+  /** La vera "home" della squadra: rosa atlete, allenamenti, partite, valutazioni — tutta l'area operativa. */
+  async function onEntraSquadra(s: SquadraSocieta) {
+    await cambiaSquadra(s.team_id);
+    router.push("/(tabs)/allenamenti");
+  }
+
+  /** Solo la gestione di chi ha accesso alla squadra (inviti, ruoli) — non la rosa/allenamenti. */
   async function onGestisciOrganico(s: SquadraSocieta) {
     await cambiaSquadra(s.team_id);
     router.push("/gestione-squadra");
@@ -256,6 +284,25 @@ export default function GestioneSocieta() {
       </View>
 
       <ScrollView contentContainerStyle={{ padding: 16, gap: 14, paddingBottom: 60 }}>
+        {!stagioneSocietaEsiste && (
+          <View style={styles.card}>
+            <Text style={styles.sezione}>Apri la prima stagione</Text>
+            <Text style={styles.nota}>La società non ha ancora nessuna stagione: aprila per poter attivare le squadre e iniziare a registrare allenamenti e valutazioni.</Text>
+            <View style={{ flexDirection: "row", gap: 8 }}>
+              <TextInput
+                style={[styles.input, { flex: 1 }]}
+                placeholder="Nome stagione (es. 2026/2027)"
+                placeholderTextColor={brand.colors.muted}
+                value={nomeStagione}
+                onChangeText={setNomeStagione}
+              />
+              <Pressable style={styles.bottone} onPress={onApriPrimaStagione} disabled={apertura || !nomeStagione.trim()}>
+                {apertura ? <ActivityIndicator color="#000" /> : <Text style={styles.bottoneTesto}>Apri</Text>}
+              </Pressable>
+            </View>
+          </View>
+        )}
+
         <View style={styles.card}>
           <Text style={styles.sezione}>Crea una nuova squadra</Text>
           <View style={{ flexDirection: "row", gap: 8 }}>
@@ -297,6 +344,12 @@ export default function GestioneSocieta() {
               </Text>
               <Text style={styles.dettaglioSquadra}>Allenatore: {s.allenatore_email ?? "nessuno assegnato"}</Text>
               <Text style={styles.dettaglioSquadra}>Vice: {s.vice_allenatore_email ?? "nessuno assegnato"}</Text>
+
+              {s.squadra_attivata && (
+                <Pressable style={styles.bottonePrimarioPieno} onPress={() => onEntraSquadra(s)}>
+                  <Text style={styles.bottoneTesto}>Entra nella squadra →</Text>
+                </Pressable>
+              )}
 
               <View style={{ flexDirection: "row", gap: 8, flexWrap: "wrap" }}>
                 <Pressable style={styles.bottoneSecondario} onPress={() => apriAssegnaCollaboratore(s, "allenatore")}>
@@ -512,6 +565,7 @@ const styles = StyleSheet.create({
   bottoneSecondarioDistruttivo: { borderWidth: 1, borderColor: brand.colors.error, borderRadius: 8, paddingVertical: 8, paddingHorizontal: 10, alignItems: "center", marginTop: 2 },
   bottoneSecondarioDistruttivoTesto: { color: brand.colors.error, fontWeight: "700", fontSize: 12.5 },
   bottoneDistruttivoPieno: { backgroundColor: brand.colors.error, paddingHorizontal: 18, paddingVertical: 12, borderRadius: 8, alignItems: "center", justifyContent: "center" },
+  bottonePrimarioPieno: { backgroundColor: brand.colors.brand, paddingHorizontal: 18, paddingVertical: 12, borderRadius: 8, alignItems: "center", justifyContent: "center" },
   badge: { color: brand.colors.muted, fontSize: 11, textTransform: "uppercase", fontWeight: "700" },
   badgeAttiva: { color: brand.colors.success },
   label: { color: brand.colors.muted, fontSize: 12, textTransform: "uppercase", marginTop: 6 },
