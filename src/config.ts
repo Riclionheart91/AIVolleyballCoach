@@ -18,7 +18,7 @@ export const brand = {
 
 /** Contatto reale per chi deve chiedere la fondazione di una nuova società (schermata crea-squadra.tsx). */
 export const contattoAmministratore = {
-  nome: "Liu",
+  nome: "Riccardo",
   email: "lil.liu91@gmail.com",
 };
 
