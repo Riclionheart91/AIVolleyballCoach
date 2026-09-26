@@ -64,3 +64,20 @@ export async function elencaBaselineStagione(seasonId: string): Promise<SeasonBa
   if (error) throw error;
   return data ?? [];
 }
+
+export interface StoricoStagione {
+  season_id: string;
+  nome: string;
+  stato: string;
+  data_apertura: string | null;
+  data_chiusura: string | null;
+  /** Questa squadra è stata attivata dal presidente in questa stagione. */
+  squadra_attivata: boolean;
+}
+
+/** Storico di tutte le stagioni della società, con indicazione se questa squadra è stata attivata in ciascuna. */
+export async function storicoStagioniSquadra(teamId: string): Promise<StoricoStagione[]> {
+  const { data, error } = await supabaseClient.rpc("storico_stagioni_squadra", { p_team_id: teamId });
+  if (error) throw error;
+  return data ?? [];
+}

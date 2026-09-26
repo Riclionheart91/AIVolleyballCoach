@@ -5,7 +5,7 @@ import { useAuth } from "@/src/context/AuthContext";
 import { brand } from "@/src/config";
 
 export default function Index() {
-  const { session, caricamento, caricamentoContesto, erroreTeam, stagioneAttiva, squadreDisponibili, ruolo, ricaricaContesto } = useAuth();
+  const { session, caricamento, caricamentoContesto, caricamentoSocieta, erroreTeam, stagioneAttiva, squadreDisponibili, societaPresidenza, ruolo, ricaricaContesto } = useAuth();
 
   useEffect(() => {
     // caricamentoContesto copre SIA squadra SIA stagione in un colpo
@@ -13,12 +13,21 @@ export default function Index() {
     // decide nessuna rotta — elimina la finestra in cui squadra e
     // stagione potevano essere lette in momenti diversi e risultare
     // disallineate (causa del bug "nessuna stagione aperta" mostrato
-    // per errore).
-    if (caricamento || caricamentoContesto) return;
+    // per errore). caricamentoSocieta è separato (arriva da un'altra
+    // chiamata): va aspettato anche lui, altrimenti un presidente può
+    // essere reindirizzato per un attimo come se non lo fosse.
+    if (caricamento || caricamentoContesto || caricamentoSocieta) return;
     if (!session) { router.replace("/login"); return; }
     if (erroreTeam) return; // errore vero, distinto da "nessuna squadra": si mostra sotto, non si reindirizza alla cieca
 
-    // Instradamento:
+    // Il presidente entra sempre nella gestione della sua società: è lì
+    // che vede tutte le squadre, a prescindere da quale di esse sia
+    // stata attivata per la stagione corrente. Questo vale anche se ha
+    // anche un ruolo diretto (es. allenatore) su una di quelle squadre:
+    // da lì può comunque raggiungere "Gestisci organico" per entrarci.
+    if (societaPresidenza) { router.replace("/gestione-societa"); return; }
+
+    // Instradamento per chi non è presidente:
     //  - nessuna squadra          -> creazione squadra (unico caso in cui va mostrata)
     //  - stagione non attiva      -> apertura stagione
     //  - altrimenti               -> dritti agli allenamenti, per la squadra già scelta
@@ -36,7 +45,7 @@ export default function Index() {
     // Le persone con profilo atleta non hanno accesso ad allenamenti,
     // anagrafica ed esercizi: entrano direttamente nella propria scheda.
     router.replace(ruolo === "atleta" ? "/(tabs)/scheda" : "/(tabs)/allenamenti");
-  }, [session, caricamento, caricamentoContesto, erroreTeam, stagioneAttiva, squadreDisponibili, ruolo]);
+  }, [session, caricamento, caricamentoContesto, caricamentoSocieta, erroreTeam, stagioneAttiva, squadreDisponibili, societaPresidenza, ruolo]);
 
   if (!caricamento && !caricamentoContesto && erroreTeam) {
     return (

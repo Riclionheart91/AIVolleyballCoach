@@ -49,6 +49,8 @@ interface AuthState {
   isSuperuser: boolean;
   /** Se si è presidente di una società, questa: null altrimenti. Va controllata anche senza squadre (società appena fondata). */
   societaPresidenza: MiaSocieta | null;
+  /** Finché true, non è ancora certo se la persona sia presidente: chi decide le rotte deve aspettare, non presumere "no". */
+  caricamentoSocieta: boolean;
   squadreDisponibili: SquadraDisponibile[];
   cambiaSquadra: (teamId: string) => Promise<void>;
   /**
@@ -82,6 +84,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [squadreDisponibili, setSquadreDisponibili] = useState<SquadraDisponibile[]>([]);
   const [isSuperuser, setIsSuperuser] = useState(false);
   const [societaPresidenza, setSocietaPresidenza] = useState<MiaSocieta | null>(null);
+  const [caricamentoSocieta, setCaricamentoSocieta] = useState(true);
   const [caricamentoContesto, setCaricamentoContesto] = useState(true);
   const [erroreTeam, setErroreTeam] = useState<string | null>(null);
   const [stagioneAttiva, setStagioneAttiva] = useState<Season | null>(null);
@@ -106,8 +109,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [session?.user.id]);
 
   useEffect(() => {
-    if (!session) { setSocietaPresidenza(null); return; }
-    miaSocietaPresidenza().then(setSocietaPresidenza).catch(() => setSocietaPresidenza(null));
+    if (!session) { setSocietaPresidenza(null); setCaricamentoSocieta(false); return; }
+    setCaricamentoSocieta(true);
+    miaSocietaPresidenza()
+      .then(setSocietaPresidenza)
+      .catch(() => setSocietaPresidenza(null))
+      .finally(() => setCaricamentoSocieta(false));
   }, [session?.user.id]);
 
   /**
@@ -225,11 +232,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const value = useMemo<AuthState>(
     () => ({
       session, caricamento, team, ruolo, atletaId, puoScrivere, soloLettura, puoScoutare, puoUsareAI, puoGestireStagioni, isSuperuser,
-      societaPresidenza, squadreDisponibili, cambiaSquadra, caricamentoContesto, erroreTeam, stagioneAttiva, stagioneSocietaEsiste,
+      societaPresidenza, caricamentoSocieta, squadreDisponibili, cambiaSquadra, caricamentoContesto, erroreTeam, stagioneAttiva, stagioneSocietaEsiste,
       squadraAttivata: stagioneAttiva !== null,
       accediConGoogle, esci, creaPrimaSquadra, ricaricaContesto,
     }),
-    [session, caricamento, team, ruolo, atletaId, isSuperuser, societaPresidenza, squadreDisponibili, caricamentoContesto, erroreTeam, stagioneAttiva, stagioneSocietaEsiste],
+    [session, caricamento, team, ruolo, atletaId, isSuperuser, societaPresidenza, caricamentoSocieta, squadreDisponibili, caricamentoContesto, erroreTeam, stagioneAttiva, stagioneSocietaEsiste],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

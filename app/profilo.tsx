@@ -103,6 +103,9 @@ export default function Profilo() {
           <Pressable style={styles.bottoneSecondario} onPress={() => router.push("/gestione-societa")}>
             <Text style={styles.bottoneSecondarioTesto}>🏛️ Gestione società ({societaPresidenza.nome})</Text>
           </Pressable>
+          <Pressable style={styles.bottoneSecondario} onPress={() => router.push("/rubrica-staff")}>
+            <Text style={styles.bottoneSecondarioTesto}>📇 Rubrica staff</Text>
+          </Pressable>
         </View>
       )}
 

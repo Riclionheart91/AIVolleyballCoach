@@ -14,6 +14,7 @@ export interface SquadraSocieta {
   nome: string;
   numero_membri: number;
   allenatore_email: string | null;
+  vice_allenatore_email: string | null;
   stagione_attiva: string | null;
   /** Questa squadra è stata confermata dal presidente per la stagione attiva della società. */
   squadra_attivata: boolean;
@@ -35,6 +36,29 @@ export async function creaSquadraInSocieta(nome: string, societaId: string): Pro
 /** Invita per email chi diventerà allenatore di questa squadra della società. */
 export async function assegnaAllenatoreSquadra(teamId: string, email: string): Promise<void> {
   const { error } = await supabaseClient.rpc("assegna_allenatore_squadra", { p_team_id: teamId, p_email: email });
+  if (error) throw error;
+}
+
+/** Invita per email chi diventerà allenatore o vice-allenatore di questa squadra. */
+export async function assegnaCollaboratoreSquadra(teamId: string, email: string, ruolo: "allenatore" | "vice_allenatore"): Promise<void> {
+  const { error } = await supabaseClient.rpc("assegna_collaboratore_squadra", { p_team_id: teamId, p_email: email, p_ruolo: ruolo });
+  if (error) throw error;
+}
+
+/** Rimuove allenatore o vice-allenatore dalla squadra senza assegnarne subito uno nuovo. */
+export async function rimuoviCollaboratoreSquadra(teamId: string, ruolo: "allenatore" | "vice_allenatore"): Promise<void> {
+  const { error } = await supabaseClient.rpc("rimuovi_collaboratore_squadra", { p_team_id: teamId, p_ruolo: ruolo });
+  if (error) throw error;
+}
+
+export async function rinominaSquadra(teamId: string, nomeNuovo: string): Promise<void> {
+  const { error } = await supabaseClient.rpc("rinomina_squadra", { p_team_id: teamId, p_nome_nuovo: nomeNuovo });
+  if (error) throw error;
+}
+
+/** Cancellazione totale e irreversibile: richiede di ridigitare esattamente il nome della squadra come conferma. */
+export async function eliminaSquadra(teamId: string, nomeConferma: string): Promise<void> {
+  const { error } = await supabaseClient.rpc("elimina_squadra", { p_team_id: teamId, p_nome_conferma: nomeConferma });
   if (error) throw error;
 }
 

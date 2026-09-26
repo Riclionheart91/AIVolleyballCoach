@@ -2,30 +2,56 @@ import { useCallback, useState } from "react";
 import { View, Text, TextInput, Pressable, StyleSheet, ScrollView, ActivityIndicator, Modal } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { useAuth } from "@/src/context/AuthContext";
-import { elencaSquadreSocieta, creaSquadraInSocieta, assegnaAllenatoreSquadra, type SquadraSocieta } from "@/src/services/societa";
-import { attivaSquadraInStagione, disattivaSquadraInStagione, spostaAtletaSquadra } from "@/src/services/seasons";
+import {
+  elencaSquadreSocieta,
+  creaSquadraInSocieta,
+  assegnaCollaboratoreSquadra,
+  rimuoviCollaboratoreSquadra,
+  rinominaSquadra,
+  eliminaSquadra,
+  type SquadraSocieta,
+} from "@/src/services/societa";
+import {
+  attivaSquadraInStagione,
+  disattivaSquadraInStagione,
+  spostaAtletaSquadra,
+  storicoStagioniSquadra,
+  type StoricoStagione,
+} from "@/src/services/seasons";
 import { elencaAtlete } from "@/src/services/athletes";
 import { confermaAzione, avvisa } from "@/src/lib/confermaAzione";
 import { brand } from "@/src/config";
 import type { Athlete } from "@/src/types/database";
 
 /**
- * L'organico della società: qui il presidente vede tutte le squadre
- * del proprio club, ne crea di nuove, e assegna chi le allena — la
- * gestione che prima mancava del tutto.
+ * L'organico della società: qui il presidente vede tutte le squadre del
+ * proprio club, ne crea di nuove, assegna chi le allena, le rinomina o
+ * le elimina, sposta atleti tra squadre, e le attiva per la stagione
+ * corrente. La gestione fine dell'organico (inviti, ruoli, scout) resta
+ * in Gestione squadra — "Gestisci organico" ci porta direttamente,
+ * cambiando prima la squadra corrente.
  */
 export default function GestioneSocieta() {
-  const { societaPresidenza } = useAuth();
+  const { societaPresidenza, cambiaSquadra } = useAuth();
   const [squadre, setSquadre] = useState<SquadraSocieta[]>([]);
   const [caricamento, setCaricamento] = useState(true);
 
   const [nomeNuova, setNomeNuova] = useState("");
   const [creando, setCreando] = useState(false);
 
-  const [squadraPerAllenatore, setSquadraPerAllenatore] = useState<SquadraSocieta | null>(null);
-  const [emailAllenatore, setEmailAllenatore] = useState("");
+  const [squadraPerCollaboratore, setSquadraPerCollaboratore] = useState<SquadraSocieta | null>(null);
+  const [ruoloCollaboratore, setRuoloCollaboratore] = useState<"allenatore" | "vice_allenatore">("allenatore");
+  const [emailCollaboratore, setEmailCollaboratore] = useState("");
 
   const [inCorsoAttivazione, setInCorsoAttivazione] = useState<string | null>(null);
+
+  const [squadraPerRinomina, setSquadraPerRinomina] = useState<SquadraSocieta | null>(null);
+  const [nomeRinomina, setNomeRinomina] = useState("");
+  const [rinominando, setRinominando] = useState(false);
+
+  const [squadraPerEliminazione, setSquadraPerEliminazione] = useState<SquadraSocieta | null>(null);
+  const [nomeConfermaEliminazione, setNomeConfermaEliminazione] = useState("");
+  const [eliminando, setEliminando] = useState(false);
 
   const [spostamentoAperto, setSpostamentoAperto] = useState(false);
   const [squadraOrigine, setSquadraOrigine] = useState<SquadraSocieta | null>(null);
@@ -33,6 +59,10 @@ export default function GestioneSocieta() {
   const [atletaScelto, setAtletaScelto] = useState<Athlete | null>(null);
   const [squadraDestinazione, setSquadraDestinazione] = useState<SquadraSocieta | null>(null);
   const [spostando, setSpostando] = useState(false);
+
+  const [squadraPerStorico, setSquadraPerStorico] = useState<SquadraSocieta | null>(null);
+  const [storico, setStorico] = useState<StoricoStagione[]>([]);
+  const [storicoCaricamento, setStoricoCaricamento] = useState(false);
 
   const carica = useCallback(async () => {
     if (!societaPresidenza) return;
@@ -59,16 +89,55 @@ export default function GestioneSocieta() {
     }
   }
 
-  async function onAssegnaAllenatore() {
-    if (!squadraPerAllenatore || !emailAllenatore.trim()) return;
+  function apriAssegnaCollaboratore(s: SquadraSocieta, ruolo: "allenatore" | "vice_allenatore") {
+    setSquadraPerCollaboratore(s);
+    setRuoloCollaboratore(ruolo);
+    setEmailCollaboratore("");
+  }
+
+  async function onAssegnaCollaboratore() {
+    if (!squadraPerCollaboratore || !emailCollaboratore.trim()) return;
     try {
-      await assegnaAllenatoreSquadra(squadraPerAllenatore.team_id, emailAllenatore.trim());
-      avvisa("Invito inviato", `${emailAllenatore.trim()} diventerà allenatore al primo accesso con quell'email.`);
-      setSquadraPerAllenatore(null);
-      setEmailAllenatore("");
+      await assegnaCollaboratoreSquadra(squadraPerCollaboratore.team_id, emailCollaboratore.trim(), ruoloCollaboratore);
+      const etichetta = ruoloCollaboratore === "allenatore" ? "allenatore" : "vice-allenatore";
+      avvisa("Invito inviato", `${emailCollaboratore.trim()} diventerà ${etichetta} al primo accesso con quell'email.`);
+      setSquadraPerCollaboratore(null);
+      setEmailCollaboratore("");
       carica();
     } catch (e) {
       avvisa("Errore", (e as Error).message);
+    }
+  }
+
+  function onRimuoviCollaboratore(s: SquadraSocieta, ruolo: "allenatore" | "vice_allenatore") {
+    const etichetta = ruolo === "allenatore" ? "allenatore" : "vice-allenatore";
+    const emailAttuale = ruolo === "allenatore" ? s.allenatore_email : s.vice_allenatore_email;
+    confermaAzione(
+      `Rimuovere l'${etichetta} di ${s.nome}?`,
+      `${emailAttuale} perderà l'accesso a questa squadra. Nessuno prenderà il suo posto finché non ne assegni uno nuovo.`,
+      "Rimuovi",
+      async () => {
+        try {
+          await rimuoviCollaboratoreSquadra(s.team_id, ruolo);
+          carica();
+        } catch (e) {
+          avvisa("Errore", (e as Error).message);
+        }
+      },
+      true,
+    );
+  }
+
+  async function apriStorico(s: SquadraSocieta) {
+    setSquadraPerStorico(s);
+    setStorico([]);
+    setStoricoCaricamento(true);
+    try {
+      setStorico(await storicoStagioniSquadra(s.team_id));
+    } catch (e) {
+      avvisa("Errore", (e as Error).message);
+    } finally {
+      setStoricoCaricamento(false);
     }
   }
 
@@ -102,6 +171,50 @@ export default function GestioneSocieta() {
       },
       true,
     );
+  }
+
+  async function onGestisciOrganico(s: SquadraSocieta) {
+    await cambiaSquadra(s.team_id);
+    router.push("/gestione-squadra");
+  }
+
+  function apriRinomina(s: SquadraSocieta) {
+    setSquadraPerRinomina(s);
+    setNomeRinomina(s.nome);
+  }
+
+  async function onRinomina() {
+    if (!squadraPerRinomina || !nomeRinomina.trim()) return;
+    setRinominando(true);
+    try {
+      await rinominaSquadra(squadraPerRinomina.team_id, nomeRinomina.trim());
+      setSquadraPerRinomina(null);
+      carica();
+    } catch (e) {
+      avvisa("Errore", (e as Error).message);
+    } finally {
+      setRinominando(false);
+    }
+  }
+
+  function apriEliminazione(s: SquadraSocieta) {
+    setSquadraPerEliminazione(s);
+    setNomeConfermaEliminazione("");
+  }
+
+  async function onElimina() {
+    if (!squadraPerEliminazione) return;
+    setEliminando(true);
+    try {
+      await eliminaSquadra(squadraPerEliminazione.team_id, nomeConfermaEliminazione.trim());
+      setSquadraPerEliminazione(null);
+      carica();
+      avvisa("Squadra eliminata", `${squadraPerEliminazione.nome} e tutti i suoi dati (atleti, allenamenti, valutazioni, partite) sono stati eliminati definitivamente.`);
+    } catch (e) {
+      avvisa("Errore", (e as Error).message);
+    } finally {
+      setEliminando(false);
+    }
   }
 
   async function apriSpostamento(squadra: SquadraSocieta) {
@@ -138,7 +251,7 @@ export default function GestioneSocieta() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Pressable onPress={() => router.back()} hitSlop={12}><Text style={styles.indietro}>← Profilo</Text></Pressable>
+        <Pressable onPress={() => router.push("/profilo")} hitSlop={12}><Text style={styles.indietro}>← Profilo</Text></Pressable>
         <Text style={styles.titolo}>{societaPresidenza.nome}</Text>
       </View>
 
@@ -169,7 +282,9 @@ export default function GestioneSocieta() {
           squadre.map((s) => (
             <View key={s.team_id} style={styles.card}>
               <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-                <Text style={styles.nomeSquadra}>{s.nome}</Text>
+                <Pressable onPress={() => apriRinomina(s)} style={{ flex: 1 }}>
+                  <Text style={styles.nomeSquadra}>{s.nome} <Text style={styles.matita}>✎</Text></Text>
+                </Pressable>
                 {s.stagione_attiva && (
                   <Text style={[styles.badge, s.squadra_attivata && styles.badgeAttiva]}>
                     {s.squadra_attivata ? "attivata" : "sospesa"}
@@ -180,16 +295,34 @@ export default function GestioneSocieta() {
                 {s.numero_membri} {s.numero_membri === 1 ? "persona" : "persone"}
                 {s.stagione_attiva ? ` · stagione ${s.stagione_attiva}` : " · nessuna stagione aperta"}
               </Text>
-              <Text style={styles.dettaglioSquadra}>
-                Allenatore: {s.allenatore_email ?? "nessuno assegnato"}
-              </Text>
+              <Text style={styles.dettaglioSquadra}>Allenatore: {s.allenatore_email ?? "nessuno assegnato"}</Text>
+              <Text style={styles.dettaglioSquadra}>Vice: {s.vice_allenatore_email ?? "nessuno assegnato"}</Text>
+
               <View style={{ flexDirection: "row", gap: 8, flexWrap: "wrap" }}>
-                <Pressable
-                  style={styles.bottoneSecondario}
-                  onPress={() => { setSquadraPerAllenatore(s); setEmailAllenatore(""); }}
-                >
+                <Pressable style={styles.bottoneSecondario} onPress={() => apriAssegnaCollaboratore(s, "allenatore")}>
                   <Text style={styles.bottoneSecondarioTesto}>{s.allenatore_email ? "Cambia allenatore" : "Assegna allenatore"}</Text>
                 </Pressable>
+                {s.allenatore_email && (
+                  <Pressable style={styles.bottoneSecondarioDistruttivo} onPress={() => onRimuoviCollaboratore(s, "allenatore")}>
+                    <Text style={styles.bottoneSecondarioDistruttivoTesto}>Rimuovi allenatore</Text>
+                  </Pressable>
+                )}
+                <Pressable style={styles.bottoneSecondario} onPress={() => apriAssegnaCollaboratore(s, "vice_allenatore")}>
+                  <Text style={styles.bottoneSecondarioTesto}>{s.vice_allenatore_email ? "Cambia vice" : "Assegna vice"}</Text>
+                </Pressable>
+                {s.vice_allenatore_email && (
+                  <Pressable style={styles.bottoneSecondarioDistruttivo} onPress={() => onRimuoviCollaboratore(s, "vice_allenatore")}>
+                    <Text style={styles.bottoneSecondarioDistruttivoTesto}>Rimuovi vice</Text>
+                  </Pressable>
+                )}
+                <Pressable style={styles.bottoneSecondario} onPress={() => apriStorico(s)}>
+                  <Text style={styles.bottoneSecondarioTesto}>Storico stagioni</Text>
+                </Pressable>
+                {s.numero_membri > 0 && (
+                  <Pressable style={styles.bottoneSecondario} onPress={() => onGestisciOrganico(s)}>
+                    <Text style={styles.bottoneSecondarioTesto}>Gestisci organico</Text>
+                  </Pressable>
+                )}
                 {s.stagione_attiva && (
                   s.squadra_attivata ? (
                     <Pressable style={styles.bottoneSecondarioDistruttivo} onPress={() => onDisattiva(s)} disabled={inCorsoAttivazione === s.team_id}>
@@ -206,31 +339,83 @@ export default function GestioneSocieta() {
                     <Text style={styles.bottoneSecondarioTesto}>Sposta un atleta da qui</Text>
                   </Pressable>
                 )}
+                <Pressable style={styles.bottoneSecondarioDistruttivo} onPress={() => apriEliminazione(s)}>
+                  <Text style={styles.bottoneSecondarioDistruttivoTesto}>Elimina squadra</Text>
+                </Pressable>
               </View>
             </View>
           ))
         )}
       </ScrollView>
 
-      <Modal visible={!!squadraPerAllenatore} animationType="fade" transparent onRequestClose={() => setSquadraPerAllenatore(null)}>
+      <Modal visible={!!squadraPerCollaboratore} animationType="fade" transparent onRequestClose={() => setSquadraPerCollaboratore(null)}>
         <View style={styles.sfondoPopup}>
           <View style={styles.cartaPopup}>
-            <Text style={styles.titoloPopup}>Allenatore di {squadraPerAllenatore?.nome}</Text>
-            <Text style={styles.nota}>Un invito parte subito: al primo accesso con questa email, la persona entra come allenatore.</Text>
+            <Text style={styles.titoloPopup}>
+              {ruoloCollaboratore === "allenatore" ? "Allenatore" : "Vice-allenatore"} di {squadraPerCollaboratore?.nome}
+            </Text>
+            <Text style={styles.nota}>Un invito parte subito: al primo accesso con questa email, la persona entra con questo profilo.</Text>
             <TextInput
               style={styles.input}
               placeholder="Email Google"
               placeholderTextColor={brand.colors.muted}
               autoCapitalize="none"
               keyboardType="email-address"
-              value={emailAllenatore}
-              onChangeText={setEmailAllenatore}
+              value={emailCollaboratore}
+              onChangeText={setEmailCollaboratore}
               autoFocus
             />
-            <Pressable style={styles.bottone} onPress={onAssegnaAllenatore} disabled={!emailAllenatore.trim()}>
+            <Pressable style={styles.bottone} onPress={onAssegnaCollaboratore} disabled={!emailCollaboratore.trim()}>
               <Text style={styles.bottoneTesto}>Invia invito</Text>
             </Pressable>
-            <Pressable onPress={() => setSquadraPerAllenatore(null)}><Text style={styles.chiudi}>Annulla</Text></Pressable>
+            <Pressable onPress={() => setSquadraPerCollaboratore(null)}><Text style={styles.chiudi}>Annulla</Text></Pressable>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={!!squadraPerRinomina} animationType="fade" transparent onRequestClose={() => setSquadraPerRinomina(null)}>
+        <View style={styles.sfondoPopup}>
+          <View style={styles.cartaPopup}>
+            <Text style={styles.titoloPopup}>Rinomina squadra</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Nuovo nome"
+              placeholderTextColor={brand.colors.muted}
+              value={nomeRinomina}
+              onChangeText={setNomeRinomina}
+              autoFocus
+            />
+            <Pressable style={styles.bottone} onPress={onRinomina} disabled={rinominando || !nomeRinomina.trim()}>
+              <Text style={styles.bottoneTesto}>{rinominando ? "Salvataggio…" : "Salva"}</Text>
+            </Pressable>
+            <Pressable onPress={() => setSquadraPerRinomina(null)}><Text style={styles.chiudi}>Annulla</Text></Pressable>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={!!squadraPerEliminazione} animationType="fade" transparent onRequestClose={() => setSquadraPerEliminazione(null)}>
+        <View style={styles.sfondoPopup}>
+          <View style={styles.cartaPopup}>
+            <Text style={styles.titoloPopup}>Eliminare {squadraPerEliminazione?.nome}?</Text>
+            <Text style={styles.nota}>
+              Azione irreversibile: verranno eliminati per sempre anche tutti gli atleti, gli allenamenti, le valutazioni, le partite e i piani di questa squadra. Per confermare, scrivi esattamente il nome della squadra: "{squadraPerEliminazione?.nome}".
+            </Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Ridigita il nome della squadra"
+              placeholderTextColor={brand.colors.muted}
+              value={nomeConfermaEliminazione}
+              onChangeText={setNomeConfermaEliminazione}
+              autoCapitalize="none"
+            />
+            <Pressable
+              style={styles.bottoneDistruttivoPieno}
+              onPress={onElimina}
+              disabled={eliminando || nomeConfermaEliminazione.trim() !== squadraPerEliminazione?.nome}
+            >
+              <Text style={styles.bottoneTesto}>{eliminando ? "Eliminazione…" : "Elimina definitivamente"}</Text>
+            </Pressable>
+            <Pressable onPress={() => setSquadraPerEliminazione(null)}><Text style={styles.chiudi}>Annulla</Text></Pressable>
           </View>
         </View>
       </Modal>
@@ -272,6 +457,38 @@ export default function GestioneSocieta() {
           </View>
         </View>
       </Modal>
+
+      <Modal visible={!!squadraPerStorico} animationType="fade" transparent onRequestClose={() => setSquadraPerStorico(null)}>
+        <View style={styles.sfondoPopup}>
+          <View style={styles.cartaPopup}>
+            <Text style={styles.titoloPopup}>Storico stagioni — {squadraPerStorico?.nome}</Text>
+            <ScrollView style={{ maxHeight: 360 }}>
+              {storicoCaricamento ? (
+                <ActivityIndicator color={brand.colors.brand} />
+              ) : storico.length === 0 ? (
+                <Text style={styles.nota}>Nessuna stagione trovata per questa società.</Text>
+              ) : (
+                storico.map((st) => (
+                  <View key={st.season_id} style={styles.rigaStorico}>
+                    <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+                      <Text style={styles.rigaSceltaTesto}>{st.nome}</Text>
+                      <Text style={[styles.badge, st.squadra_attivata && styles.badgeAttiva]}>
+                        {st.squadra_attivata ? "attivata" : "non attivata"}
+                      </Text>
+                    </View>
+                    <Text style={styles.dettaglioSquadra}>
+                      {st.stato === "attiva" ? "Stagione in corso" : "Conclusa"}
+                      {st.data_apertura ? ` · dal ${st.data_apertura}` : ""}
+                      {st.data_chiusura ? ` al ${st.data_chiusura}` : ""}
+                    </Text>
+                  </View>
+                ))
+              )}
+            </ScrollView>
+            <Pressable onPress={() => setSquadraPerStorico(null)}><Text style={styles.chiudi}>Chiudi</Text></Pressable>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -284,6 +501,7 @@ const styles = StyleSheet.create({
   card: { backgroundColor: brand.colors.surfaceSecondary, borderRadius: 12, padding: 14, gap: 8 },
   sezione: { color: brand.colors.onSurface, fontSize: 15, fontWeight: "700" },
   nomeSquadra: { color: brand.colors.onSurface, fontSize: 15, fontWeight: "700" },
+  matita: { color: brand.colors.muted, fontSize: 12, fontWeight: "400" },
   dettaglioSquadra: { color: brand.colors.muted, fontSize: 12.5 },
   nota: { color: brand.colors.muted, fontSize: 12, lineHeight: 17 },
   input: { backgroundColor: brand.colors.surfaceTertiary, color: brand.colors.onSurface, borderRadius: 8, padding: 12 },
@@ -293,10 +511,12 @@ const styles = StyleSheet.create({
   bottoneSecondarioTesto: { color: brand.colors.brandSecondary, fontWeight: "700", fontSize: 12.5 },
   bottoneSecondarioDistruttivo: { borderWidth: 1, borderColor: brand.colors.error, borderRadius: 8, paddingVertical: 8, paddingHorizontal: 10, alignItems: "center", marginTop: 2 },
   bottoneSecondarioDistruttivoTesto: { color: brand.colors.error, fontWeight: "700", fontSize: 12.5 },
+  bottoneDistruttivoPieno: { backgroundColor: brand.colors.error, paddingHorizontal: 18, paddingVertical: 12, borderRadius: 8, alignItems: "center", justifyContent: "center" },
   badge: { color: brand.colors.muted, fontSize: 11, textTransform: "uppercase", fontWeight: "700" },
   badgeAttiva: { color: brand.colors.success },
   label: { color: brand.colors.muted, fontSize: 12, textTransform: "uppercase", marginTop: 6 },
   rigaScelta: { backgroundColor: brand.colors.surfaceTertiary, borderRadius: 8, padding: 10, marginTop: 4, borderWidth: 1, borderColor: "transparent" },
+  rigaStorico: { backgroundColor: brand.colors.surfaceTertiary, borderRadius: 8, padding: 10, marginTop: 4, gap: 3 },
   rigaSceltaAttiva: { borderColor: brand.colors.brand },
   rigaSceltaTesto: { color: brand.colors.onSurface, fontSize: 13.5, fontWeight: "600" },
   sfondoPopup: { flex: 1, backgroundColor: "rgba(0,0,0,0.55)", justifyContent: "center", padding: 24 },
