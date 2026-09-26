@@ -127,9 +127,10 @@ export interface EvaluationProposal {
   decisa_da: string | null;
 }
 
+/** La stagione è di società (condivisa da tutte le squadre), non più di singola squadra. */
 export interface Season {
   id: string;
-  team_id: string;
+  societa_id: string;
   nome: string;
   stato: StatoStagione;
   data_apertura: string;

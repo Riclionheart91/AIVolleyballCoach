@@ -15,6 +15,8 @@ export interface SquadraSocieta {
   numero_membri: number;
   allenatore_email: string | null;
   stagione_attiva: string | null;
+  /** Questa squadra è stata confermata dal presidente per la stagione attiva della società. */
+  squadra_attivata: boolean;
 }
 
 export async function elencaSquadreSocieta(societaId: string): Promise<SquadraSocieta[]> {

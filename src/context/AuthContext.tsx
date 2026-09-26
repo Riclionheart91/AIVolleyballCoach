@@ -19,6 +19,9 @@ interface RigaContesto {
   stagione_id: string | null;
   stagione_nome: string | null;
   stagione_stato: string | null;
+  /** Esiste una stagione attiva per la società, a prescindere dal fatto che QUESTA squadra sia stata attivata. */
+  stagione_societa_esiste: boolean;
+  /** Vero solo se la stagione di società è attiva E questa squadra è stata confermata dal presidente per essa. */
   stagione_aperta: boolean;
 }
 
@@ -58,6 +61,10 @@ interface AuthState {
   caricamentoContesto: boolean;
   erroreTeam: string | null;
   stagioneAttiva: Season | null;
+  /** Esiste una stagione attiva per la società della squadra corrente, anche se questa squadra non è ancora stata attivata per essa. */
+  stagioneSocietaEsiste: boolean;
+  /** Questa squadra è stata confermata dal presidente per la stagione corrente (equivale a stagioneAttiva !== null, esposto a parte per leggibilità). */
+  squadraAttivata: boolean;
   accediConGoogle: () => Promise<void>;
   esci: () => Promise<void>;
   creaPrimaSquadra: (nome: string) => Promise<void>;
@@ -78,6 +85,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [caricamentoContesto, setCaricamentoContesto] = useState(true);
   const [erroreTeam, setErroreTeam] = useState<string | null>(null);
   const [stagioneAttiva, setStagioneAttiva] = useState<Season | null>(null);
+  const [stagioneSocietaEsiste, setStagioneSocietaEsiste] = useState(false);
 
   useEffect(() => {
     supabaseClient.auth.getSession().then(({ data }) => {
@@ -110,7 +118,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   async function ricaricaContesto() {
     if (!session) {
       setTeam(null); setRuolo(null); setAtletaId(null);
-      setSquadreDisponibili([]); setStagioneAttiva(null);
+      setSquadreDisponibili([]); setStagioneAttiva(null); setStagioneSocietaEsiste(false);
       setCaricamentoContesto(false);
       return;
     }
@@ -124,7 +132,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.warn("Errore nel caricamento del contesto squadra:", error.message);
       setErroreTeam(error.message);
       setTeam(null); setRuolo(null); setAtletaId(null);
-      setSquadreDisponibili([]); setStagioneAttiva(null);
+      setSquadreDisponibili([]); setStagioneAttiva(null); setStagioneSocietaEsiste(false);
       setCaricamentoContesto(false);
       return;
     }
@@ -134,7 +142,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     if (righe.length === 0) {
       setTeam(null); setRuolo(null); setAtletaId(null);
-      setSquadreDisponibili([]); setStagioneAttiva(null);
+      setSquadreDisponibili([]); setStagioneAttiva(null); setStagioneSocietaEsiste(false);
       setCaricamentoContesto(false);
       return;
     }
@@ -155,9 +163,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setTeam(opzioni.find((o) => o.team.id === rigaScelta.team_id)!.team);
     setRuolo(rigaScelta.ruolo);
     setAtletaId(rigaScelta.atleta_id);
+    setStagioneSocietaEsiste(rigaScelta.stagione_societa_esiste);
     setStagioneAttiva(
       rigaScelta.stagione_aperta && rigaScelta.stagione_id
-        ? { id: rigaScelta.stagione_id, team_id: rigaScelta.team_id, nome: rigaScelta.stagione_nome!, stato: "attiva", data_apertura: "", data_chiusura: null, creata_il: "", creata_da: null }
+        ? { id: rigaScelta.stagione_id, societa_id: rigaScelta.team_societa_id ?? "", nome: rigaScelta.stagione_nome!, stato: "attiva", data_apertura: "", data_chiusura: null, creata_il: "", creata_da: null }
         : null,
     );
     setCaricamentoContesto(false);
@@ -216,10 +225,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const value = useMemo<AuthState>(
     () => ({
       session, caricamento, team, ruolo, atletaId, puoScrivere, soloLettura, puoScoutare, puoUsareAI, puoGestireStagioni, isSuperuser,
-      societaPresidenza, squadreDisponibili, cambiaSquadra, caricamentoContesto, erroreTeam, stagioneAttiva,
+      societaPresidenza, squadreDisponibili, cambiaSquadra, caricamentoContesto, erroreTeam, stagioneAttiva, stagioneSocietaEsiste,
+      squadraAttivata: stagioneAttiva !== null,
       accediConGoogle, esci, creaPrimaSquadra, ricaricaContesto,
     }),
-    [session, caricamento, team, ruolo, atletaId, isSuperuser, societaPresidenza, squadreDisponibili, caricamentoContesto, erroreTeam, stagioneAttiva],
+    [session, caricamento, team, ruolo, atletaId, isSuperuser, societaPresidenza, squadreDisponibili, caricamentoContesto, erroreTeam, stagioneAttiva, stagioneSocietaEsiste],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

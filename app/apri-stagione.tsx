@@ -1,43 +1,43 @@
 import { useCallback, useState } from "react";
-import { View, Text, TextInput, Pressable, StyleSheet, FlatList } from "react-native";
+import { View, Text, TextInput, Pressable, StyleSheet, FlatList, ActivityIndicator } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { useAuth } from "@/src/context/AuthContext";
-import { attivaStagione, creaStagione, elencaStagioni } from "@/src/services/seasons";
+import { apriPrimaStagioneSocieta, attivaSquadraInStagione, elencaStagioniSocieta } from "@/src/services/seasons";
 import { confermaAzione, avvisa } from "@/src/lib/confermaAzione";
 import { brand } from "@/src/config";
 import type { Season } from "@/src/types/database";
 
 /**
- * Gate obbligatorio: senza una stagione attiva, l'allenatore/vice deve
- * aprirne una prima di entrare nell'app operativa. Prima questa
- * schermata offriva solo "creane una nuova" anche quando esisteva già
- * una stagione creata in precedenza (stato "pianificata") mai attivata
- * — costringendo a passare dalla tab Stagioni per trovarla. Ora, se ce
- * n'è una, la propone direttamente qui con un pulsante "Attiva questa".
+ * Gate obbligatorio: senza una stagione ATTIVA E la propria squadra
+ * CONFERMATA per essa, non si entra nell'app operativa. Con il modello
+ * di stagione a livello di società, ci sono due casi distinti da
+ * distinguere chiaramente per non confondere l'utente:
+ *  - non esiste ancora nessuna stagione per la società;
+ *  - la società ha una stagione attiva, ma QUESTA squadra non è ancora
+ *    stata confermata dal presidente per essa (il caso nuovo, introdotto
+ *    apposta perché "nessuno deve poter accedere alla nuova stagione
+ *    finché il presidente non riassegna le squadre").
  */
 export default function ApriStagione() {
-  const { team, puoGestireStagioni, ricaricaContesto } = useAuth();
-  const [stagioni, setStagioni] = useState<Season[]>([]);
+  const { team, puoGestireStagioni, stagioneSocietaEsiste, ricaricaContesto } = useAuth();
+  const [stagioniConcluse, setStagioniConcluse] = useState<Season[]>([]);
   const [nome, setNome] = useState("");
   const [inCorso, setInCorso] = useState(false);
-  const [mostraFormNuova, setMostraFormNuova] = useState(false);
 
   const carica = useCallback(async () => {
-    if (!team) return;
-    setStagioni(await elencaStagioni(team.id));
+    if (!team?.societaId) return;
+    const tutte = await elencaStagioniSocieta(team.societaId);
+    setStagioniConcluse(tutte.filter((s) => s.stato === "conclusa"));
   }, [team]);
 
   useFocusEffect(useCallback(() => { carica(); }, [carica]));
 
-  const stagioniPianificate = stagioni.filter((s) => s.stato === "pianificata");
-  const stagioniConcluse = stagioni.filter((s) => s.stato === "conclusa");
-
-  async function aprineUnaNuova() {
-    if (!team || !nome.trim()) return;
+  async function apriPrima() {
+    if (!team?.societaId || !nome.trim()) return;
     setInCorso(true);
     try {
-      const stagione = await creaStagione(team.id, { nome: nome.trim(), data_apertura: new Date().toISOString().slice(0, 10) });
-      await attivaStagione(stagione.id);
+      await apriPrimaStagioneSocieta(team.societaId, nome.trim());
+      await attivaSquadraInStagione(team.id);
       await ricaricaContesto();
       router.replace("/(tabs)");
     } catch (e) {
@@ -47,15 +47,16 @@ export default function ApriStagione() {
     }
   }
 
-  function chiediAttivazione(stagione: Season) {
+  function chiediAttivazione() {
+    if (!team) return;
     confermaAzione(
-      "Attivare questa stagione?",
-      `"${stagione.nome}" era già stata creata ma non ancora attivata. Attivarla ora renderà l'app operativa per registrare allenamenti e valutazioni.`,
+      "Attivare questa squadra per la stagione in corso?",
+      "Da questo momento allenatore, vice e atleti di questa squadra potranno registrare allenamenti e valutazioni nella nuova stagione.",
       "Attiva",
       async () => {
         setInCorso(true);
         try {
-          await attivaStagione(stagione.id);
+          await attivaSquadraInStagione(team.id);
           await ricaricaContesto();
           router.replace("/(tabs)");
         } catch (e) {
@@ -73,38 +74,38 @@ export default function ApriStagione() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Nessuna stagione attiva</Text>
-
       {puoGestireStagioni ? (
-        <>
-          {stagioniPianificate.length > 0 && (
+        stagioneSocietaEsiste ? (
+          <>
+            <Text style={styles.title}>Squadra non ancora attivata</Text>
+            <Text style={styles.sottotitolo}>
+              La società ha una stagione in corso, ma questa squadra non è ancora stata confermata per parteciparvi. Attivala per iniziare a registrare allenamenti e valutazioni.
+            </Text>
+            <Pressable style={styles.bottone} onPress={chiediAttivazione} disabled={inCorso}>
+              <Text style={styles.bottoneTesto}>{inCorso ? "Un attimo…" : "Attiva questa squadra"}</Text>
+            </Pressable>
+          </>
+        ) : (
+          <>
+            <Text style={styles.title}>Nessuna stagione attiva</Text>
             <View style={styles.form}>
-              <Text style={styles.sottotitolo}>Hai già {stagioniPianificate.length === 1 ? "una stagione creata" : "delle stagioni create"} ma non ancora attivata. Vuoi usare questa, o preferisci crearne una nuova?</Text>
-              {stagioniPianificate.map((s) => (
-                <Pressable key={s.id} style={styles.rigaPianificata} onPress={() => chiediAttivazione(s)} disabled={inCorso}>
-                  <Text style={styles.rigaStagioneTesto}>{s.nome}</Text>
-                  <Text style={styles.bottoneAttivaInline}>Attiva questa →</Text>
-                </Pressable>
-              ))}
-            </View>
-          )}
-
-          {(mostraFormNuova || stagioniPianificate.length === 0) ? (
-            <View style={styles.form}>
-              <Text style={styles.sottotitolo}>{stagioniPianificate.length > 0 ? "Oppure crea una nuova stagione:" : "Apri una nuova stagione per iniziare a registrare allenamenti e valutazioni."}</Text>
+              <Text style={styles.sottotitolo}>Apri la prima stagione della società per iniziare a registrare allenamenti e valutazioni.</Text>
               <TextInput style={styles.input} placeholder="Nome stagione (es. 2026/2027)" placeholderTextColor={brand.colors.muted} value={nome} onChangeText={setNome} />
-              <Pressable style={styles.bottone} onPress={aprineUnaNuova} disabled={inCorso || !nome.trim()}>
-                <Text style={styles.bottoneTesto}>{inCorso ? "Apertura…" : "Crea e attiva"}</Text>
+              <Pressable style={styles.bottone} onPress={apriPrima} disabled={inCorso || !nome.trim()}>
+                <Text style={styles.bottoneTesto}>{inCorso ? "Apertura…" : "Apri e attiva la mia squadra"}</Text>
               </Pressable>
             </View>
-          ) : (
-            <Pressable onPress={() => setMostraFormNuova(true)}>
-              <Text style={styles.linkCreaNuova}>Preferisco crearne una nuova</Text>
-            </Pressable>
-          )}
-        </>
+          </>
+        )
       ) : (
-        <Text style={styles.sottotitolo}>Il presidente della società non ha ancora aperto la stagione corrente. Puoi consultare in sola lettura le stagioni passate qui sotto.</Text>
+        <>
+          <Text style={styles.title}>Nessuna stagione attiva</Text>
+          <Text style={styles.sottotitolo}>
+            {stagioneSocietaEsiste
+              ? "Il presidente della società ha aperto la nuova stagione, ma non ha ancora attivato questa squadra. Aspetta la sua conferma: potrai registrare allenamenti e valutazioni non appena l'avrà fatto."
+              : "Il presidente della società non ha ancora aperto la stagione corrente. Puoi consultare in sola lettura le stagioni passate qui sotto."}
+          </Text>
+        </>
       )}
 
       {stagioniConcluse.length > 0 && (
@@ -122,6 +123,8 @@ export default function ApriStagione() {
           />
         </>
       )}
+
+      {inCorso && <ActivityIndicator color={brand.colors.brand} />}
     </View>
   );
 }
@@ -134,11 +137,8 @@ const styles = StyleSheet.create({
   input: { backgroundColor: brand.colors.surfaceTertiary, color: brand.colors.onSurface, borderRadius: 8, padding: 10 },
   bottone: { backgroundColor: brand.colors.brand, padding: 12, borderRadius: 8, alignItems: "center" },
   bottoneTesto: { color: "#000", fontWeight: "700" },
-  linkCreaNuova: { color: brand.colors.brandSecondary, fontSize: 13, fontWeight: "600" },
   sezione: { color: brand.colors.muted, fontSize: 13, textTransform: "uppercase", marginTop: 8 },
   rigaStagione: { backgroundColor: brand.colors.surfaceSecondary, borderRadius: 10, padding: 12, marginBottom: 8 },
-  rigaPianificata: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", backgroundColor: brand.colors.surfaceTertiary, borderRadius: 10, padding: 12, marginTop: 4 },
   rigaStagioneTesto: { color: brand.colors.onSurface, fontWeight: "600" },
   rigaStagioneSotto: { color: brand.colors.muted, fontSize: 12 },
-  bottoneAttivaInline: { color: brand.colors.brand, fontWeight: "700", fontSize: 13 },
 });

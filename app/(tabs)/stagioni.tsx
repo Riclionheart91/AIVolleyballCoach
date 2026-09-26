@@ -1,26 +1,32 @@
 import { useCallback, useState } from "react";
-import { View, Text, FlatList, TextInput, Pressable, StyleSheet, RefreshControl } from "react-native";
+import { View, Text, FlatList, Pressable, StyleSheet, RefreshControl } from "react-native";
 import { useFocusEffect } from "expo-router";
 import { useAuth } from "@/src/context/AuthContext";
-import { attivaStagione, concludiStagione, creaStagione, elencaStagioni, generaBaselineStagione } from "@/src/services/seasons";
+import { chiudiEApriNuovaStagioneSocieta, elencaStagioniSocieta, generaBaselineStagione } from "@/src/services/seasons";
 import { confermaAzione, avvisa } from "@/src/lib/confermaAzione";
-import { FabAggiungi } from "@/src/components/Fab";
-import { PopupForm } from "@/src/components/PopupForm";
 import { brand } from "@/src/config";
 import type { Season } from "@/src/types/database";
 
+/**
+ * La stagione è ora di società, condivisa da tutte le squadre: questa
+ * tab mostra lo storico (attuale + concluse) della società della
+ * squadra corrente. Non esiste più un passaggio "crea stagione, poi
+ * attivala": aprire la prima stagione o passare alla successiva la
+ * rende attiva da subito (vedi apri-stagione.tsx e i servizi in
+ * seasons.ts) — qui resta solo l'azione di chiusura+riapertura e la
+ * generazione della baseline per la propria squadra.
+ */
 export default function Stagioni() {
-  const { team, puoScrivere, puoGestireStagioni, ricaricaContesto } = useAuth();
+  const { team, puoScrivere, puoGestireStagioni, stagioneAttiva, ricaricaContesto } = useAuth();
   const [stagioni, setStagioni] = useState<Season[]>([]);
   const [caricamento, setCaricamento] = useState(true);
-  const [popupAperto, setPopupAperto] = useState(false);
-  const [nome, setNome] = useState("");
+  const [inCorso, setInCorso] = useState(false);
 
   const carica = useCallback(async () => {
-    if (!team) return;
+    if (!team?.societaId) return;
     setCaricamento(true);
     try {
-      setStagioni(await elencaStagioni(team.id));
+      setStagioni(await elencaStagioniSocieta(team.societaId));
     } finally {
       setCaricamento(false);
     }
@@ -28,31 +34,10 @@ export default function Stagioni() {
 
   useFocusEffect(useCallback(() => { carica(); }, [carica]));
 
-  async function crea() {
-    if (!team || !nome.trim()) return;
+  async function generaBaseline(seasonId: string) {
+    if (!team) return;
     try {
-      await creaStagione(team.id, { nome: nome.trim(), data_apertura: new Date().toISOString().slice(0, 10) });
-      setNome("");
-      setPopupAperto(false);
-      carica();
-    } catch (e) {
-      avvisa("Errore nella creazione della stagione", (e as Error).message);
-    }
-  }
-
-  async function attiva(id: string) {
-    try {
-      await attivaStagione(id);
-      carica();
-      await ricaricaContesto();
-    } catch (e) {
-      avvisa("Errore", (e as Error).message);
-    }
-  }
-
-  async function generaBaseline(id: string) {
-    try {
-      const n = await generaBaselineStagione(id);
+      const n = await generaBaselineStagione(team.id, seasonId);
       if (n === 0) {
         avvisa(
           "Nessuna valutazione da usare come punto di partenza",
@@ -66,12 +51,24 @@ export default function Stagioni() {
     }
   }
 
-  function conferimaConclusione(id: string, nomeStagione: string) {
+  function confermaChiusura() {
+    if (!team?.societaId) return;
     confermaAzione(
-      "Terminare la stagione?",
-      `"${nomeStagione}" verrà segnata come conclusa. Resta consultabile in sola lettura, ma per registrare nuovi allenamenti/valutazioni dovrai aprirne un'altra.`,
-      "Termina",
-      async () => { try { await concludiStagione(id); carica(); await ricaricaContesto(); } catch (e) { avvisa("Errore", (e as Error).message); } },
+      "Chiudere la stagione e aprirne subito una nuova?",
+      "La stagione corrente verrà segnata come conclusa (resta consultabile in sola lettura da tutta la società) e se ne aprirà subito un'altra. Nessuna squadra sarà attiva nella nuova stagione finché non la riattivi tu da Gestione società — comprese quelle che stai usando oggi.",
+      "Chiudi e apri la nuova",
+      async () => {
+        setInCorso(true);
+        try {
+          await chiudiEApriNuovaStagioneSocieta(team.societaId!);
+          await ricaricaContesto();
+          carica();
+        } catch (e) {
+          avvisa("Errore", (e as Error).message);
+        } finally {
+          setInCorso(false);
+        }
+      },
       true,
     );
   }
@@ -83,7 +80,7 @@ export default function Stagioni() {
         keyExtractor={(s) => s.id}
         contentContainerStyle={{ padding: 16, paddingBottom: 90 }}
         refreshControl={<RefreshControl refreshing={caricamento} onRefresh={carica} tintColor={brand.colors.brand} />}
-        ListEmptyComponent={!caricamento ? <Text style={styles.vuoto}>Nessuna stagione ancora. Usa il pulsante + qui sotto.</Text> : null}
+        ListEmptyComponent={!caricamento ? <Text style={styles.vuoto}>Nessuna stagione ancora.</Text> : null}
         renderItem={({ item }) => (
           <View style={styles.card}>
             <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
@@ -92,43 +89,29 @@ export default function Stagioni() {
             </View>
             <Text style={styles.cardSotto}>Apertura: {item.data_apertura}</Text>
             <View style={styles.azioni}>
-              {puoGestireStagioni && item.stato !== "attiva" && item.stato !== "conclusa" && (
-                <Pressable style={styles.bottoneSecondario} onPress={() => attiva(item.id)}>
-                  <Text style={styles.bottoneSecondarioTesto}>Attiva</Text>
-                </Pressable>
-              )}
-              {puoScrivere && (
+              {puoScrivere && item.stato === "attiva" && (
                 <Pressable style={styles.bottoneSecondario} onPress={() => generaBaseline(item.id)}>
                   <Text style={styles.bottoneSecondarioTesto}>Genera baseline</Text>
                 </Pressable>
               )}
-              {puoGestireStagioni && item.stato !== "conclusa" && (
-                <Pressable style={styles.bottoneSecondarioDistruttivo} onPress={() => conferimaConclusione(item.id, item.nome)}>
-                  <Text style={styles.bottoneSecondarioDistruttivoTesto}>Termina</Text>
+              {puoGestireStagioni && item.stato === "attiva" && (
+                <Pressable style={styles.bottoneSecondarioDistruttivo} onPress={confermaChiusura} disabled={inCorso}>
+                  <Text style={styles.bottoneSecondarioDistruttivoTesto}>{inCorso ? "Un attimo…" : "Termina e apri la nuova"}</Text>
                 </Pressable>
               )}
             </View>
           </View>
         )}
       />
-
-      {puoGestireStagioni && <FabAggiungi onPress={() => setPopupAperto(true)} />}
-
-      <PopupForm visibile={popupAperto} titolo="Nuova stagione" haModifiche={nome.trim().length > 0} onChiudi={() => { setPopupAperto(false); setNome(""); }}>
-        <TextInput style={styles.input} placeholder="Nome stagione (es. 2026/2027)" placeholderTextColor={brand.colors.muted} value={nome} onChangeText={setNome} autoFocus />
-        <Pressable style={styles.bottone} onPress={crea} disabled={!nome.trim()}>
-          <Text style={styles.bottoneTesto}>Crea stagione</Text>
-        </Pressable>
-      </PopupForm>
+      {!stagioneAttiva && !caricamento && (
+        <Text style={styles.vuoto}>La tua squadra non è attiva nella stagione corrente della società.</Text>
+      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: brand.colors.surface },
-  input: { backgroundColor: brand.colors.surfaceTertiary, color: brand.colors.onSurface, borderRadius: 8, padding: 12 },
-  bottone: { backgroundColor: brand.colors.brand, padding: 12, borderRadius: 8, alignItems: "center" },
-  bottoneTesto: { color: "#000", fontWeight: "700" },
   card: { backgroundColor: brand.colors.surfaceSecondary, borderRadius: 12, padding: 14, marginBottom: 10, gap: 4 },
   cardTitolo: { color: brand.colors.onSurface, fontSize: 16, fontWeight: "700" },
   cardSotto: { color: brand.colors.muted, fontSize: 13 },
