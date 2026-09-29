@@ -6,19 +6,21 @@
 //
 // Deploy: supabase functions deploy sync-sporteasy
 //
-// V2 — corregge due bug reali trovati dopo il primo utilizzo:
-// 1. Il calendario SportEasy usa eventi RICORRENTI (RRULE) per gli
-//    allenamenti settimanali fissi ("ogni martedì e giovedì") — un
-//    parser che legge solo DTSTART importava al massimo UNA sola
-//    occorrenza invece di tutte le sedute. Ora espande FREQ=WEEKLY con
-//    BYDAY/COUNT/UNTIL in una finestra di alcuni mesi.
-// 2. La classifica "allenamento vs partita" richiedeva la parola esatta
-//    "allenamento"/"training" nel titolo. Invertita: un evento è una
-//    PARTITA solo se il titolo somiglia a un incontro (vs/contro/
-//    partita/campionato), altrimenti si assume allenamento — riflette
-//    meglio la realtà di un calendario club (la maggioranza delle
-//    voci sono sedute di allenamento, le partite sono l'eccezione
-//    nominata esplicitamente).
+// V3 — la classificazione automatica per parole chiave (V2) sbagliava
+// spesso su calendari reali, quindi ora la parola finale è
+// dell'allenatore: ogni TITOLO mai visto prima per questa squadra
+// (tabella sporteasy_classificazioni, unique per team_id+chiave_titolo)
+// viene proposto nel popup di sincronizzazione invece di essere scritto
+// da solo. La classificazione a parole chiave resta, ma solo come
+// SUGGERIMENTO preselezionato nel popup — l'allenatore può cambiarlo.
+// Una volta scelto (anche una sola volta), la scelta resta in memoria
+// per quel titolo e quella squadra: le sincronizzazioni successive con
+// lo stesso titolo si applicano da sole, senza richiedere di nuovo la
+// scelta. Gli eventi già presenti nel database (scritti da una
+// sincronizzazione precedente, prima che esistesse questa memoria)
+// vengono riconosciuti dal loro sporteasy_uid e non ripropongono la
+// scelta: la loro classificazione viene dedotta dalla tabella in cui
+// già si trovano e salvata in memoria per la prossima volta.
 
 import { createClient } from "npm:@supabase/supabase-js@2";
 
@@ -51,11 +53,20 @@ function rispostaPreflight(req: Request): Response {
 
 const GIORNI_ICS: Record<string, number> = { SU: 0, MO: 1, TU: 2, WE: 3, TH: 4, FR: 5, SA: 6 };
 const FINESTRA_ESPANSIONE_GIORNI = 180; // ~6 mesi di occorrenze future/passate generate per gli eventi ricorrenti
+const TIPI_VALIDI = new Set(["allenamento", "partita", "evento"]);
 
 interface VEvent {
   uid: string;
   summary: string;
   dataInizio: string; // ISO
+}
+
+interface EventoDaClassificare {
+  uid: string;
+  summary: string;
+  dataInizio: string;
+  chiaveTitolo: string;
+  suggerito: "allenamento" | "partita" | "evento";
 }
 
 Deno.serve(async (req) => {
@@ -67,7 +78,10 @@ Deno.serve(async (req) => {
     const { data: userData, error: userErr } = await userClient.auth.getUser();
     if (userErr || !userData.user) return jsonResponse({ errore: true, messaggio: "Sessione non valida." }, 401);
 
-    const { team_id } = await req.json();
+    const corpo = await req.json();
+    const team_id: string | undefined = corpo.team_id;
+    const azione: string = corpo.azione ?? "sincronizza";
+    const scelte: Record<string, string> | undefined = corpo.scelte;
     if (!team_id) return jsonResponse({ errore: true, messaggio: "team_id mancante." }, 400);
 
     const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
@@ -83,6 +97,23 @@ Deno.serve(async (req) => {
     const { data: integrazione } = await admin.from("team_integrations").select("*").eq("team_id", team_id).maybeSingle();
     if (!integrazione?.sporteasy_ical_url) {
       return jsonResponse({ errore: true, messaggio: "Nessun link calendario SportEasy configurato per questa squadra." }, 400);
+    }
+
+    // Fase "risolvi": l'allenatore ha appena scelto (dal popup) come
+    // classificare uno o più titoli mai visti. Le scelte vanno salvate
+    // in memoria PRIMA di rileggere il calendario, così il ciclo di
+    // classificazione qui sotto (identico per le due azioni) le trova
+    // già pronte e scrive subito gli allenamenti/partite corrispondenti
+    // invece di riproporli.
+    if (azione === "risolvi") {
+      if (!scelte || typeof scelte !== "object") return jsonResponse({ errore: true, messaggio: "scelte mancanti." }, 400);
+      const righe = Object.entries(scelte)
+        .filter(([, tipo]) => TIPI_VALIDI.has(tipo))
+        .map(([chiave_titolo, tipo]) => ({ team_id, chiave_titolo, tipo }));
+      if (righe.length > 0) {
+        const { error } = await admin.from("sporteasy_classificazioni").upsert(righe, { onConflict: "team_id,chiave_titolo" });
+        if (error) return jsonResponse({ errore: true, messaggio: `Errore nel salvare le classificazioni: ${error.message}` }, 500);
+      }
     }
 
     const url = integrazione.sporteasy_ical_url.replace(/^webcal:\/\//i, "https://");
@@ -117,71 +148,92 @@ Deno.serve(async (req) => {
 
     const eventi = analizzaIcs(testoIcs);
 
-    let allenamentiCreati = 0, allenamentiAggiornati = 0, partiteCreate = 0, partiteAggiornate = 0;
+    // Memoria delle classificazioni già decise per questa squadra
+    // (comprese quelle appena salvate sopra, nel caso di "risolvi").
+    const { data: classificazioniEsistenti } = await admin.from("sporteasy_classificazioni").select("chiave_titolo, tipo").eq("team_id", team_id);
+    const mappaClassificazioni = new Map<string, "allenamento" | "partita" | "evento">(
+      (classificazioniEsistenti ?? []).map((r) => [r.chiave_titolo, r.tipo as "allenamento" | "partita" | "evento"]),
+    );
+    const nuoveClassificazioniDaSalvare: { team_id: string; chiave_titolo: string; tipo: string }[] = [];
+
+    const contatori = { allenamentiCreati: 0, allenamentiAggiornati: 0, partiteCreate: 0, partiteAggiornate: 0 };
     const dettaglioClassificazione: { titolo: string; tipo: string }[] = [];
     const erroriScrittura: string[] = [];
-
+    const pendenti = new Map<string, EventoDaClassificare>();
     let eventiIgnorati = 0;
-    for (const ev of eventi) {
-      const tipo = classificaEvento(ev.summary, nomeSquadra);
-      dettaglioClassificazione.push({ titolo: ev.summary, tipo });
 
-      if (tipo === "evento") {
-        // Non è né un allenamento né una partita (es. riunioni, feste,
-        // assemblee messe sullo stesso calendario del club): si
-        // classifica ma NON si scrive da nessuna parte, invece di
-        // finire per sbaglio tra gli allenamenti come accadeva prima.
-        eventiIgnorati++;
+    for (const ev of eventi) {
+      const chiaveTitolo = normalizzaTitolo(ev.summary);
+      let tipo = mappaClassificazioni.get(chiaveTitolo);
+
+      if (!tipo) {
+        // Titolo mai classificato in memoria: prima di chiedere
+        // all'allenatore, controlliamo se questo esatto evento (per
+        // sporteasy_uid) è già stato scritto da una sincronizzazione
+        // precedente — capita per tutto ciò che è stato importato
+        // prima che esistesse questa memoria. In tal caso la sua
+        // classificazione è già "decisa" (la tabella in cui si trova
+        // lo dice) e non va riproposta nel popup: la deduciamo e la
+        // salviamo in memoria per la prossima volta.
+        const { data: trainingEsistente } = await admin.from("trainings").select("id").eq("team_id", team_id).eq("sporteasy_uid", ev.uid).maybeSingle();
+        if (trainingEsistente) {
+          tipo = "allenamento";
+        } else {
+          const { data: matchEsistente } = await admin.from("matches").select("id").eq("team_id", team_id).eq("sporteasy_uid", ev.uid).maybeSingle();
+          if (matchEsistente) tipo = "partita";
+        }
+        if (tipo) {
+          mappaClassificazioni.set(chiaveTitolo, tipo);
+          nuoveClassificazioniDaSalvare.push({ team_id, chiave_titolo: chiaveTitolo, tipo });
+        }
+      }
+
+      if (!tipo) {
+        // Genuinamente nuovo: nessuna memoria, nessuna riga esistente.
+        // Va proposto nel popup — un solo suggerimento per titolo
+        // distinto, anche se un evento ricorrente genera decine di
+        // occorrenze con lo stesso titolo.
+        if (!pendenti.has(chiaveTitolo)) {
+          pendenti.set(chiaveTitolo, { uid: ev.uid, summary: ev.summary, dataInizio: ev.dataInizio, chiaveTitolo, suggerito: suggerisciTipo(ev.summary, nomeSquadra) });
+        }
         continue;
       }
 
-      if (tipo === "allenamento") {
-        const { data: esistente } = await admin.from("trainings").select("id").eq("team_id", team_id).eq("sporteasy_uid", ev.uid).maybeSingle();
-        if (esistente) {
-          const { error } = await admin.from("trainings").update({ titolo: titoloAllenamento(ev.summary, nomeSquadra), data: ev.dataInizio }).eq("id", esistente.id);
-          if (error) erroriScrittura.push(`"${ev.summary}": ${error.message}`); else allenamentiAggiornati++;
-        } else {
-          const { error } = await admin.from("trainings").insert({ team_id, titolo: titoloAllenamento(ev.summary, nomeSquadra), data: ev.dataInizio, note: "", sporteasy_uid: ev.uid });
-          if (error) erroriScrittura.push(`"${ev.summary}": ${error.message}`); else allenamentiCreati++;
-        }
+      dettaglioClassificazione.push({ titolo: ev.summary, tipo });
+      if (tipo === "evento") {
+        eventiIgnorati++;
       } else {
-        const avversario = estraiAvversario(ev.summary, nomeSquadra);
-        const { data: esistente } = await admin.from("matches").select("id").eq("team_id", team_id).eq("sporteasy_uid", ev.uid).maybeSingle();
-        if (esistente) {
-          // Aggiorna solo avversario/data: il campionato, se già
-          // assegnato (magari corretto a mano dall'allenatore), non
-          // viene mai sovrascritto da una risincronizzazione.
-          const { error } = await admin.from("matches").update({ avversario, data: ev.dataInizio }).eq("id", esistente.id);
-          if (error) erroriScrittura.push(`"${ev.summary}": ${error.message}`); else partiteAggiornate++;
-        } else {
-          // Solo alla PRIMA creazione: assegna in automatico il
-          // campionato il cui periodo copre la data della partita —
-          // sempre modificabile a mano dopo, dalla tab Partite.
-          const dataSolaData = ev.dataInizio.slice(0, 10);
-          const { data: campionatoId } = await admin.rpc("trova_campionato_per_data", { p_team_id: team_id, p_data: dataSolaData });
-          const { error } = await admin.from("matches").insert({
-            team_id, avversario, data: ev.dataInizio, luogo: "casa", stato: "programmata", sporteasy_uid: ev.uid,
-            campionato_id: campionatoId ?? null, tipo_gara: campionatoId ? "campionato" : "amichevole",
-          });
-          if (error) erroriScrittura.push(`"${ev.summary}": ${error.message}`); else partiteCreate++;
-        }
+        await scriviEvento(admin, team_id, ev, tipo, nomeSquadra, contatori, erroriScrittura);
       }
+    }
+
+    if (nuoveClassificazioniDaSalvare.length > 0) {
+      // Dedotte dalle righe già esistenti: non possono confliggere con
+      // scelte diverse già in memoria (altrimenti mappaClassificazioni
+      // le avrebbe già trovate), quindi un upsert semplice basta.
+      await admin.from("sporteasy_classificazioni").upsert(nuoveClassificazioniDaSalvare, { onConflict: "team_id,chiave_titolo" });
     }
 
     await registraEsito(admin, team_id, erroriScrittura.length > 0 ? `${erroriScrittura.length} errori di scrittura` : "ok");
 
     return jsonResponse({
       errore: false,
-      allenamentiCreati, allenamentiAggiornati, partiteCreate, partiteAggiornate,
-      // Eventi riconosciuti ma volutamente NON scritti da nessuna parte
-      // (riunioni, feste...): il coach deve poterli distinguere da un
-      // allenamento o una partita mancati per errore.
+      allenamentiCreati: contatori.allenamentiCreati,
+      allenamentiAggiornati: contatori.allenamentiAggiornati,
+      partiteCreate: contatori.partiteCreate,
+      partiteAggiornate: contatori.partiteAggiornate,
+      // Eventi classificati come "ignora" (dall'allenatore o in
+      // memoria): riconosciuti ma volutamente NON scritti da nessuna
+      // parte.
       eventiIgnorati,
       totaleEventiNelCalendario: eventi.length,
       // Diagnostica: il coach può vedere ESATTAMENTE come ogni titolo è
-      // stato classificato, invece di dover indovinare perché un evento
-      // è finito nella categoria sbagliata.
+      // stato classificato, invece di dover indovinare.
       dettaglioClassificazione,
+      // Titoli mai visti per questa squadra: l'app deve mostrare un
+      // popup per farli classificare (con "suggerito" preselezionato)
+      // prima che vengano scritti. Vuoto = nessuna scelta da fare.
+      daClassificare: Array.from(pendenti.values()),
       // Errori di scrittura REALI: prima venivano ignorati del tutto e
       // i contatori venivano incrementati comunque, quindi la
       // sincronizzazione dichiarava "N creati" anche quando nel
@@ -202,21 +254,63 @@ async function registraEsito(admin: ReturnType<typeof createClient>, teamId: str
   await admin.from("team_integrations").update({ ultima_sincronizzazione: new Date().toISOString(), ultimo_esito: esito }).eq("team_id", teamId);
 }
 
+/** Chiave con cui un titolo evento viene ricordato in sporteasy_classificazioni: spazi ai bordi e maiuscole non devono contare come titoli diversi. */
+function normalizzaTitolo(summary: string): string {
+  return summary.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+/** Scrive (inserisce o aggiorna) un singolo evento già classificato come allenamento o partita. */
+async function scriviEvento(
+  admin: ReturnType<typeof createClient>,
+  teamId: string,
+  ev: VEvent,
+  tipo: "allenamento" | "partita",
+  nomeSquadra: string | null,
+  contatori: { allenamentiCreati: number; allenamentiAggiornati: number; partiteCreate: number; partiteAggiornate: number },
+  erroriScrittura: string[],
+): Promise<void> {
+  if (tipo === "allenamento") {
+    const { data: esistente } = await admin.from("trainings").select("id").eq("team_id", teamId).eq("sporteasy_uid", ev.uid).maybeSingle();
+    if (esistente) {
+      const { error } = await admin.from("trainings").update({ titolo: titoloAllenamento(ev.summary, nomeSquadra), data: ev.dataInizio }).eq("id", esistente.id);
+      if (error) erroriScrittura.push(`"${ev.summary}": ${error.message}`); else contatori.allenamentiAggiornati++;
+    } else {
+      const { error } = await admin.from("trainings").insert({ team_id: teamId, titolo: titoloAllenamento(ev.summary, nomeSquadra), data: ev.dataInizio, note: "", sporteasy_uid: ev.uid });
+      if (error) erroriScrittura.push(`"${ev.summary}": ${error.message}`); else contatori.allenamentiCreati++;
+    }
+    return;
+  }
+
+  const avversario = estraiAvversario(ev.summary, nomeSquadra);
+  const { data: esistente } = await admin.from("matches").select("id").eq("team_id", teamId).eq("sporteasy_uid", ev.uid).maybeSingle();
+  if (esistente) {
+    // Aggiorna solo avversario/data: il campionato, se già assegnato
+    // (magari corretto a mano dall'allenatore), non viene mai
+    // sovrascritto da una risincronizzazione.
+    const { error } = await admin.from("matches").update({ avversario, data: ev.dataInizio }).eq("id", esistente.id);
+    if (error) erroriScrittura.push(`"${ev.summary}": ${error.message}`); else contatori.partiteAggiornate++;
+  } else {
+    // Solo alla PRIMA creazione: assegna in automatico il campionato il
+    // cui periodo copre la data della partita — sempre modificabile a
+    // mano dopo, dalla tab Partite.
+    const dataSolaData = ev.dataInizio.slice(0, 10);
+    const { data: campionatoId } = await admin.rpc("trova_campionato_per_data", { p_team_id: teamId, p_data: dataSolaData });
+    const { error } = await admin.from("matches").insert({
+      team_id: teamId, avversario, data: ev.dataInizio, luogo: "casa", stato: "programmata", sporteasy_uid: ev.uid,
+      campionato_id: campionatoId ?? null, tipo_gara: campionatoId ? "campionato" : "amichevole",
+    });
+    if (error) erroriScrittura.push(`"${ev.summary}": ${error.message}`); else contatori.partiteCreate++;
+  }
+}
+
 /**
  * SportEasy nomina gli eventi "NomeSquadra - Qualcosa", dove
  * "Qualcosa" è il tipo di seduta ("Allenamento", "Sitting Volley") per
- * gli allenamenti e il nome dell'avversario per le partite. Quindi:
- * si toglie il prefisso con il nome della squadra e si guarda cosa
- * resta — se somiglia a un tipo di seduta è un allenamento, altrimenti
- * è una partita contro quella squadra. Restano riconosciute anche le
- * diciture esplicite ("vs", "contro", "partita"...) per i calendari
- * che non seguono quel formato.
- *
- * Un calendario di club, però, spesso contiene ANCHE voci che non sono
- * né l'uno né l'altro: riunioni, feste, assemblee, iscrizioni... Queste
- * vanno riconosciute come "evento" e NON scritte da nessuna parte —
- * prima finivano infilate tra gli allenamenti solo perché non
- * sembravano una partita, che è esattamente il problema segnalato.
+ * gli allenamenti e il nome dell'avversario per le partite. Questa
+ * funzione resta solo come SUGGERIMENTO preselezionato nel popup di
+ * classificazione — la parola finale è sempre dell'allenatore, la
+ * scelta di parole chiave qui sotto era troppo spesso sbagliata su
+ * calendari reali per essere usata da sola.
  */
 const PAROLE_ALLENAMENTO = /(allenamento|training|riscaldamento|preparazione|atletica|palestra|sitting|tecnica|seduta|raduno)/i;
 const PAROLE_PARTITA = /\b(vs\.?|contro|partita|campionato|match|gara|torneo|amichevole)\b/i;
@@ -230,27 +324,13 @@ function separaPrefissoSquadra(summary: string, nomeSquadra?: string | null): st
   return summary;
 }
 
-function classificaEvento(summary: string, nomeSquadra?: string | null): "allenamento" | "partita" | "evento" {
-  // Una parola esplicita da evento generico (riunione, festa...) vince
-  // su tutto: non ha senso confonderla con una partita solo perché
-  // contiene "torneo" o simile.
+function suggerisciTipo(summary: string, nomeSquadra?: string | null): "allenamento" | "partita" | "evento" {
   if (PAROLE_EVENTO.test(summary)) return "evento";
   if (PAROLE_PARTITA.test(summary)) return "partita";
 
   const resto = separaPrefissoSquadra(summary, nomeSquadra);
-  if (resto !== summary) {
-    // Prefisso "NomeSquadra - " tolto: SportEasy lo usa sia per le
-    // sedute proprie (allenamento) sia per le partite (avversario). Se
-    // ciò che resta è un tipo di seduta riconosciuto è un allenamento,
-    // altrimenti è il nome dell'avversario.
-    return PAROLE_ALLENAMENTO.test(resto) ? "allenamento" : "partita";
-  }
+  if (resto !== summary) return PAROLE_ALLENAMENTO.test(resto) ? "allenamento" : "partita";
 
-  // Nessun prefisso di squadra, nessuna parola da partita né da evento:
-  // si riconosce come allenamento solo se il titolo contiene
-  // esplicitamente una parola da seduta. Senza nessun indizio è meglio
-  // ignorarlo (evento non riconosciuto) che inserirlo per sbaglio come
-  // allenamento o come partita.
   return PAROLE_ALLENAMENTO.test(summary) ? "allenamento" : "evento";
 }
 

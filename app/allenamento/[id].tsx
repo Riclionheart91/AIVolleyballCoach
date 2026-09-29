@@ -32,6 +32,10 @@ export default function PianoAllenamento() {
   const [pesiFasi, setPesiFasi] = useState<PesoFase[]>([]);
   const [mostraNuovoEsercizio, setMostraNuovoEsercizio] = useState(false);
   const [atlete, setAtlete] = useState<Athlete[]>([]);
+  // Indice dell'esercizio da sostituire quando il catalogo viene aperto
+  // per una sostituzione manuale invece che per un'aggiunta: null = si
+  // sta aggiungendo un esercizio in coda, come sempre.
+  const [indiceSostituzione, setIndiceSostituzione] = useState<number | null>(null);
   // Il salvataggio differito legge da qui: lo stato dentro setTimeout
   // sarebbe quello vecchio.
   const eserciziRef = useRef<VoceRiepilogoPiano[]>([]);
@@ -68,12 +72,36 @@ export default function PianoAllenamento() {
     // BUG CORRETTO: prima non si portava dietro la fase dell'esercizio,
     // quindi sembrava corretta solo a schermo (per via del ripiego di
     // faseDi()) ma al salvataggio finiva sempre in "tecnico".
-    setEsercizi((prev) => [...prev, {
+    const voce: VoceRiepilogoPiano = {
       exerciseId: ex.id, nome: ex.nome, durataMinuti: 15, note: "",
       fase: (ex.fase_consigliata as string | undefined) ?? "tecnico",
       categoria: ex.categoria ?? undefined,
-    }]);
+    };
+    if (indiceSostituzione !== null) {
+      // Sostituzione manuale dalla libreria: prende il posto
+      // dell'esercizio scelto, restando nella stessa fase e con la
+      // stessa durata già impostata — solo nome/categoria/descrizione
+      // cambiano, come per la sostituzione fatta dall'AI.
+      const indice = indiceSostituzione;
+      setEsercizi((prev) => prev.map((e, i) => (i === indice ? { ...voce, durataMinuti: e.durataMinuti, fase: e.fase ?? voce.fase } : e)));
+      setEsercizioEspanso(null);
+      setIndiceSostituzione(null);
+    } else {
+      setEsercizi((prev) => [...prev, voce]);
+    }
     setMostraCatalogo(false);
+  }
+
+  function apriSostituzioneDaLibreria(indice: number) {
+    setIndiceSostituzione(indice);
+    setMostraNuovoEsercizio(false);
+    setMostraCatalogo(true);
+  }
+
+  function chiudiCatalogo() {
+    setMostraCatalogo(false);
+    setMostraNuovoEsercizio(false);
+    setIndiceSostituzione(null);
   }
 
   function categoriaDi(e: VoceRiepilogoPiano): string {
@@ -376,7 +404,7 @@ export default function PianoAllenamento() {
         <View style={styles.card}>
           <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
             <Text style={styles.etichetta}>Esercizi ({totaleMinuti} min totali)</Text>
-            <Pressable onPress={() => { setMostraNuovoEsercizio(false); setMostraCatalogo(true); }}><Text style={styles.linkAggiungi}>+ Aggiungi</Text></Pressable>
+            <Pressable onPress={() => { setIndiceSostituzione(null); setMostraNuovoEsercizio(false); setMostraCatalogo(true); }}><Text style={styles.linkAggiungi}>+ Aggiungi</Text></Pressable>
           </View>
 
           {esercizi.length === 0 ? (
@@ -460,11 +488,16 @@ export default function PianoAllenamento() {
                             ))}
                           </View>
 
-                          <Pressable style={styles.bottoneRigenera} onPress={() => rigeneraSingolo(i)} disabled={rigenerando === i}>
-                            <Text style={styles.bottoneRigeneraTesto}>
-                              {rigenerando === i ? "Sto cercando un'alternativa…" : "✨ Sostituisci con un altro esercizio"}
-                            </Text>
-                          </Pressable>
+                          <View style={styles.rigaSostituzione}>
+                            <Pressable style={styles.bottoneRigenera} onPress={() => apriSostituzioneDaLibreria(i)}>
+                              <Text style={styles.bottoneRigeneraTesto}>📚 Sostituisci dalla libreria</Text>
+                            </Pressable>
+                            <Pressable style={styles.bottoneRigenera} onPress={() => rigeneraSingolo(i)} disabled={rigenerando === i}>
+                              <Text style={styles.bottoneRigeneraTesto}>
+                                {rigenerando === i ? "Sto cercando…" : "✨ Fai scegliere all'AI"}
+                              </Text>
+                            </Pressable>
+                          </View>
                         </View>
                       )}
                     </View>
@@ -506,12 +539,12 @@ export default function PianoAllenamento() {
         </View>
       </Modal>
 
-      <Modal visible={mostraCatalogo} animationType="slide" transparent onRequestClose={() => setMostraCatalogo(false)}>
+      <Modal visible={mostraCatalogo} animationType="slide" transparent onRequestClose={chiudiCatalogo}>
         <View style={styles.sfondoPopup}>
           <View style={styles.cartaPopup}>
             <View style={styles.intestazionePopup}>
-              <Text style={styles.titoloPopup}>Scegli un esercizio</Text>
-              <Pressable onPress={() => setMostraCatalogo(false)}><Text style={styles.chiudiPopup}>✕</Text></Pressable>
+              <Text style={styles.titoloPopup}>{indiceSostituzione !== null ? "Sostituisci con…" : "Scegli un esercizio"}</Text>
+              <Pressable onPress={chiudiCatalogo}><Text style={styles.chiudiPopup}>✕</Text></Pressable>
             </View>
 
             {mostraNuovoEsercizio ? (
@@ -629,7 +662,8 @@ const styles = StyleSheet.create({
   dettaglioEsercizio: { paddingBottom: 10, paddingLeft: 24, gap: 6 },
   testoDettaglio: { color: brand.colors.onSurfaceSecondary, fontSize: 13, lineHeight: 19 },
   noteEsercizio: { color: brand.colors.muted, fontSize: 12 },
-  bottoneRigenera: { borderWidth: 1, borderColor: brand.colors.brandSecondary, borderRadius: 8, paddingVertical: 8, alignItems: "center" },
+  rigaSostituzione: { flexDirection: "row", gap: 8 },
+  bottoneRigenera: { flex: 1, borderWidth: 1, borderColor: brand.colors.brandSecondary, borderRadius: 8, paddingVertical: 8, alignItems: "center" },
   bottoneRigeneraTesto: { color: brand.colors.brandSecondary, fontSize: 12, fontWeight: "700" },
   etichettaCategoriaPiano: { color: brand.colors.brandSecondary, fontSize: 12, fontWeight: "700", marginTop: 8, textTransform: "uppercase" },
   rigaEsercizio: { flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 6, borderTopWidth: 1, borderTopColor: brand.colors.border },
