@@ -52,6 +52,7 @@ export function PannelloSporteasy({ teamId, onSincronizzato }: { teamId: string;
         `Eventi interpretati: ${r.totaleEventiNelCalendario}.\n` +
         `Allenamenti: ${r.allenamentiCreati} nuovi, ${r.allenamentiAggiornati} aggiornati.\n` +
         `Partite: ${r.partiteCreate} nuove, ${r.partiteAggiornate} aggiornate.` +
+        (r.eventiIgnorati ? `\nEventi non riconosciuti come allenamento o partita (ignorati): ${r.eventiIgnorati}.` : "") +
         (righeErrore.length > 0 ? `\n\nERRORI DI SCRITTURA (${righeErrore.length}):\n${righeErrore.slice(0, 5).join("\n")}` : ""),
       );
       carica();
@@ -95,7 +96,9 @@ export function PannelloSporteasy({ teamId, onSincronizzato }: { teamId: string;
               <Text style={styles.nota}>Come sono stati classificati gli eventi trovati:</Text>
               {dettaglio.map((d, i) => (
                 <Text key={i} style={styles.rigaClassificazione}>
-                  <Text style={d.tipo === "partita" ? styles.tagPartita : styles.tagAllenamento}>{d.tipo === "partita" ? "PARTITA" : "ALLENAMENTO"}</Text> — {d.titolo}
+                  <Text style={d.tipo === "partita" ? styles.tagPartita : d.tipo === "evento" ? styles.tagEvento : styles.tagAllenamento}>
+                    {d.tipo === "partita" ? "PARTITA" : d.tipo === "evento" ? "IGNORATO" : "ALLENAMENTO"}
+                  </Text> — {d.titolo}
                 </Text>
               ))}
             </View>
@@ -120,4 +123,5 @@ const styles = StyleSheet.create({
   rigaClassificazione: { color: brand.colors.onSurfaceSecondary, fontSize: 12 },
   tagPartita: { color: brand.colors.brand, fontWeight: "700" },
   tagAllenamento: { color: brand.colors.brandSecondary, fontWeight: "700" },
+  tagEvento: { color: brand.colors.muted, fontWeight: "700" },
 });

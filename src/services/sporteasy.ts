@@ -20,6 +20,7 @@ export interface RisultatoSincronizzazione {
   allenamentiAggiornati?: number;
   partiteCreate?: number;
   partiteAggiornate?: number;
+  eventiIgnorati?: number;
   totaleEventiNelCalendario?: number;
   dettaglioClassificazione?: { titolo: string; tipo: string }[];
   erroriScrittura?: string[];

@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { View, Text, FlatList, TextInput, Pressable, StyleSheet, RefreshControl } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { useAuth } from "@/src/context/AuthContext";
@@ -29,12 +29,25 @@ function dataIsoATesto(iso: string): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
+/** Primo giorno del mese corrente, a mezzanotte locale. */
+function meseCorrente(): Date {
+  const d = new Date();
+  d.setDate(1);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
 export default function Allenamenti() {
   const { team, puoScrivere } = useAuth();
   const [allenamenti, setAllenamenti] = useState<Training[]>([]);
   // Si mostra un mese alla volta: con centinaia di sedute importate da
   // SportEasy un elenco unico diventa illeggibile.
-  const [meseVisualizzato, setMeseVisualizzato] = useState(() => { const d = new Date(); d.setDate(1); d.setHours(0,0,0,0); return d; });
+  const [meseVisualizzato, setMeseVisualizzato] = useState(meseCorrente);
+  // Se la app resta aperta per giorni (tipico di un sito web mai
+  // ricaricato) il mese "corrente" catturato all'avvio invecchia: si
+  // tiene traccia dell'ultimo mese reale visto e, se cambia, si
+  // riparte da quello invece di restare bloccati su un mese passato.
+  const ultimoMeseReale = useRef(meseVisualizzato.getTime());
   const [archiviati, setArchiviati] = useState<Training[]>([]);
   const [mostraArchivio, setMostraArchivio] = useState(false);
   const [aperto, setAperto] = useState<string | null>(null);
@@ -72,6 +85,18 @@ export default function Allenamenti() {
   }
 
   useFocusEffect(useCallback(() => { carica(); }, [carica]));
+
+  // Ogni volta che si torna su questa schermata, si controlla se nel
+  // frattempo è iniziato un mese nuovo (es. la tab è rimasta aperta da
+  // ieri sera): in tal caso si passa al mese corrente vero, altrimenti
+  // resta il mese che si stava sfogliando.
+  useFocusEffect(useCallback(() => {
+    const reale = meseCorrente();
+    if (reale.getTime() !== ultimoMeseReale.current) {
+      ultimoMeseReale.current = reale.getTime();
+      setMeseVisualizzato(reale);
+    }
+  }, []));
 
   function apriNuovo() {
     setAllenamentoInModifica(null);

@@ -121,11 +121,21 @@ Deno.serve(async (req) => {
     const dettaglioClassificazione: { titolo: string; tipo: string }[] = [];
     const erroriScrittura: string[] = [];
 
+    let eventiIgnorati = 0;
     for (const ev of eventi) {
-      const eAllenamento = !sembraPartita(ev.summary, nomeSquadra);
-      dettaglioClassificazione.push({ titolo: ev.summary, tipo: eAllenamento ? "allenamento" : "partita" });
+      const tipo = classificaEvento(ev.summary, nomeSquadra);
+      dettaglioClassificazione.push({ titolo: ev.summary, tipo });
 
-      if (eAllenamento) {
+      if (tipo === "evento") {
+        // Non è né un allenamento né una partita (es. riunioni, feste,
+        // assemblee messe sullo stesso calendario del club): si
+        // classifica ma NON si scrive da nessuna parte, invece di
+        // finire per sbaglio tra gli allenamenti come accadeva prima.
+        eventiIgnorati++;
+        continue;
+      }
+
+      if (tipo === "allenamento") {
         const { data: esistente } = await admin.from("trainings").select("id").eq("team_id", team_id).eq("sporteasy_uid", ev.uid).maybeSingle();
         if (esistente) {
           const { error } = await admin.from("trainings").update({ titolo: titoloAllenamento(ev.summary, nomeSquadra), data: ev.dataInizio }).eq("id", esistente.id);
@@ -163,6 +173,10 @@ Deno.serve(async (req) => {
     return jsonResponse({
       errore: false,
       allenamentiCreati, allenamentiAggiornati, partiteCreate, partiteAggiornate,
+      // Eventi riconosciuti ma volutamente NON scritti da nessuna parte
+      // (riunioni, feste...): il coach deve poterli distinguere da un
+      // allenamento o una partita mancati per errore.
+      eventiIgnorati,
       totaleEventiNelCalendario: eventi.length,
       // Diagnostica: il coach può vedere ESATTAMENTE come ogni titolo è
       // stato classificato, invece di dover indovinare perché un evento
@@ -197,9 +211,16 @@ async function registraEsito(admin: ReturnType<typeof createClient>, teamId: str
  * è una partita contro quella squadra. Restano riconosciute anche le
  * diciture esplicite ("vs", "contro", "partita"...) per i calendari
  * che non seguono quel formato.
+ *
+ * Un calendario di club, però, spesso contiene ANCHE voci che non sono
+ * né l'uno né l'altro: riunioni, feste, assemblee, iscrizioni... Queste
+ * vanno riconosciute come "evento" e NON scritte da nessuna parte —
+ * prima finivano infilate tra gli allenamenti solo perché non
+ * sembravano una partita, che è esattamente il problema segnalato.
  */
 const PAROLE_ALLENAMENTO = /(allenamento|training|riscaldamento|preparazione|atletica|palestra|sitting|tecnica|seduta|raduno)/i;
 const PAROLE_PARTITA = /\b(vs\.?|contro|partita|campionato|match|gara|torneo|amichevole)\b/i;
+const PAROLE_EVENTO = /(riunione|assemblea|consiglio direttivo|festa|cena|pranzo sociale|compleanno|iscrizion|open day|presentazione|colloqui|corso allenatori|corso arbitri|premiazion|briefing genitori)/i;
 
 function separaPrefissoSquadra(summary: string, nomeSquadra?: string | null): string {
   if (nomeSquadra) {
@@ -209,15 +230,28 @@ function separaPrefissoSquadra(summary: string, nomeSquadra?: string | null): st
   return summary;
 }
 
-function sembraPartita(summary: string, nomeSquadra?: string | null): boolean {
-  if (PAROLE_PARTITA.test(summary)) return true;
+function classificaEvento(summary: string, nomeSquadra?: string | null): "allenamento" | "partita" | "evento" {
+  // Una parola esplicita da evento generico (riunione, festa...) vince
+  // su tutto: non ha senso confonderla con una partita solo perché
+  // contiene "torneo" o simile.
+  if (PAROLE_EVENTO.test(summary)) return "evento";
+  if (PAROLE_PARTITA.test(summary)) return "partita";
+
   const resto = separaPrefissoSquadra(summary, nomeSquadra);
-  // Nessun prefisso rimosso: senza altri indizi si assume allenamento
-  // (in un calendario di squadra sono la maggioranza).
-  if (resto === summary) return false;
-  // Prefisso rimosso: se ciò che resta non è un tipo di seduta, è il
-  // nome dell'avversario.
-  return !PAROLE_ALLENAMENTO.test(resto);
+  if (resto !== summary) {
+    // Prefisso "NomeSquadra - " tolto: SportEasy lo usa sia per le
+    // sedute proprie (allenamento) sia per le partite (avversario). Se
+    // ciò che resta è un tipo di seduta riconosciuto è un allenamento,
+    // altrimenti è il nome dell'avversario.
+    return PAROLE_ALLENAMENTO.test(resto) ? "allenamento" : "partita";
+  }
+
+  // Nessun prefisso di squadra, nessuna parola da partita né da evento:
+  // si riconosce come allenamento solo se il titolo contiene
+  // esplicitamente una parola da seduta. Senza nessun indizio è meglio
+  // ignorarlo (evento non riconosciuto) che inserirlo per sbaglio come
+  // allenamento o come partita.
+  return PAROLE_ALLENAMENTO.test(summary) ? "allenamento" : "evento";
 }
 
 function estraiAvversario(summary: string, nomeSquadra?: string | null): string {

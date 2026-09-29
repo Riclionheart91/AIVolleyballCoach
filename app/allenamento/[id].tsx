@@ -3,11 +3,13 @@ import { View, Text, TextInput, Pressable, StyleSheet, ScrollView, ActivityIndic
 import { useLocalSearchParams, useFocusEffect, router } from "expo-router";
 import { useAuth } from "@/src/context/AuthContext";
 import { creaEsercizio, elencaEsercizi } from "@/src/services/exercises";
+import { elencaAtlete } from "@/src/services/athletes";
 import { pesiFasiPerData, type PesoFase, elencaPianoAllenamento, generaPianoAllenamentoAI, impostaPianoAllenamento, leggiBloccoPerData, type VoceRiepilogoPiano } from "@/src/services/trainingPlan";
 import { avvisa } from "@/src/lib/confermaAzione";
+import { CreaEsercizio } from "@/src/components/CreaEsercizio";
 import { brand, fasiAllenamento } from "@/src/config";
 import { supabaseClient } from "@/src/lib/supabase";
-import type { Exercise, Training } from "@/src/types/database";
+import type { Athlete, Exercise, Training } from "@/src/types/database";
 
 export default function PianoAllenamento() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -28,6 +30,8 @@ export default function PianoAllenamento() {
   const [esercizioEspanso, setEsercizioEspanso] = useState<number | null>(null);
   const [rigenerando, setRigenerando] = useState<number | null>(null);
   const [pesiFasi, setPesiFasi] = useState<PesoFase[]>([]);
+  const [mostraNuovoEsercizio, setMostraNuovoEsercizio] = useState(false);
+  const [atlete, setAtlete] = useState<Athlete[]>([]);
   // Il salvataggio differito legge da qui: lo stato dentro setTimeout
   // sarebbe quello vecchio.
   const eserciziRef = useRef<VoceRiepilogoPiano[]>([]);
@@ -42,6 +46,7 @@ export default function PianoAllenamento() {
     setArgomento(t?.argomento ?? "");
     const cat = await elencaEsercizi(team.id);
     setCatalogo(cat);
+    setAtlete(await elencaAtlete(team.id).catch(() => []));
     if (t?.data) {
       setBloccoPeriodo(await leggiBloccoPerData(team.id, t.data).catch(() => null));
       setPesiFasi(await pesiFasiPerData(team.id, t.data, Number(durataObiettivo) || 120).catch(() => []));
@@ -181,6 +186,20 @@ export default function PianoAllenamento() {
     } finally {
       setRigenerando(null);
     }
+  }
+
+  /**
+   * Esercizio/i appena creati (manualmente o con l'AI) dalla stessa
+   * maschera già usata nella tab Esercizi — non una versione ridotta:
+   * capita spesso di pensare a un esercizio nuovo mentre si costruisce
+   * la seduta, senza voler prima uscire da qui. Vanno comunque nel
+   * catalogo vero, così restano disponibili anche per i piani futuri, e
+   * si aggiungono subito a questo piano.
+   */
+  function onEserciziCreatiNelPiano(nuovi: Exercise[]) {
+    setCatalogo((prev) => [...prev, ...nuovi]);
+    for (const ex of nuovi) aggiungiEsercizio(ex);
+    setMostraNuovoEsercizio(false);
   }
 
   function rimuoviEsercizio(indice: number) {
@@ -357,7 +376,7 @@ export default function PianoAllenamento() {
         <View style={styles.card}>
           <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
             <Text style={styles.etichetta}>Esercizi ({totaleMinuti} min totali)</Text>
-            <Pressable onPress={() => setMostraCatalogo(true)}><Text style={styles.linkAggiungi}>+ Aggiungi</Text></Pressable>
+            <Pressable onPress={() => { setMostraNuovoEsercizio(false); setMostraCatalogo(true); }}><Text style={styles.linkAggiungi}>+ Aggiungi</Text></Pressable>
           </View>
 
           {esercizi.length === 0 ? (
@@ -494,7 +513,29 @@ export default function PianoAllenamento() {
               <Text style={styles.titoloPopup}>Scegli un esercizio</Text>
               <Pressable onPress={() => setMostraCatalogo(false)}><Text style={styles.chiudiPopup}>✕</Text></Pressable>
             </View>
-            {catalogo.length === 0 ? (
+
+            {mostraNuovoEsercizio ? (
+              <View style={styles.formNuovoEsercizio}>
+                <Pressable onPress={() => setMostraNuovoEsercizio(false)}>
+                  <Text style={styles.linkNuovoEsercizioTesto}>‹ Torna al catalogo</Text>
+                </Pressable>
+                {team && (
+                  <CreaEsercizio
+                    teamId={team.id}
+                    eserciziEsistenti={catalogo}
+                    atlete={atlete}
+                    modoIniziale="manuale"
+                    onCreati={onEserciziCreatiNelPiano}
+                  />
+                )}
+              </View>
+            ) : (
+              <Pressable style={styles.linkNuovoEsercizio} onPress={() => setMostraNuovoEsercizio(true)}>
+                <Text style={styles.linkNuovoEsercizioTesto}>✨ Esercizio non in catalogo → creane uno nuovo</Text>
+              </Pressable>
+            )}
+
+            {!mostraNuovoEsercizio && (catalogo.length === 0 ? (
               <Text style={styles.nota}>Nessun esercizio nel catalogo — aggiungine dalla tab Esercizi.</Text>
             ) : (
               <FlatList
@@ -514,7 +555,7 @@ export default function PianoAllenamento() {
                   </View>
                 )}
               />
-            )}
+            ))}
           </View>
         </View>
       </Modal>
@@ -548,6 +589,9 @@ const styles = StyleSheet.create({
   rigaCatalogo: { paddingVertical: 8, paddingLeft: 20, borderBottomWidth: 1, borderBottomColor: brand.colors.border },
   rigaCatalogoTesto: { color: brand.colors.onSurface, fontSize: 14, fontWeight: "600" },
   rigaCatalogoDescrizione: { color: brand.colors.muted, fontSize: 12, marginTop: 2, lineHeight: 17 },
+  linkNuovoEsercizio: { paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: brand.colors.border, marginBottom: 4 },
+  linkNuovoEsercizioTesto: { color: brand.colors.brandSecondary, fontSize: 13, fontWeight: "700" },
+  formNuovoEsercizio: { gap: 8, paddingBottom: 10 },
   bottoneSceltaPrimaria: { backgroundColor: brand.colors.brand, borderRadius: 10, padding: 14, alignItems: "center", gap: 2 },
   bottoneSceltaPrimariaTesto: { color: "#000", fontWeight: "800", fontSize: 15 },
   bottoneSceltaSecondaria: { borderWidth: 1, borderColor: brand.colors.brand, borderRadius: 10, padding: 14, alignItems: "center", gap: 2 },
