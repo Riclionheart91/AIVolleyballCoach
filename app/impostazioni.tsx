@@ -6,6 +6,7 @@ import { impostaLinkSporteasy, leggiIntegrazione } from "@/src/services/sporteas
 import { elencaProvider, salvaProvider, type AiProviderConfig } from "@/src/services/aiProviders";
 import { brand } from "@/src/config";
 import { avvisa } from "@/src/lib/confermaAzione";
+import { leggiImpostazioniNotifiche, salvaImpostazioniNotifiche, IMPOSTAZIONI_NOTIFICHE_DEFAULT, type ImpostazioniNotificheEsercizio } from "@/src/lib/impostazioniEsercizio";
 
 const PROVIDER_CODICI = ["GEMINI", "GROQ", "OPENROUTER"] as const;
 
@@ -14,6 +15,8 @@ export default function Impostazioni() {
   const [linkSporteasy, setLinkSporteasy] = useState("");
   const [providerSquadra, setProviderSquadra] = useState<AiProviderConfig[]>([]);
   const [providerGlobali, setProviderGlobali] = useState<AiProviderConfig[]>([]);
+  const [notificheEsercizio, setNotificheEsercizio] = useState<ImpostazioniNotificheEsercizio>(IMPOSTAZIONI_NOTIFICHE_DEFAULT);
+  const [intervalloTesto, setIntervalloTesto] = useState(String(IMPOSTAZIONI_NOTIFICHE_DEFAULT.intervalloMinuti));
 
   const carica = useCallback(async () => {
     if (!team) return;
@@ -21,9 +24,24 @@ export default function Impostazioni() {
     if (integ?.sporteasy_ical_url) setLinkSporteasy(integ.sporteasy_ical_url);
     if (puoScrivere) setProviderSquadra(await elencaProvider(team.id).catch(() => []));
     if (isSuperuser) setProviderGlobali(await elencaProvider(null).catch(() => []));
+    const imp = await leggiImpostazioniNotifiche();
+    setNotificheEsercizio(imp);
+    setIntervalloTesto(String(imp.intervalloMinuti));
   }, [team, puoScrivere, isSuperuser]);
 
   useFocusEffect(useCallback(() => { carica(); }, [carica]));
+
+  async function aggiornaNotifiche(patch: Partial<ImpostazioniNotificheEsercizio>) {
+    const nuove = { ...notificheEsercizio, ...patch };
+    setNotificheEsercizio(nuove);
+    await salvaImpostazioniNotifiche(nuove);
+  }
+
+  function onCambiaIntervallo(testo: string) {
+    setIntervalloTesto(testo);
+    const n = Number(testo);
+    if (Number.isFinite(n) && n > 0) aggiornaNotifiche({ intervalloMinuti: n });
+  }
 
   async function salvaSporteasy() {
     if (!team || !linkSporteasy.trim()) return;
@@ -68,6 +86,21 @@ export default function Impostazioni() {
   return (
     <ScrollView style={styles.container} contentContainerStyle={{ padding: 16, gap: 20 }}>
       <View style={styles.card}>
+        <Text style={styles.sezioneTitolo}>Avvisi durante l'esercizio</Text>
+        <Text style={styles.nota}>Preferenza di questo dispositivo: quanto spesso ricevere un promemoria (vibrazione, suono e notifica) mentre un esercizio è in corso. L'avviso a 30 secondi dalla fine e quello di fine esercizio restano sempre attivi quando l'esercizio ha una durata prevista.</Text>
+        <View style={styles.rigaNotifiche}>
+          <Text style={styles.rigaProviderNome}>Promemoria periodico</Text>
+          <Switch value={notificheEsercizio.notificaPeriodicaAttiva} onValueChange={(v) => aggiornaNotifiche({ notificaPeriodicaAttiva: v })} trackColor={{ true: brand.colors.brand }} />
+        </View>
+        {notificheEsercizio.notificaPeriodicaAttiva && (
+          <View style={styles.rigaNotifiche}>
+            <Text style={styles.rigaProviderNome}>Ogni quanti minuti</Text>
+            <TextInput style={styles.inputPriorita} keyboardType="numeric" value={intervalloTesto} onChangeText={onCambiaIntervallo} />
+          </View>
+        )}
+      </View>
+
+      <View style={styles.card}>
         <Text style={styles.sezioneTitolo}>Integrazione SportEasy</Text>
         <Text style={styles.nota}>Link calendario iCal della squadra (SportEasy → Impostazioni squadra → Esporta calendario). La sincronizzazione vera e propria si lancia dalla tab Partite.</Text>
         <TextInput style={styles.input} placeholder="webcal://calendar.sporteasy.net/..." placeholderTextColor={brand.colors.muted} autoCapitalize="none" value={linkSporteasy} onChangeText={setLinkSporteasy} editable={puoScrivere} />
@@ -104,6 +137,7 @@ const styles = StyleSheet.create({
   bottone: { backgroundColor: brand.colors.brand, padding: 10, borderRadius: 8, alignItems: "center" },
   bottoneTesto: { color: "#000", fontWeight: "700" },
   rigaProvider: { flexDirection: "row", alignItems: "center", gap: 8 },
+  rigaNotifiche: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   rigaProviderNome: { color: brand.colors.onSurface, fontWeight: "600", width: 90 },
   inputPriorita: { backgroundColor: brand.colors.surfaceTertiary, color: brand.colors.onSurface, borderRadius: 6, padding: 6, width: 40, textAlign: "center" },
   inputModello: { flex: 1, backgroundColor: brand.colors.surfaceTertiary, color: brand.colors.onSurface, borderRadius: 6, padding: 6, fontSize: 12 },

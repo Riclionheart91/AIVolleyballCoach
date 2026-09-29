@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { View, Text, Pressable, StyleSheet, ScrollView, ActivityIndicator } from "react-native";
 import { useLocalSearchParams, useFocusEffect, router } from "expo-router";
 import { useAuth } from "@/src/context/AuthContext";
@@ -12,6 +12,8 @@ import {
   type VoceSessione,
 } from "@/src/services/trainingPlan";
 import { confermaAzione, avvisa } from "@/src/lib/confermaAzione";
+import { avvisaTempo, chiudiNotificaFine, richiediPermessoNotifiche } from "@/src/lib/feedbackEsercizio";
+import { leggiImpostazioniNotifiche, IMPOSTAZIONI_NOTIFICHE_DEFAULT, type ImpostazioniNotificheEsercizio } from "@/src/lib/impostazioniEsercizio";
 import { brand, etichetteFase, fasiAllenamento } from "@/src/config";
 import { supabaseClient } from "@/src/lib/supabase";
 import type { Training } from "@/src/types/database";
@@ -60,6 +62,17 @@ export default function SessioneAllenamento() {
     return () => clearInterval(timer);
   }, []);
 
+  // Preferenza personale del dispositivo su quanto spesso avvisare durante
+  // l'esercizio; letta una volta all'apertura della schermata (e chiesta
+  // di nuovo ogni volta che la schermata torna a fuoco, così se l'utente
+  // la cambia dalle Impostazioni si applica al rientro). Il permesso di
+  // notifica va chiesto una volta sola, appena la schermata è pronta.
+  const impostazioniNotifiche = useRef<ImpostazioniNotificheEsercizio>(IMPOSTAZIONI_NOTIFICHE_DEFAULT);
+  useFocusEffect(useCallback(() => {
+    leggiImpostazioniNotifiche().then((imp) => { impostazioniNotifiche.current = imp; });
+    richiediPermessoNotifiche();
+  }, []));
+
   const inCorso = voci.find((v) => v.iniziato_il && !v.concluso_il);
   const sessioneAvviata = !!training?.iniziato_il && !training?.concluso_il;
 
@@ -68,6 +81,54 @@ export default function SessioneAllenamento() {
     if (!v.iniziato_il) return 0;
     return Math.max(0, Math.floor((Date.now() - new Date(v.iniziato_il).getTime()) / 1000));
   }
+
+  const secondiInCorso = inCorso ? secondi(inCorso) : 0;
+  const pianificatoSec = (inCorso?.durata_minuti ?? 0) * 60;
+  const oltre = pianificatoSec > 0 && secondiInCorso > pianificatoSec;
+
+  // Avvisi (vibrazione + suono + notifica) durante l'esercizio in corso:
+  // un promemoria periodico facoltativo ogni tot minuti, un avviso a 30
+  // secondi dalla fine e uno alla fine esatta — questi ultimi due solo se
+  // l'esercizio ha una durata prevista, altrimenti non c'è "fine" da
+  // annunciare (il promemoria periodico invece funziona comunque). Lo
+  // stesso avviso non deve mai scattare due volte per lo stesso esercizio:
+  // il ref tiene traccia di cosa è già stato annunciato e si resetta
+  // quando cambia l'esercizio in corso (o quando nessuno è in corso). La
+  // notifica di fine resta visibile finché non parte un nuovo esercizio,
+  // quindi va chiusa esplicitamente quando l'esercizio in corso cambia.
+  const avvisiSparati = useRef<{ id: string | null; avviso30: boolean; fine: boolean; ultimoIntervallo: number }>({ id: null, avviso30: false, fine: false, ultimoIntervallo: 0 });
+  useEffect(() => {
+    if (!inCorso) {
+      avvisiSparati.current = { id: null, avviso30: false, fine: false, ultimoIntervallo: 0 };
+      return;
+    }
+    if (avvisiSparati.current.id !== inCorso.id) {
+      chiudiNotificaFine();
+      avvisiSparati.current = { id: inCorso.id, avviso30: false, fine: false, ultimoIntervallo: 0 };
+    }
+
+    const imp = impostazioniNotifiche.current;
+    if (imp.notificaPeriodicaAttiva) {
+      const intervalloMin = Math.max(1, imp.intervalloMinuti);
+      const intervalloCorrente = Math.floor(secondiInCorso / (intervalloMin * 60));
+      if (intervalloCorrente > avvisiSparati.current.ultimoIntervallo) {
+        avvisiSparati.current.ultimoIntervallo = intervalloCorrente;
+        const minutiTrascorsi = intervalloCorrente * intervalloMin;
+        avvisaTempo("periodica", inCorso.nome, `${minutiTrascorsi} minut${minutiTrascorsi === 1 ? "o" : "i"} trascors${minutiTrascorsi === 1 ? "o" : "i"}`);
+      }
+    }
+
+    if (pianificatoSec > 0) {
+      const rimanenti = pianificatoSec - secondiInCorso;
+      if (!avvisiSparati.current.fine && rimanenti <= 0) {
+        avvisiSparati.current.fine = true;
+        avvisaTempo("fine", inCorso.nome, "Esercizio finito");
+      } else if (!avvisiSparati.current.avviso30 && rimanenti <= 30) {
+        avvisiSparati.current.avviso30 = true;
+        avvisaTempo("avviso30", inCorso.nome, "Mancano 30 secondi");
+      }
+    }
+  }, [inCorso?.id, inCorso?.nome, secondiInCorso, pianificatoSec]);
 
   const daFare = voci.filter((v) => !v.concluso_il && v.id !== inCorso?.id);
   const prossimo = daFare[0];
@@ -85,9 +146,12 @@ export default function SessioneAllenamento() {
 
   if (caricamento || !training) return <View style={styles.container}><ActivityIndicator color={brand.colors.brand} style={{ marginTop: 40 }} /></View>;
 
-  const secondiInCorso = inCorso ? secondi(inCorso) : 0;
-  const pianificatoSec = (inCorso?.durata_minuti ?? 0) * 60;
-  const oltre = pianificatoSec > 0 && secondiInCorso > pianificatoSec;
+  // Con una durata prevista, il grande cronometro conta alla rovescia
+  // verso zero; superata la durata, passa a contare per quanto si è
+  // andati oltre. Senza durata prevista (esercizio libero) resta un
+  // normale conteggio in avanti, com'era prima.
+  const haConto = pianificatoSec > 0;
+  const secondiMostrati = !haConto ? secondiInCorso : oltre ? secondiInCorso - pianificatoSec : pianificatoSec - secondiInCorso;
 
   return (
     <View style={styles.container}>
@@ -103,9 +167,13 @@ export default function SessioneAllenamento() {
         <View style={styles.riquadroInCorso}>
           <Text style={styles.etichettaInCorso}>IN CORSO · {etichetteFase[inCorso.fase ?? "tecnico"] ?? ""}</Text>
           <Text style={styles.nomeInCorso}>{inCorso.nome}</Text>
-          <Text style={[styles.cronometro, oltre && styles.cronometroOltre]}>{mmss(secondiInCorso)}</Text>
+          <Text style={[styles.cronometro, oltre && styles.cronometroOltre]}>{mmss(secondiMostrati)}</Text>
           <Text style={styles.sottoCronometro}>
-            previsti {inCorso.durata_minuti ?? 0} min{oltre ? " · oltre il previsto" : ""}
+            {!haConto
+              ? "nessuna durata prevista"
+              : oltre
+                ? `oltre il previsto di ${inCorso.durata_minuti} min`
+                : `previsti ${inCorso.durata_minuti} min`}
           </Text>
 
           <ScrollView style={styles.areaDescrizione} contentContainerStyle={{ paddingBottom: 8 }}>
