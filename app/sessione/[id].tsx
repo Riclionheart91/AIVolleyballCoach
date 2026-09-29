@@ -24,6 +24,19 @@ function mmss(secondi: number): string {
   return `${m}:${String(s).padStart(2, "0")}`;
 }
 
+// Testo del promemoria periodico: se l'esercizio ha una durata prevista
+// dice quanto manca (utile per regolarsi), altrimenti dice solo da quanto
+// è iniziato (non c'è una fine da cui contare all'indietro).
+function testoMancano(secondiRimanenti: number): string {
+  const min = Math.round(secondiRimanenti / 60);
+  if (min <= 0) return "Manca meno di un minuto";
+  return min === 1 ? "Manca 1 minuto" : `Mancano ${min} minuti`;
+}
+
+function testoTrascorsi(minuti: number): string {
+  return minuti === 1 ? "1 minuto trascorso" : `${minuti} minuti trascorsi`;
+}
+
 /**
  * Esecuzione della seduta, pensata prima per lo smartphone: si usa in
  * piedi, con una mano, spesso con poca luce. Perciò l'esercizio in
@@ -113,8 +126,10 @@ export default function SessioneAllenamento() {
       const intervalloCorrente = Math.floor(secondiInCorso / (intervalloMin * 60));
       if (intervalloCorrente > avvisiSparati.current.ultimoIntervallo) {
         avvisiSparati.current.ultimoIntervallo = intervalloCorrente;
-        const minutiTrascorsi = intervalloCorrente * intervalloMin;
-        avvisaTempo("periodica", inCorso.nome, `${minutiTrascorsi} minut${minutiTrascorsi === 1 ? "o" : "i"} trascors${minutiTrascorsi === 1 ? "o" : "i"}`);
+        const corpo = pianificatoSec > 0
+          ? testoMancano(pianificatoSec - secondiInCorso)
+          : testoTrascorsi(intervalloCorrente * intervalloMin);
+        avvisaTempo("periodica", inCorso.nome, corpo);
       }
     }
 
