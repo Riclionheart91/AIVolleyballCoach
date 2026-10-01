@@ -3,8 +3,8 @@ import { View, Text, Pressable, StyleSheet, ScrollView, ActivityIndicator } from
 import { useLocalSearchParams, useFocusEffect, router } from "expo-router";
 import { useAuth } from "@/src/context/AuthContext";
 import {
-  analisiFondamentaliPartita, analisiPersonePartita, andamentoTraPartite,
-  type AnalisiFondamentale, type AnalisiPersona, type AndamentoPartita,
+  analisiFondamentaliPartita, analisiPersonePartita, andamentoTraPartite, rendimentoServizioRicezionePartita,
+  type AnalisiFondamentale, type AnalisiPersona, type AndamentoPartita, type RendimentoServizioRicezione,
 } from "@/src/services/matches";
 import { supabaseClient } from "@/src/lib/supabase";
 import { avvisa } from "@/src/lib/confermaAzione";
@@ -24,6 +24,7 @@ export default function AnalisiPartita() {
   const [fondamentali, setFondamentali] = useState<AnalisiFondamentale[]>([]);
   const [persone, setPersone] = useState<AnalisiPersona[]>([]);
   const [andamento, setAndamento] = useState<AndamentoPartita[]>([]);
+  const [servizioRicezione, setServizioRicezione] = useState<RendimentoServizioRicezione | null>(null);
   const [caricamento, setCaricamento] = useState(true);
 
   const carica = useCallback(async () => {
@@ -32,14 +33,16 @@ export default function AnalisiPartita() {
     try {
       const { data: m } = await supabaseClient.from("matches").select("*").eq("id", id).single();
       setMatch(m ?? null);
-      const [f, p, a] = await Promise.all([
+      const [f, p, a, sr] = await Promise.all([
         analisiFondamentaliPartita(id).catch(() => []),
         analisiPersonePartita(id).catch(() => []),
         andamentoTraPartite(team.id, 8).catch(() => []),
+        rendimentoServizioRicezionePartita(id).catch(() => null),
       ]);
       setFondamentali(f);
       setPersone(p);
       setAndamento(a);
+      setServizioRicezione(sr);
     } catch (e) {
       avvisa("Errore", (e as Error).message);
     } finally {
@@ -94,6 +97,28 @@ export default function AnalisiPartita() {
             ))
           )}
         </View>
+
+        {servizioRicezione && (servizioRicezione.punti_in_battuta > 0 || servizioRicezione.punti_in_ricezione > 0) && (
+          <View>
+            <Text style={styles.sezione}>Side-out % / Break-point %</Text>
+            <Text style={styles.nota}>Le due metriche-cardine dell'analisi pallavolistica: quanto si rende servendo e quanto si rende ricevendo.</Text>
+            <View style={styles.rigaAndamento}>
+              <Text style={styles.rigaAndamentoTesto}>Break-point (punti vinti in battuta)</Text>
+              <Text style={[styles.valoreEfficienza, { color: brand.colors.brand }]}>
+                {servizioRicezione.break_point_pct != null ? `${servizioRicezione.break_point_pct}%` : "—"} ({servizioRicezione.punti_vinti_in_battuta}/{servizioRicezione.punti_in_battuta})
+              </Text>
+            </View>
+            <View style={styles.rigaAndamento}>
+              <Text style={styles.rigaAndamentoTesto}>Side-out (punti vinti in ricezione)</Text>
+              <Text style={[styles.valoreEfficienza, { color: brand.colors.brand }]}>
+                {servizioRicezione.side_out_pct != null ? `${servizioRicezione.side_out_pct}%` : "—"} ({servizioRicezione.punti_vinti_in_ricezione}/{servizioRicezione.punti_in_ricezione})
+              </Text>
+            </View>
+            <Text style={styles.dettaglioFondamentale}>
+              Ricezioni: {servizioRicezione.ricezioni_ottime} perfette, {servizioRicezione.ricezioni_buone} buone, {servizioRicezione.ricezioni_scarse} scarse, {servizioRicezione.ricezioni_errori} errori.
+            </Text>
+          </View>
+        )}
 
         <View>
           <Text style={styles.sezione}>Contributo individuale</Text>

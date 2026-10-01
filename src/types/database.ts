@@ -6,6 +6,8 @@ export type StatoProposta = "proposta" | "approvata" | "modificata" | "rigettata
 export type StatoStagione = "pianificata" | "attiva" | "conclusa";
 export type Skill = "Servizio" | "Ricezione" | "Attacco" | "Muro" | "Difesa" | "Punto_avversario";
 export type Esito = "punto" | "neutro" | "errore";
+/** Qualità di una ricezione andata a buon fine (esito="neutro"): scala di scouting standard (es. "3-2-1-0" di Coleman). */
+export type QualitaRicezione = "ottima" | "buona" | "scarsa";
 export type StatoMatch = "programmata" | "in_corso" | "conclusa";
 
 export interface Team {
@@ -218,6 +220,8 @@ export interface MatchEvent {
   athlete_id: string | null;
   creato_il: string;
   creato_da: string | null;
+  /** Solo per skill="Ricezione" con esito="neutro"; null altrimenti. */
+  qualita: QualitaRicezione | null;
 }
 
 export interface MatchSetLineup {

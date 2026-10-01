@@ -1,5 +1,5 @@
 import { supabaseClient } from "@/src/lib/supabase";
-import type { Esito, Match, MatchConvocato, MatchEvent, MatchSet, MatchSetLineup, Skill } from "@/src/types/database";
+import type { Esito, Match, MatchConvocato, MatchEvent, MatchSet, MatchSetLineup, QualitaRicezione, Skill } from "@/src/types/database";
 
 export async function elencaPartite(teamId: string): Promise<Match[]> {
   const { data, error } = await supabaseClient.from("matches").select("*").eq("team_id", teamId).order("data", { ascending: false });
@@ -73,8 +73,8 @@ export async function nuovoSet(matchId: string): Promise<string> {
 }
 
 /** Un tap sul fondamentale + un tap sull'esito = una sola chiamata: il punteggio E la rotazione si aggiornano da soli lato database (trigger). */
-export async function registraEvento(matchId: string, setId: string, skill: Skill, esito: Esito | null, athleteId: string | null): Promise<string> {
-  const { data, error } = await supabaseClient.rpc("registra_evento", { p_match_id: matchId, p_set_id: setId, p_skill: skill, p_esito: esito, p_athlete_id: athleteId });
+export async function registraEvento(matchId: string, setId: string, skill: Skill, esito: Esito | null, athleteId: string | null, qualita: QualitaRicezione | null = null): Promise<string> {
+  const { data, error } = await supabaseClient.rpc("registra_evento", { p_match_id: matchId, p_set_id: setId, p_skill: skill, p_esito: esito, p_athlete_id: athleteId, p_qualita: qualita });
   if (error) throw error;
   return data as string;
 }
@@ -175,6 +175,32 @@ export async function rendimentoTurniServizio(matchId: string): Promise<Rendimen
   const { data, error } = await supabaseClient.rpc("rendimento_turni_servizio", { p_match_id: matchId });
   if (error) throw error;
   return data ?? [];
+}
+
+/**
+ * Side-out% (punti vinti ricevendo) e break-point% (punti vinti
+ * servendo): le due metriche-cardine dell'analisi pallavolistica
+ * professionale (DataVolley/VolleyStation), più il dettaglio qualità
+ * delle ricezioni. Un rapporto basso in ricezione con tante ricezioni
+ * "scarse" indica da dove viene il problema, non solo che c'è.
+ */
+export interface RendimentoServizioRicezione {
+  punti_in_battuta: number;
+  punti_vinti_in_battuta: number;
+  break_point_pct: number | null;
+  punti_in_ricezione: number;
+  punti_vinti_in_ricezione: number;
+  side_out_pct: number | null;
+  ricezioni_ottime: number;
+  ricezioni_buone: number;
+  ricezioni_scarse: number;
+  ricezioni_errori: number;
+}
+
+export async function rendimentoServizioRicezionePartita(matchId: string): Promise<RendimentoServizioRicezione | null> {
+  const { data, error } = await supabaseClient.rpc("rendimento_servizio_ricezione_partita", { p_match_id: matchId });
+  if (error) throw error;
+  return (data ?? [])[0] ?? null;
 }
 
 export interface AvvisoFormazione { avviso: string; gravita: string }

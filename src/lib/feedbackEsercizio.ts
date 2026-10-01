@@ -16,6 +16,96 @@ export type MomentoAvviso = "periodica" | "avviso30" | "fine";
 // chiusa esplicitamente quando parte un nuovo esercizio invece di
 // sparire da sola dopo pochi secondi come le altre.
 let notificaFineAttiva: { close: () => void } | null = null;
+// Se le notifiche passano dal service worker (vedi registraServiceWorker),
+// la chiusura richiede la registrazione invece dell'oggetto Notification.
+let notificaFineReg: ServiceWorkerRegistration | null = null;
+
+const BASE_URL_WEB = "/AIVolleyballCoach";
+
+/**
+ * Elementi audio creati UNA SOLA VOLTA e riusati, invece di un
+ * `new Audio()` a ogni avviso: su iPhone Safari blocca la riproduzione
+ * di un elemento mai "sbloccato" da un vero tocco dell'utente, e lo
+ * sblocco (vedi sbloccaAudioNotifiche) vale solo per QUELL'elemento —
+ * crearne uno nuovo a ogni avviso vanificava lo sblocco ed era la causa
+ * più probabile del "non sento nessun suono" su iPhone.
+ */
+type ElementiAudio = Record<MomentoAvviso, HTMLAudioElement>;
+let elementiAudio: ElementiAudio | null = null;
+
+function creaElementiAudio(): ElementiAudio | null {
+  if (elementiAudio) return elementiAudio;
+  if (typeof window === "undefined" || !("Audio" in window)) return null;
+  try {
+    elementiAudio = {
+      periodica: new window.Audio(SUONO_PERIODICA),
+      avviso30: new window.Audio(SUONO_AVVISO_30S),
+      fine: new window.Audio(SUONO_FINE),
+    };
+    return elementiAudio;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Da chiamare dentro un vero tocco dell'utente (es. il primo pulsante
+ * premuto nella schermata di sessione): Safari su iPhone impedisce a un
+ * suono avviato da un timer di partire se non è mai stato "sbloccato" da
+ * un gesto reale. Lo sblocco (riproduzione mutata e subito fermata) vale
+ * per tutta la sessione della pagina, quindi basta farlo una volta sola
+ * al primo tocco perché i suoni durante il conto alla rovescia
+ * funzionino da lì in avanti.
+ */
+export function sbloccaAudioNotifiche(): void {
+  if (Platform.OS !== "web") return;
+  const el = creaElementiAudio();
+  if (!el) return;
+  for (const audio of Object.values(el)) {
+    try {
+      const volumeOriginale = audio.volume;
+      audio.volume = 0;
+      const promessa = audio.play();
+      if (promessa && typeof promessa.then === "function") {
+        promessa
+          .then(() => { audio.pause(); audio.currentTime = 0; audio.volume = volumeOriginale; })
+          .catch(() => { audio.volume = volumeOriginale; });
+      } else {
+        audio.pause();
+        audio.currentTime = 0;
+        audio.volume = volumeOriginale;
+      }
+    } catch {
+      // Se anche lo sblocco fallisce, suona() proverà comunque: non deve
+      // mai interrompere l'allenamento.
+    }
+  }
+}
+
+/**
+ * Registra il service worker usato SOLO per mostrare notifiche via
+ * registration.showNotification(): su iPhone, per un sito aggiunto alla
+ * schermata Home, è il modo che Apple considera "vero" per le notifiche
+ * (a differenza della chiamata diretta a `new Notification()`, meno
+ * affidabile lì) — è anche il presupposto perché iOS le prenda in
+ * considerazione per lo specchio sull'Apple Watch. Va richiamata prima
+ * del primo avviso; le chiamate successive sono no-op economici.
+ */
+let swPronto: Promise<ServiceWorkerRegistration | null> | null = null;
+export function registraServiceWorker(): void {
+  try {
+    if (Platform.OS !== "web") return;
+    if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) return;
+    if (swPronto) return;
+    swPronto = navigator.serviceWorker
+      .register(`${BASE_URL_WEB}/sw.js`)
+      .then(() => navigator.serviceWorker.ready)
+      .catch(() => null);
+  } catch {
+    // Senza service worker le notifiche restano comunque possibili con
+    // l'API diretta (ripiego in notifica()), solo meno affidabili su iPhone.
+  }
+}
 
 /**
  * Vibrazione + suono + notifica di sistema per chi allena in piedi, spesso
@@ -41,9 +131,14 @@ export function avvisaTempo(momento: MomentoAvviso, nomeEsercizio: string, corpo
 export function chiudiNotificaFine(): void {
   try { notificaFineAttiva?.close(); } catch { /* ignorato */ }
   notificaFineAttiva = null;
+  if (notificaFineReg) {
+    const reg = notificaFineReg;
+    notificaFineReg = null;
+    reg.getNotifications({ tag: "avviso-esercizio-fine" }).then((ns) => ns.forEach((n) => n.close())).catch(() => {});
+  }
 }
 
-/** Da chiamare all'apertura della schermata di sessione, prima che serva il primo avviso: chiede il permesso di mostrare notifiche (solo web; su nativo richiederebbe expo-notifications). */
+/** Da chiamare all'apertura della schermata di sessione, prima che serva il primo avviso: chiede il permesso di mostrare notifiche e registra il service worker che le mostra (solo web; su nativo richiederebbe expo-notifications). */
 export function richiediPermessoNotifiche(): void {
   try {
     if (Platform.OS !== "web") return;
@@ -52,6 +147,7 @@ export function richiediPermessoNotifiche(): void {
   } catch {
     // Notifiche non disponibili su questo browser: si ignora.
   }
+  registraServiceWorker();
 }
 
 function vibra(momento: MomentoAvviso): void {
@@ -80,8 +176,13 @@ async function suona(momento: MomentoAvviso): Promise<void> {
   const sorgente = momento === "fine" ? SUONO_FINE : momento === "avviso30" ? SUONO_AVVISO_30S : SUONO_PERIODICA;
   try {
     if (Platform.OS === "web") {
-      if (typeof window !== "undefined" && "Audio" in window) {
-        const audio = new window.Audio(sorgente);
+      // Riusa l'elemento creato (ed eventualmente sbloccato) una sola
+      // volta, invece di un `new Audio()` a ogni avviso — vedi il
+      // commento su creaElementiAudio più sopra.
+      const el = creaElementiAudio();
+      const audio = el?.[momento];
+      if (audio) {
+        try { audio.currentTime = 0; } catch { /* alcuni browser rifiutano il reset prima del primo play: non blocca */ }
         audio.play().catch(() => {});
       }
       return;
@@ -98,7 +199,7 @@ async function suona(momento: MomentoAvviso): Promise<void> {
   }
 }
 
-function notifica(momento: MomentoAvviso, nomeEsercizio: string, corpo: string): void {
+async function notifica(momento: MomentoAvviso, nomeEsercizio: string, corpo: string): Promise<void> {
   try {
     // Le notifiche di sistema vere (quelle che iPhone/Android possono
     // rispecchiare sul watch abbinato) esistono solo sul web in questo
@@ -109,10 +210,29 @@ function notifica(momento: MomentoAvviso, nomeEsercizio: string, corpo: string):
     if (typeof window === "undefined" || !("Notification" in window)) return;
     if (Notification.permission !== "granted") return;
 
+    const tag = `avviso-esercizio-${momento}`;
     // silent: true perché vibrazione e suono li gestiamo già noi sopra,
     // con pattern diversi per ogni momento.
-    const n = new Notification(nomeEsercizio, { body: corpo, silent: true, tag: `avviso-esercizio-${momento}` });
+    const opzioni: NotificationOptions = { body: corpo, silent: true, tag };
 
+    // Passare dal service worker (quando registrato) è il modo che
+    // Safari su iPhone considera "vero" per una PWA installata sulla
+    // Home — la chiamata diretta a `new Notification()` qui sotto resta
+    // come ripiego per i browser dove il service worker non è pronto.
+    const reg = swPronto ? await swPronto : null;
+    if (reg) {
+      await reg.showNotification(nomeEsercizio, opzioni);
+      if (momento === "fine") {
+        notificaFineReg = reg;
+      } else {
+        setTimeout(() => {
+          reg.getNotifications({ tag }).then((ns) => ns.forEach((n) => n.close())).catch(() => {});
+        }, 4000);
+      }
+      return;
+    }
+
+    const n = new Notification(nomeEsercizio, opzioni);
     if (momento === "fine") {
       // Resta visibile finché non parte un nuovo esercizio.
       notificaFineAttiva = n;

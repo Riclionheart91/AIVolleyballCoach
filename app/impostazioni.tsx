@@ -7,16 +7,24 @@ import { elencaProvider, salvaProvider, type AiProviderConfig } from "@/src/serv
 import { brand } from "@/src/config";
 import { avvisa } from "@/src/lib/confermaAzione";
 import { leggiImpostazioniNotifiche, salvaImpostazioniNotifiche, IMPOSTAZIONI_NOTIFICHE_DEFAULT, type ImpostazioniNotificheEsercizio } from "@/src/lib/impostazioniEsercizio";
+import {
+  pushCertificatiSupportato,
+  statoAbbonamentoPushCertificati,
+  attivaNotifichePushCertificati,
+  disattivaNotifichePushCertificati,
+} from "@/src/lib/pushCertificati";
 
 const PROVIDER_CODICI = ["GEMINI", "GROQ", "OPENROUTER"] as const;
 
 export default function Impostazioni() {
-  const { team, puoScrivere, isSuperuser } = useAuth();
+  const { team, ruolo, puoScrivere, isSuperuser } = useAuth();
   const [linkSporteasy, setLinkSporteasy] = useState("");
   const [providerSquadra, setProviderSquadra] = useState<AiProviderConfig[]>([]);
   const [providerGlobali, setProviderGlobali] = useState<AiProviderConfig[]>([]);
   const [notificheEsercizio, setNotificheEsercizio] = useState<ImpostazioniNotificheEsercizio>(IMPOSTAZIONI_NOTIFICHE_DEFAULT);
   const [intervalloTesto, setIntervalloTesto] = useState(String(IMPOSTAZIONI_NOTIFICHE_DEFAULT.intervalloMinuti));
+  const [pushCertificatiAttivo, setPushCertificatiAttivo] = useState(false);
+  const [caricandoPush, setCaricandoPush] = useState(false);
 
   const carica = useCallback(async () => {
     if (!team) return;
@@ -27,9 +35,23 @@ export default function Impostazioni() {
     const imp = await leggiImpostazioniNotifiche();
     setNotificheEsercizio(imp);
     setIntervalloTesto(String(imp.intervalloMinuti));
+    setPushCertificatiAttivo(await statoAbbonamentoPushCertificati().catch(() => false));
   }, [team, puoScrivere, isSuperuser]);
 
   useFocusEffect(useCallback(() => { carica(); }, [carica]));
+
+  async function cambiaPushCertificati(attiva: boolean) {
+    setCaricandoPush(true);
+    try {
+      if (attiva) await attivaNotifichePushCertificati();
+      else await disattivaNotifichePushCertificati();
+      setPushCertificatiAttivo(attiva);
+    } catch (e) {
+      avvisa("Errore", (e as Error).message);
+    } finally {
+      setCaricandoPush(false);
+    }
+  }
 
   async function aggiornaNotifiche(patch: Partial<ImpostazioniNotificheEsercizio>) {
     const nuove = { ...notificheEsercizio, ...patch };
@@ -99,6 +121,21 @@ export default function Impostazioni() {
           </View>
         )}
       </View>
+
+      {(ruolo === "allenatore" || ruolo === "vice_allenatore" || ruolo === "atleta") && pushCertificatiSupportato() && (
+        <View style={styles.card}>
+          <Text style={styles.sezioneTitolo}>Notifiche push — certificati in scadenza</Text>
+          <Text style={styles.nota}>
+            {ruolo === "atleta"
+              ? "Ogni venerdì mattina, se il tuo certificato medico è scaduto o in scadenza entro 30 giorni, ricevi una notifica su questo dispositivo — anche ad app chiusa."
+              : "Ogni venerdì mattina ricevi su questo dispositivo, anche ad app chiusa, l'elenco delle atlete della squadra con certificato medico scaduto o in scadenza entro 30 giorni."}
+          </Text>
+          <View style={styles.rigaNotifiche}>
+            <Text style={styles.rigaProviderNome}>Attive su questo dispositivo</Text>
+            <Switch value={pushCertificatiAttivo} onValueChange={cambiaPushCertificati} disabled={caricandoPush} trackColor={{ true: brand.colors.brand }} />
+          </View>
+        </View>
+      )}
 
       <View style={styles.card}>
         <Text style={styles.sezioneTitolo}>Integrazione SportEasy</Text>

@@ -12,7 +12,7 @@ import {
   type VoceSessione,
 } from "@/src/services/trainingPlan";
 import { confermaAzione, avvisa } from "@/src/lib/confermaAzione";
-import { avvisaTempo, chiudiNotificaFine, richiediPermessoNotifiche } from "@/src/lib/feedbackEsercizio";
+import { avvisaTempo, chiudiNotificaFine, richiediPermessoNotifiche, sbloccaAudioNotifiche } from "@/src/lib/feedbackEsercizio";
 import { leggiImpostazioniNotifiche, IMPOSTAZIONI_NOTIFICHE_DEFAULT, type ImpostazioniNotificheEsercizio } from "@/src/lib/impostazioniEsercizio";
 import { brand, etichetteFase, fasiAllenamento } from "@/src/config";
 import { supabaseClient } from "@/src/lib/supabase";
@@ -151,6 +151,11 @@ export default function SessioneAllenamento() {
   const totaleEffettivo = Math.round(voci.reduce((s, v) => s + secondi(v), 0) / 60);
 
   async function azione(fn: () => Promise<void>) {
+    // Va chiamato qui, dentro il gestore del tocco vero e proprio:
+    // Safari su iPhone sblocca la riproduzione audio programmata solo se
+    // il primo play() di un elemento avviene entro un gesto reale
+    // dell'utente. Le chiamate successive sono no-op economici.
+    sbloccaAudioNotifiche();
     try { await fn(); carica(); } catch (e) { avvisa("Errore", (e as Error).message); }
   }
 

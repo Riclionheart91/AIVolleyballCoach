@@ -30,6 +30,17 @@ export const supabase = {
   sporteasySyncFunction: "sync-sporteasy",
 };
 
+/**
+ * Chiave pubblica VAPID per le notifiche push (promemoria certificati
+ * in scadenza, vedi src/lib/pushCertificati.ts). NON è un segreto: la
+ * chiave pubblica serve anche al browser per iscriversi
+ * (pushManager.subscribe) e viaggia comunque nel bundle client. La
+ * chiave PRIVATA che firma gli invii vive solo come secret della edge
+ * function supabase/functions/notifica-certificati (mai in questo
+ * repository — vedi il commento in testa a quel file).
+ */
+export const vapidPublicKey = "BNzC0E6SbnLL5VmMQiNn8xFSOhzU4FWuMIrPn849KGM_LRgjslTBhwi1v2KEtItmLNjkoLl-Kvb4lCCxjHPNZq0";
+
 // Vocabolario unico in tutta l'app: "Servizio", non "Battuta".
 export const fondamentali = ["Servizio", "Ricezione", "Attacco", "Muro", "Difesa"] as const;
 

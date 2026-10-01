@@ -5,6 +5,7 @@ import { useAuth } from "@/src/context/AuthContext";
 import { aggiornaAtleta, archiviaAtleta, eliminaAtletaDefinitivamente, leggiAtleta, ripristinaAtleta } from "@/src/services/athletes";
 import { confermaAzione, avvisa } from "@/src/lib/confermaAzione";
 import { SchedaRendimento } from "@/src/components/SchedaRendimento";
+import { CaricoAllenamento } from "@/src/components/CaricoAllenamento";
 import { PianiIndividuali } from "@/src/components/PianiIndividuali";
 import { brand, ruoliCampo } from "@/src/config";
 import type { Athlete, RuoloCampo } from "@/src/types/database";
@@ -182,6 +183,8 @@ export default function SchedaAtleta() {
             <View style={{ marginTop: 12 }}>
               <SchedaRendimento athleteId={atleta.id} nomeAtleta={`${atleta.nome} ${atleta.cognome}`} modificabile={puoScrivere} soloRiepilogo />
             </View>
+
+            <CaricoAllenamento athleteId={atleta.id} />
 
             <Text style={styles.titoloSezione}>Piani individuali</Text>
             {team && (

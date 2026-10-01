@@ -24,9 +24,10 @@ import {
 } from "@/src/services/matches";
 import { chiediParerePartitaAI } from "@/src/services/evaluations";
 import { rendimentoTurniServizio, type RendimentoTurnoServizio } from "@/src/services/matches";
+import { rendimentoServizioRicezionePartita, type RendimentoServizioRicezione } from "@/src/services/matches";
 import { analizzaSituazione, riassuntoPerAI, type SegnalazioneSituazione } from "@/src/lib/situazione";
 import { brand, skillsScouting, skillsScoutingEssenziali } from "@/src/config";
-import type { Athlete, Esito, Match, MatchEvent, MatchSet, MatchSetLineup, Skill } from "@/src/types/database";
+import type { Athlete, Esito, Match, MatchEvent, MatchSet, MatchSetLineup, QualitaRicezione, Skill } from "@/src/types/database";
 import { supabaseClient } from "@/src/lib/supabase";
 import { confermaAzione, avvisa } from "@/src/lib/confermaAzione";
 import { Campo9x9, type OccupanteCampo } from "@/src/components/Campo9x9";
@@ -72,6 +73,7 @@ export default function PartitaLive() {
   const [popupSituazione, setPopupSituazione] = useState(false);
   const [rotazioni, setRotazioni] = useState<RendimentoRotazionePartita[]>([]);
   const [turni, setTurni] = useState<RendimentoTurnoServizio[]>([]);
+  const [servizioRicezione, setServizioRicezione] = useState<RendimentoServizioRicezione | null>(null);
   const [parereAI, setParereAI] = useState<string | null>(null);
   const [chiedendoAI, setChiedendoAI] = useState(false);
   const [popupEventi, setPopupEventi] = useState(false);
@@ -200,12 +202,12 @@ export default function PartitaLive() {
     });
   }
 
-  async function registra(skill: Skill, esito: Esito | null, athleteId: string | null) {
+  async function registra(skill: Skill, esito: Esito | null, athleteId: string | null, qualita: QualitaRicezione | null = null) {
     if (!match || !setCorrente) return;
     setErroreVisibile(null);
     const provvisorio: MatchEvent = {
       id: `temp-${Date.now()}`, match_id: match.id, set_id: setCorrente.id, skill, esito,
-      athlete_id: athleteId, creato_il: new Date().toISOString(), creato_da: null,
+      athlete_id: athleteId, creato_il: new Date().toISOString(), creato_da: null, qualita,
     };
     setEventi((prev) => [provvisorio, ...prev]);
     applicaDelta(skill, esito, 1);
@@ -213,7 +215,7 @@ export default function PartitaLive() {
     setAtletaSelId(null);
 
     try {
-      await registraEvento(match.id, setCorrente.id, skill, esito, athleteId);
+      await registraEvento(match.id, setCorrente.id, skill, esito, athleteId, qualita);
       carica();
     } catch (e) {
       const msg = (e as Error).message;
@@ -239,6 +241,7 @@ export default function PartitaLive() {
     if (match) {
       try { setRotazioni(await rendimentoRotazioniPartita(match.id)); } catch { setRotazioni([]); }
       try { setTurni(await rendimentoTurniServizio(match.id)); } catch { setTurni([]); }
+      try { setServizioRicezione(await rendimentoServizioRicezionePartita(match.id)); } catch { setServizioRicezione(null); }
     }
   }
 
@@ -346,6 +349,29 @@ export default function PartitaLive() {
                 ))
               )}
 
+              <Text style={styles.titoloSezionePopup}>Side-out % / Break-point %</Text>
+              {!servizioRicezione || (servizioRicezione.punti_in_battuta === 0 && servizioRicezione.punti_in_ricezione === 0) ? (
+                <Text style={styles.nota}>Nessun dato ancora.</Text>
+              ) : (
+                <>
+                  <View style={styles.rigaRotazione}>
+                    <Text style={styles.rigaRotazioneNome}>Break-point (punti vinti in battuta)</Text>
+                    <Text style={styles.rigaRotazioneSaldo}>
+                      {servizioRicezione.break_point_pct != null ? `${servizioRicezione.break_point_pct}%` : "—"} ({servizioRicezione.punti_vinti_in_battuta}/{servizioRicezione.punti_in_battuta})
+                    </Text>
+                  </View>
+                  <View style={styles.rigaRotazione}>
+                    <Text style={styles.rigaRotazioneNome}>Side-out (punti vinti in ricezione)</Text>
+                    <Text style={styles.rigaRotazioneSaldo}>
+                      {servizioRicezione.side_out_pct != null ? `${servizioRicezione.side_out_pct}%` : "—"} ({servizioRicezione.punti_vinti_in_ricezione}/{servizioRicezione.punti_in_ricezione})
+                    </Text>
+                  </View>
+                  <Text style={styles.nota}>
+                    Ricezioni: {servizioRicezione.ricezioni_ottime} perfette, {servizioRicezione.ricezioni_buone} buone, {servizioRicezione.ricezioni_scarse} scarse, {servizioRicezione.ricezioni_errori} errori.
+                  </Text>
+                </>
+              )}
+
               <Text style={styles.titoloSezionePopup}>Parere dell'assistente</Text>
               {parereAI ? (
                 <Text style={styles.parere}>{parereAI}</Text>
@@ -424,7 +450,35 @@ export default function PartitaLive() {
               </View>
             )}
 
-            {passo === "esito" && skillSel && (
+            {passo === "esito" && skillSel && skillSel === "Ricezione" && (
+              // Griglia 2x2 invece dei 3 pulsanti impilati: la ricezione
+              // non può mai valere "punto" con le regole standard, quindi
+              // il bucket "neutro" si apre in una scala di qualità
+              // (standard di scouting pro: quante opzioni d'attacco resi
+              // disponibili). 4 pulsanti in griglia sono più bassi dei 3
+              // impilati di prima: resta tutto in una sola schermata.
+              <>
+                <View style={styles.griglia}>
+                  <Pressable style={[styles.tastoEsitoGriglia, styles.esitoOttima, { paddingVertical: d(16) }]} onPress={() => registra(skillSel, "neutro", atletaSelId, "ottima")}>
+                    <Text style={[styles.tastoEsitoTesto, { fontSize: d(13) }]}>Perfetta</Text>
+                  </Pressable>
+                  <Pressable style={[styles.tastoEsitoGriglia, styles.esitoBuona, { paddingVertical: d(16) }]} onPress={() => registra(skillSel, "neutro", atletaSelId, "buona")}>
+                    <Text style={[styles.tastoEsitoTesto, { fontSize: d(13) }]}>Buona</Text>
+                  </Pressable>
+                  <Pressable style={[styles.tastoEsitoGriglia, styles.esitoScarsaRic, { paddingVertical: d(16) }]} onPress={() => registra(skillSel, "neutro", atletaSelId, "scarsa")}>
+                    <Text style={[styles.tastoEsitoTesto, { fontSize: d(13) }]}>Scarsa</Text>
+                  </Pressable>
+                  <Pressable style={[styles.tastoEsitoGriglia, styles.esitoErrore, { paddingVertical: d(16) }]} onPress={() => registra(skillSel, "errore", atletaSelId)}>
+                    <Text style={[styles.tastoEsitoTesto, { fontSize: d(13) }]}>Errore</Text>
+                  </Pressable>
+                </View>
+                <Pressable onPress={() => setSkillSel(null)} style={styles.tastoAnnullaPasso}>
+                  <Text style={styles.nota}>← cambia fondamentale</Text>
+                </Pressable>
+              </>
+            )}
+
+            {passo === "esito" && skillSel && skillSel !== "Ricezione" && (
               <>
                 <Pressable style={[styles.tastoEsito, styles.esitoPunto, { paddingVertical: d(18) }]} onPress={() => registra(skillSel, "punto", atletaSelId)}>
                   <Text style={[styles.tastoEsitoTesto, { fontSize: d(16) }]}>Punto</Text>
@@ -632,6 +686,12 @@ const styles = StyleSheet.create({
   esitoNeutro: { backgroundColor: brand.colors.surfaceTertiary },
   esitoErrore: { backgroundColor: brand.colors.error },
   tastoEsitoTesto: { color: "#fff", fontWeight: "800", fontSize: 16 },
+  // Griglia 2x2 della qualità ricezione: stesso ingombro di tastoGriglia
+  // (2 per riga), colorata come tastoEsito.
+  tastoEsitoGriglia: { flexGrow: 1, minWidth: "46%", borderRadius: 10, alignItems: "center" },
+  esitoOttima: { backgroundColor: brand.colors.success },
+  esitoBuona: { backgroundColor: brand.colors.brandSecondary },
+  esitoScarsaRic: { backgroundColor: brand.colors.warning },
   tastoAnnullaPasso: { alignItems: "center", paddingVertical: 6 },
   rigaPuntiDiretti: { flexDirection: "row", gap: 6 },
   bottonePuntoNostro: { flex: 1, backgroundColor: brand.colors.success, borderRadius: 10, alignItems: "center" },
