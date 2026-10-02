@@ -90,13 +90,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [stagioneAttiva, setStagioneAttiva] = useState<Season | null>(null);
   const [stagioneSocietaEsiste, setStagioneSocietaEsiste] = useState(false);
 
+  // PRIMA c'erano due fonti indipendenti per la sessione: getSession()
+  // (una tantum) e onAuthStateChange (che spara anche lui un evento
+  // "INITIAL_SESSION" subito dopo l'iscrizione, con la sessione già
+  // pronta). Le due promesse potevano risolversi in ordine non
+  // garantito: se getSession() vinceva la corsa, "session" in React
+  // diventava non-null e "caricamento" false un istante prima che il
+  // client supabase-js avesse davvero allegato il token alle chiamate
+  // successive — la primissima query autenticata (mio_contesto_team)
+  // partiva quindi come se l'utente non avesse nessuna squadra, con
+  // conseguente redirect sbagliato a "crea-squadra" in app/index.tsx
+  // (poi corretto in un secondo giro, ma a quel punto l'utente era già
+  // stato spedito sulla schermata sbagliata). Un'unica fonte — solo
+  // onAuthStateChange, che garantisce lato libreria che la sessione sia
+  // già quella usata per le richieste — elimina la corsa alla radice.
   useEffect(() => {
-    supabaseClient.auth.getSession().then(({ data }) => {
-      setSession(data.session);
-      setCaricamento(false);
-    });
     const { data: sub } = supabaseClient.auth.onAuthStateChange((_event, nuovaSessione) => {
       setSession(nuovaSessione);
+      setCaricamento(false);
     });
     return () => sub.subscription.unsubscribe();
   }, []);
@@ -111,10 +122,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!session) { setSocietaPresidenza(null); setCaricamentoSocieta(false); return; }
     setCaricamentoSocieta(true);
+    // Chi decide le rotte (app/index.tsx) legge societaPresidenza e
+    // caricamentoSocieta nello stesso istante e si aspetta che, quando
+    // il secondo diventa falso, il primo sia già quello giusto. Con
+    // .then(setSocietaPresidenza) seguito da un .finally separato per
+    // caricamentoSocieta(false), erano due continuation di promise
+    // distinte: due giri di setState invece di uno, con una finestra
+    // in cui un render poteva vedere caricamentoSocieta già falso ma
+    // societaPresidenza non ancora aggiornato nello stesso giro — causa
+    // riscontrata del redirect a "crea-squadra" per chi è presidente.
+    // Un solo callback con entrambi i setState insieme chiude la
+    // finestra: React li raggruppa in un solo render.
     miaSocietaPresidenza()
-      .then(setSocietaPresidenza)
-      .catch(() => setSocietaPresidenza(null))
-      .finally(() => setCaricamentoSocieta(false));
+      .then((r) => { setSocietaPresidenza(r); setCaricamentoSocieta(false); })
+      .catch(() => { setSocietaPresidenza(null); setCaricamentoSocieta(false); });
   }, [session?.user.id]);
 
   /**
