@@ -13,6 +13,7 @@ import {
   elencaFormazioneConPosizioni,
   impostaConvocati,
   impostaFormazioneIniziale,
+  formazioneInizialeSet,
 } from "@/src/services/matches";
 import { confermaAzione, avvisa } from "@/src/lib/confermaAzione";
 import { Campo9x9, type OccupanteCampo } from "@/src/components/Campo9x9";
@@ -36,6 +37,8 @@ export default function PreparaPartita() {
   const [convocateIds, setConvocateIds] = useState<Set<string>>(new Set());
   const [liberoIds, setLiberoIds] = useState<Set<string>>(new Set());
   const [posizioni, setPosizioni] = useState<Record<number, string>>({});
+  // Formazione di partenza del set precedente (vuota al 1° set o se non disponibile).
+  const [formazionePrecedente, setFormazionePrecedente] = useState<Record<number, string>>({});
   const [posizioneInModifica, setPosizioneInModifica] = useState<number | null>(null);
   const [chiServe, setChiServe] = useState<"noi" | "avversario">("noi");
   const [chiServeRichiesto, setChiServeRichiesto] = useState(true); // false = auto-dedotto, non richiesto (set 2-4)
@@ -72,6 +75,15 @@ export default function PreparaPartita() {
       for (const riga of formazioneAttuale) if (riga.posizione) posizioniIniziali[riga.posizione] = riga.athlete_id;
       setPosizioni(posizioniIniziali);
       if (Object.keys(posizioniIniziali).length > 0) setMostraFormazione(true);
+
+      // Dal 2° set in poi: la formazione di partenza del set appena
+      // concluso, da poter riproporre con un tocco.
+      if (numero > 1) {
+        const { data: setPrecedente } = await supabaseClient.from("match_sets").select("id").eq("match_id", id).eq("numero_set", numero - 1).maybeSingle();
+        setFormazionePrecedente(setPrecedente ? await formazioneInizialeSet(setPrecedente.id) : {});
+      } else {
+        setFormazionePrecedente({});
+      }
 
       // Chi serve: richiesto solo al 1° e al 5° set (per regolamento).
       // Negli altri, si alterna in automatico rispetto al set
@@ -188,6 +200,22 @@ export default function PreparaPartita() {
 
   const formazioneCompleta = Object.keys(posizioni).length === 6;
 
+  // La formazione precedente si può riproporre solo se è completa e
+  // tutti i suoi giocatori sono ancora tra i convocati (e non Liberi,
+  // che non partono mai in campo).
+  const formazionePrecedenteUtilizzabile =
+    Object.keys(formazionePrecedente).length === 6 &&
+    Object.values(formazionePrecedente).every((athleteId) => convocateIds.has(athleteId) && !liberoIds.has(athleteId));
+  const formazioneUgualeAPrecedente =
+    formazionePrecedenteUtilizzabile &&
+    Object.entries(formazionePrecedente).every(([pos, athleteId]) => posizioni[Number(pos)] === athleteId);
+
+  function usaFormazionePrecedente() {
+    setPosizioni({ ...formazionePrecedente });
+    setPosizioneInModifica(null);
+    setAvvisiFormazione([]);
+  }
+
   async function salvaFormazione(): Promise<boolean> {
     if (!setId || !formazioneCompleta) return false;
     try {
@@ -288,6 +316,23 @@ export default function PreparaPartita() {
           <View style={styles.card}>
             <Text style={styles.sottotitolo}>2. Formazione iniziale (tocca una posizione)</Text>
             <Text style={styles.nota}>Tocca una casella del campo, poi scegli chi mettere lì. La posizione 1 è la zona di battuta. Chi è già posizionato non compare più tra le scelte per un'altra casella. Chi gioca da Libero non compare qui: entra solo durante il gioco, come rimpiazzo.</Text>
+            {numeroSet > 1 && (
+              formazionePrecedenteUtilizzabile ? (
+                <Pressable
+                  onPress={usaFormazionePrecedente}
+                  disabled={formazioneUgualeAPrecedente}
+                  style={[styles.bottoneStessaFormazione, formazioneUgualeAPrecedente && styles.bottoneStessaFormazioneAttivo]}
+                >
+                  <Text style={styles.bottoneStessaFormazioneTesto}>
+                    {formazioneUgualeAPrecedente
+                      ? `✓ Stessa formazione di partenza del set ${numeroSet - 1}`
+                      : `↺ Usa la stessa formazione di partenza del set ${numeroSet - 1}`}
+                  </Text>
+                </Pressable>
+              ) : (
+                <Text style={styles.nota}>La formazione di partenza del set {numeroSet - 1} non è disponibile (set giocato prima che venisse registrata): impostala a mano.</Text>
+              )
+            )}
             <View style={styles.rigaAzioniCampo}>
               <Pressable onPress={svuotaFormazione} style={styles.bottoneAzioneCampo}><Text style={styles.bottoneAzioneCampoTesto}>🗑 Svuota tutto</Text></Pressable>
               <Pressable onPress={ruotaFormazioneDiUnaPosizione} style={styles.bottoneAzioneCampo}><Text style={styles.bottoneAzioneCampoTesto}>↻ Ruota di 1</Text></Pressable>
@@ -376,6 +421,9 @@ const styles = StyleSheet.create({
   bottoneSecondarioTesto: { color: brand.colors.brand, fontWeight: "700" },
   bottoneApriFormazione: { backgroundColor: brand.colors.surfaceSecondary, borderWidth: 1, borderColor: brand.colors.brandSecondary, borderRadius: 10, padding: 14, alignItems: "center" },
   bottoneApriFormazioneTesto: { color: brand.colors.brandSecondary, fontWeight: "700" },
+  bottoneStessaFormazione: { borderWidth: 1, borderColor: brand.colors.brand, borderRadius: 10, paddingVertical: 12, paddingHorizontal: 12, alignItems: "center", minHeight: 46, justifyContent: "center" },
+  bottoneStessaFormazioneAttivo: { backgroundColor: brand.colors.surfaceTertiary, borderColor: brand.colors.success },
+  bottoneStessaFormazioneTesto: { color: brand.colors.onSurface, fontSize: 13, fontWeight: "700", textAlign: "center" },
   rigaAzioniCampo: { flexDirection: "row", gap: 8 },
   bottoneAzioneCampo: { flex: 1, borderWidth: 1, borderColor: brand.colors.muted, borderRadius: 8, paddingVertical: 12, alignItems: "center", minHeight: 44, justifyContent: "center" },
   bottoneAzioneCampoTesto: { color: brand.colors.onSurfaceSecondary, fontSize: 12, fontWeight: "600" },

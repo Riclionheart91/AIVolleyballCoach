@@ -230,6 +230,8 @@ export interface MatchSetLineup {
   athlete_id: string;
   in_campo: boolean;
   posizione: number | null;
+  /** Posizione dichiarata alla partenza del set: non cambia con rotazioni e cambi. Null per chi è entrato dopo e per i set giocati prima che fosse registrata. */
+  posizione_iniziale?: number | null;
   aggiornato_il: string;
 }
 

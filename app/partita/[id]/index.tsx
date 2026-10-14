@@ -36,6 +36,13 @@ import { useSincronizzazioneLive } from "@/src/hooks/useSincronizzazioneLive";
 type Passo = "giocatrice" | "fondamentale" | "esito";
 
 /**
+ * Quante azioni recenti mostra l'elenco "Ultime azioni". Se ne caricano
+ * comunque di più (servono a "Situazione" e al parere dell'assistente,
+ * che leggono la storia recente): qui si limita solo ciò che si vede.
+ */
+const AZIONI_RECENTI_MOSTRATE = 5;
+
+/**
  * Scouting live. Due scelte di impostazione volute:
  *
  * 1. SEMPRE IN ORIZZONTALE, anche a telefono bloccato in verticale: il
@@ -59,6 +66,8 @@ export default function PartitaLive() {
   const [liberiIds, setLiberiIds] = useState<Set<string>>(new Set());
   const [libero, setLibero] = useState<LiberoInCampo | null>(null);
   const [popupLibero, setPopupLibero] = useState(false);
+  // Chi esce, già scelto, in attesa di sapere quale Libero entra (solo se i Liberi sono più d'uno).
+  const [titolareLiberoScelto, setTitolareLiberoScelto] = useState<string | null>(null);
   const [formazione, setFormazione] = useState<MatchSetLineup[]>([]);
   const [storicoFormazione, setStoricoFormazione] = useState<MatchSetLineup[]>([]);
 
@@ -276,6 +285,30 @@ export default function PartitaLive() {
     } catch (e) { avvisa("Cambio non riuscito", (e as Error).message); }
   }
 
+  // Liberi indicati nella distinta di questa partita (possono essere più di uno).
+  const liberiDisponibili = atlete.filter((a) => liberiIds.has(a.id) && convocateIds.includes(a.id));
+
+  function chiudiPopupLibero() {
+    setPopupLibero(false);
+    setTitolareLiberoScelto(null);
+  }
+
+  async function faiEntrareLibero(liberoId: string, titolareId: string) {
+    if (!setCorrente) return;
+    try {
+      await rimpiazzaConLibero(setCorrente.id, liberoId, titolareId);
+      chiudiPopupLibero();
+      carica();
+    } catch (e) { avvisa("Errore", (e as Error).message); }
+  }
+
+  /** Con un solo Libero in distinta entra subito; con due o più si chiede quale, invece di sceglierne uno a caso. */
+  function onSceglieUscenteLibero(titolareId: string) {
+    if (liberiDisponibili.length === 0) { avvisa("Nessun Libero", "Nessuno è indicato come Libero nella distinta di questa partita."); return; }
+    if (liberiDisponibili.length === 1) { faiEntrareLibero(liberiDisponibili[0].id, titolareId); return; }
+    setTitolareLiberoScelto(titolareId);
+  }
+
   if (!match) return <View style={styles.contenitore}><Text style={styles.vuoto}>Caricamento…</Text></View>;
 
   if (match.stato !== "in_corso") {
@@ -301,7 +334,8 @@ export default function PartitaLive() {
 
   const skills = modalitaEssenziale ? skillsScoutingEssenziali : skillsScouting;
   const selezionata = atletaSelId ? nomeAtleta(atletaSelId) : null;
-  const alServizio = setCorrente.squadra_al_servizio === "noi" ? formazione.find((f) => f.posizione === 1) : null;
+  const noiAlServizio = setCorrente.squadra_al_servizio === "noi";
+  const alServizio = noiAlServizio ? formazione.find((f) => f.posizione === 1) : null;
   const passo: Passo = !atletaSelId ? "giocatrice" : !skillSel ? "fondamentale" : "esito";
 
   function ModaleSituazione() {
@@ -412,11 +446,21 @@ export default function PartitaLive() {
 
       <View style={[styles.colonnaComandi, orizzontale ? { flex: 1 } : { flex: 1, width: "100%" }]}>
         <View style={styles.tabellone}>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.avversario} numberOfLines={1}>vs {match.avversario}</Text>
-            <Text style={styles.setNumero}>Set {setCorrente.numero_set}</Text>
+          {/* Le due squadre una sopra l'altra: la palla indica chi serve. */}
+          <View style={{ flex: 1, gap: 3 }}>
+            <View style={styles.rigaSquadra}>
+              <Text style={styles.indicatoreServizio}>{noiAlServizio ? "🏐" : ""}</Text>
+              <Text style={[styles.nomeSquadra, noiAlServizio && styles.nomeSquadraAlServizio]} numberOfLines={1}>{team?.nome ?? "Noi"}</Text>
+            </View>
+            <View style={styles.rigaSquadra}>
+              <Text style={styles.indicatoreServizio}>{noiAlServizio ? "" : "🏐"}</Text>
+              <Text style={[styles.nomeSquadra, !noiAlServizio && styles.nomeSquadraAlServizio]} numberOfLines={1}>{match.avversario}</Text>
+            </View>
           </View>
-          <Text style={[styles.punteggio, { fontSize: d(26) }]}>{setCorrente.punti_noi}-{setCorrente.punti_avversario}</Text>
+          <View style={{ alignItems: "flex-end" }}>
+            <Text style={styles.setNumero}>Set {setCorrente.numero_set}</Text>
+            <Text style={[styles.punteggio, { fontSize: d(26) }]}>{setCorrente.punti_noi}-{setCorrente.punti_avversario}</Text>
+          </View>
         </View>
 
         {erroreVisibile && (
@@ -510,10 +554,6 @@ export default function PartitaLive() {
                 <Text style={styles.bottonePuntoAvversarioTesto}>+1 LORO</Text>
                 <Text style={styles.sottoPulsante}>errore nostro</Text>
               </Pressable>
-              <Pressable style={[styles.bottoneFallo, { paddingVertical: d(12) }]} onPress={() => registra("Fallo_rotazione", null, null)}>
-                <Text style={styles.bottoneFalloTesto}>FALLO</Text>
-                <Text style={styles.sottoPulsante}>rotazione</Text>
-              </Pressable>
             </View>
 
             <View style={styles.rigaComandiFissi}>
@@ -521,7 +561,7 @@ export default function PartitaLive() {
                 <Text style={styles.tastoPiccoloTesto}>📊 Situazione</Text>
               </Pressable>
               <Pressable onPress={() => setPopupEventi(true)} style={styles.tastoPiccolo}>
-                <Text style={styles.tastoPiccoloTesto}>🕑 {eventi.length}</Text>
+                <Text style={styles.tastoPiccoloTesto}>🕑 Ultime {Math.min(eventi.length, AZIONI_RECENTI_MOSTRATE)}</Text>
               </Pressable>
               <Pressable onPress={() => setPopupLibero(true)} style={styles.tastoPiccolo}>
                 <Text style={styles.tastoPiccoloTesto}>{libero ? "L ✓" : "Libero"}</Text>
@@ -583,11 +623,11 @@ export default function PartitaLive() {
         <View style={styles.sfondoPopup}>
           <View style={styles.cartaPopup}>
             <View style={styles.intestazionePopup}>
-              <Text style={styles.titoloPopup}>Ultimi eventi</Text>
+              <Text style={styles.titoloPopup}>Ultime azioni</Text>
               <Pressable onPress={() => setPopupEventi(false)} hitSlop={12}><Text style={styles.chiudiPopup}>✕</Text></Pressable>
             </View>
             <FlatList
-              data={eventi}
+              data={eventi.slice(0, AZIONI_RECENTI_MOSTRATE)}
               keyExtractor={(e) => e.id}
               ListEmptyComponent={<Text style={styles.nota}>Nessun evento registrato.</Text>}
               renderItem={({ item }) => (
@@ -605,12 +645,12 @@ export default function PartitaLive() {
       </Modal>
 
 
-      <Modal visible={popupLibero} animationType="fade" transparent onRequestClose={() => setPopupLibero(false)}>
+      <Modal visible={popupLibero} animationType="fade" transparent onRequestClose={chiudiPopupLibero}>
         <View style={styles.sfondoPopup}>
           <View style={styles.cartaPopup}>
             <View style={styles.intestazionePopup}>
               <Text style={styles.titoloPopup}>Libero</Text>
-              <Pressable onPress={() => setPopupLibero(false)} hitSlop={12}><Text style={styles.chiudiPopup}>✕</Text></Pressable>
+              <Pressable onPress={chiudiPopupLibero} hitSlop={12}><Text style={styles.chiudiPopup}>✕</Text></Pressable>
             </View>
 
             {libero ? (
@@ -633,23 +673,27 @@ export default function PartitaLive() {
                   <Text style={styles.bottoneSecondarioTesto}>Fai uscire il Libero</Text>
                 </Pressable>
               </>
+            ) : titolareLiberoScelto ? (
+              // Secondo passo, solo se in distinta ci sono più Liberi:
+              // chi esce è già scelto, ora si sceglie QUALE Libero entra.
+              <>
+                <Text style={styles.nota}>Quale Libero entra al posto di {etichettaAtleta(titolareLiberoScelto)}?</Text>
+                {liberiDisponibili.map((l) => (
+                  <Pressable key={l.id} style={styles.rigaScelta} onPress={() => faiEntrareLibero(l.id, titolareLiberoScelto)}>
+                    <Text style={styles.rigaSceltaTesto}>#{l.numero_maglia ?? "-"} {l.nome} {l.cognome}</Text>
+                  </Pressable>
+                ))}
+                <Pressable onPress={() => setTitolareLiberoScelto(null)} style={styles.tastoAnnullaPasso}>
+                  <Text style={styles.nota}>← cambia chi esce</Text>
+                </Pressable>
+              </>
             ) : (
               <>
                 <Text style={styles.nota}>
                   Scegli chi esce per far entrare il Libero. Solo seconda linea (posizioni 5 e 6): in posizione 1 si va al servizio e il Libero non può servire.
                 </Text>
                 {formazione.filter((f) => f.posizione === 5 || f.posizione === 6).map((f) => (
-                  <Pressable
-                    key={f.athlete_id}
-                    style={styles.rigaScelta}
-                    onPress={async () => {
-                      if (!setCorrente) return;
-                      const lib = atlete.find((a) => liberiIds.has(a.id));
-                      if (!lib) { avvisa("Nessun Libero", "Nessuno è indicato come Libero nella distinta di questa partita."); return; }
-                      try { await rimpiazzaConLibero(setCorrente.id, lib.id, f.athlete_id); setPopupLibero(false); carica(); }
-                      catch (e) { avvisa("Errore", (e as Error).message); }
-                    }}
-                  >
+                  <Pressable key={f.athlete_id} style={styles.rigaScelta} onPress={() => onSceglieUscenteLibero(f.athlete_id)}>
                     <Text style={styles.rigaSceltaTesto}>esce {etichettaAtleta(f.athlete_id)} (posizione {f.posizione})</Text>
                   </Pressable>
                 ))}
@@ -673,7 +717,11 @@ const styles = StyleSheet.create({
   colonnaComandi: { gap: 8 },
 
   tabellone: { flexDirection: "row", alignItems: "center", backgroundColor: brand.colors.surfaceSecondary, borderRadius: 10, padding: 10, gap: 8 },
-  avversario: { color: brand.colors.onSurface, fontWeight: "700", fontSize: 13 },
+  rigaSquadra: { flexDirection: "row", alignItems: "center", gap: 4 },
+  // Larghezza fissa anche quando la palla non c'è: i due nomi restano allineati.
+  indicatoreServizio: { width: 18, fontSize: 13, textAlign: "center" },
+  nomeSquadra: { flex: 1, color: brand.colors.onSurfaceSecondary, fontWeight: "600", fontSize: 13 },
+  nomeSquadraAlServizio: { color: brand.colors.onSurface, fontWeight: "800" },
   setNumero: { color: brand.colors.muted, fontSize: 11 },
   punteggio: { color: brand.colors.brand, fontWeight: "800", fontSize: 26 },
 
@@ -699,14 +747,10 @@ const styles = StyleSheet.create({
   bottonePuntoAvversario: { flex: 1, backgroundColor: "#4A1620", borderRadius: 10, alignItems: "center" },
   bottonePuntoAvversarioTesto: { color: "#fff", fontWeight: "800", fontSize: 15 },
   sottoPulsante: { color: "rgba(255,255,255,0.7)", fontSize: 10 },
-  bottoneFalloRotazione: { borderWidth: 1, borderColor: brand.colors.warning, borderRadius: 10, paddingVertical: 8, alignItems: "center" },
-  bottoneFalloRotazioneTesto: { color: brand.colors.warning, fontWeight: "700", fontSize: 12 },
 
   rigaComandiSecondari: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
   rigaComandiFissi: { flexDirection: "row", gap: 6, alignItems: "center" },
   rigaToggleFisso: { flexDirection: "row", alignItems: "center", gap: 2 },
-  bottoneFallo: { flex: 1, backgroundColor: "#4A3A10", borderRadius: 10, alignItems: "center" },
-  bottoneFalloTesto: { color: brand.colors.warning, fontWeight: "800", fontSize: 14 },
   zonaFissa: { gap: 6, paddingTop: 6, borderTopWidth: 1, borderTopColor: brand.colors.border },
   barraFissa: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
   bottoneDistruttivo: { borderColor: brand.colors.error, borderWidth: 1, paddingVertical: 12, borderRadius: 8, alignItems: "center" },

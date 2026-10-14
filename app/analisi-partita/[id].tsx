@@ -3,8 +3,8 @@ import { View, Text, Pressable, StyleSheet, ScrollView, ActivityIndicator } from
 import { useLocalSearchParams, useFocusEffect, router } from "expo-router";
 import { useAuth } from "@/src/context/AuthContext";
 import {
-  analisiFondamentaliPartita, analisiPersonePartita, andamentoTraPartite, rendimentoServizioRicezionePartita,
-  type AnalisiFondamentale, type AnalisiPersona, type AndamentoPartita, type RendimentoServizioRicezione,
+  analisiFondamentaliPartita, analisiPersoneDettaglioPartita, analisiPersonePartita, andamentoTraPartite, rendimentoServizioRicezionePartita,
+  type AnalisiFondamentale, type AnalisiPersona, type AnalisiPersonaFondamentale, type AndamentoPartita, type RendimentoServizioRicezione,
 } from "@/src/services/matches";
 import { supabaseClient } from "@/src/lib/supabase";
 import { avvisa } from "@/src/lib/confermaAzione";
@@ -23,6 +23,9 @@ export default function AnalisiPartita() {
   const [match, setMatch] = useState<Match | null>(null);
   const [fondamentali, setFondamentali] = useState<AnalisiFondamentale[]>([]);
   const [persone, setPersone] = useState<AnalisiPersona[]>([]);
+  // Dettaglio per fondamentale, raggruppato per giocatore; vuoto se non disponibile.
+  const [dettaglio, setDettaglio] = useState<Record<string, AnalisiPersonaFondamentale[]>>({});
+  const [aperti, setAperti] = useState<Set<string>>(new Set());
   const [andamento, setAndamento] = useState<AndamentoPartita[]>([]);
   const [servizioRicezione, setServizioRicezione] = useState<RendimentoServizioRicezione | null>(null);
   const [caricamento, setCaricamento] = useState(true);
@@ -33,14 +36,21 @@ export default function AnalisiPartita() {
     try {
       const { data: m } = await supabaseClient.from("matches").select("*").eq("id", id).single();
       setMatch(m ?? null);
-      const [f, p, a, sr] = await Promise.all([
+      const [f, p, det, a, sr] = await Promise.all([
         analisiFondamentaliPartita(id).catch(() => []),
         analisiPersonePartita(id).catch(() => []),
+        analisiPersoneDettaglioPartita(id).catch(() => [] as AnalisiPersonaFondamentale[]),
         andamentoTraPartite(team.id, 8).catch(() => []),
         rendimentoServizioRicezionePartita(id).catch(() => null),
       ]);
       setFondamentali(f);
       setPersone(p);
+      const perGiocatore: Record<string, AnalisiPersonaFondamentale[]> = {};
+      for (const riga of det) {
+        if (!perGiocatore[riga.athlete_id]) perGiocatore[riga.athlete_id] = [];
+        perGiocatore[riga.athlete_id].push(riga);
+      }
+      setDettaglio(perGiocatore);
       setAndamento(a);
       setServizioRicezione(sr);
     } catch (e) {
@@ -51,6 +61,24 @@ export default function AnalisiPartita() {
   }, [id, team]);
 
   useFocusEffect(useCallback(() => { carica(); }, [carica]));
+
+  function alternaDettaglio(athleteId: string) {
+    setAperti((prev) => {
+      const nuovo = new Set(prev);
+      if (nuovo.has(athleteId)) nuovo.delete(athleteId);
+      else nuovo.add(athleteId);
+      return nuovo;
+    });
+  }
+
+  /** (punti - errori) / azioni, come per i fondamentali di squadra. */
+  function efficienzaDi(punti: number, errori: number, azioni: number): number | null {
+    return azioni > 0 ? (punti - errori) / azioni : null;
+  }
+
+  function formattaEfficienza(v: number | null): string {
+    return v === null ? "—" : (v >= 0 ? "+" : "") + v.toFixed(2);
+  }
 
   function coloreEfficienza(v: number | null): string {
     if (v === null) return brand.colors.muted;
@@ -122,26 +150,84 @@ export default function AnalisiPartita() {
 
         <View>
           <Text style={styles.sezione}>Contributo individuale</Text>
-          <Text style={styles.nota}>Ordinate dal saldo migliore. Con "punto di forza" e "punto debole" nella partita.</Text>
+          <Text style={styles.nota}>Ordinate dal saldo migliore. Con "punto di forza" e "punto debole" nella partita.{Object.keys(dettaglio).length > 0 ? " Tocca una riga per vedere i numeri fondamentale per fondamentale." : ""}</Text>
           {persone.length === 0 ? (
             <Text style={styles.vuoto}>Nessun dato individuale disponibile.</Text>
           ) : (
-            persone.map((p, i) => (
-              <View key={p.athlete_id} style={styles.rigaPersona}>
-                <Text style={styles.posizionePersona}>{i + 1}</Text>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.nomePersona}>{p.nome_completo}</Text>
-                  <Text style={styles.dettaglioPersona}>
-                    {p.azioni} azioni · {p.punti}+/{p.errori}-
-                    {p.fondamentale_migliore ? ` · forte in ${p.fondamentale_migliore}` : ""}
-                    {p.fondamentale_peggiore && p.fondamentale_peggiore !== p.fondamentale_migliore ? ` · da curare: ${p.fondamentale_peggiore}` : ""}
-                  </Text>
+            persone.map((p, i) => {
+              const righe = dettaglio[p.athlete_id] ?? [];
+              const espandibile = righe.length > 0;
+              const aperta = espandibile && aperti.has(p.athlete_id);
+              return (
+                <View key={p.athlete_id} style={styles.cardPersona}>
+                  <Pressable style={styles.rigaPersona} onPress={() => espandibile && alternaDettaglio(p.athlete_id)} disabled={!espandibile}>
+                    <Text style={styles.posizionePersona}>{i + 1}</Text>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.nomePersona}>{espandibile ? (aperta ? "▾ " : "▸ ") : ""}{p.nome_completo}</Text>
+                      <Text style={styles.dettaglioPersona}>
+                        {p.azioni} azioni · {p.punti}+/{p.errori}-
+                        {p.fondamentale_migliore ? ` · forte in ${p.fondamentale_migliore}` : ""}
+                        {p.fondamentale_peggiore && p.fondamentale_peggiore !== p.fondamentale_migliore ? ` · da curare: ${p.fondamentale_peggiore}` : ""}
+                      </Text>
+                    </View>
+                    <Text style={[styles.saldoPersona, { color: p.saldo >= 0 ? brand.colors.success : brand.colors.error }]}>
+                      {p.saldo >= 0 ? "+" : ""}{p.saldo}
+                    </Text>
+                  </Pressable>
+
+                  {aperta && (
+                    <View style={styles.tabellaDettaglio}>
+                      <View style={styles.rigaTabella}>
+                        <Text style={[styles.cellaFondamentale, styles.intestazioneTabella]}>Fondamentale</Text>
+                        <Text style={[styles.cellaNumero, styles.intestazioneTabella]}>Az.</Text>
+                        <Text style={[styles.cellaNumero, styles.intestazioneTabella]}>Pt</Text>
+                        <Text style={[styles.cellaNumero, styles.intestazioneTabella]}>Neu</Text>
+                        <Text style={[styles.cellaNumero, styles.intestazioneTabella]}>Err</Text>
+                        <Text style={[styles.cellaEfficienza, styles.intestazioneTabella]}>Eff.</Text>
+                      </View>
+                      {righe.map((r) => {
+                        const eff = efficienzaDi(r.punti, r.errori, r.azioni);
+                        return (
+                          <View key={r.fondamentale}>
+                            <View style={styles.rigaTabella}>
+                              <Text style={styles.cellaFondamentale}>{r.fondamentale}</Text>
+                              <Text style={styles.cellaNumero}>{r.azioni}</Text>
+                              <Text style={styles.cellaNumero}>{r.punti}</Text>
+                              <Text style={styles.cellaNumero}>{r.neutri}</Text>
+                              <Text style={styles.cellaNumero}>{r.errori}</Text>
+                              <Text style={[styles.cellaEfficienza, { color: coloreEfficienza(eff) }]}>{formattaEfficienza(eff)}</Text>
+                            </View>
+                            {r.fondamentale === "Ricezione" && (
+                              <Text style={styles.dettaglioRicezione}>
+                                Qualità: {r.ricezioni_ottime} perfette · {r.ricezioni_buone} buone · {r.ricezioni_scarse} scarse · {r.errori} errori
+                              </Text>
+                            )}
+                          </View>
+                        );
+                      })}
+                      {(() => {
+                        const totAz = righe.reduce((s, r) => s + r.azioni, 0);
+                        const totPt = righe.reduce((s, r) => s + r.punti, 0);
+                        const totNeu = righe.reduce((s, r) => s + r.neutri, 0);
+                        const totErr = righe.reduce((s, r) => s + r.errori, 0);
+                        const eff = efficienzaDi(totPt, totErr, totAz);
+                        return (
+                          <View style={[styles.rigaTabella, styles.rigaTotale]}>
+                            <Text style={[styles.cellaFondamentale, styles.testoTotale]}>Totale</Text>
+                            <Text style={[styles.cellaNumero, styles.testoTotale]}>{totAz}</Text>
+                            <Text style={[styles.cellaNumero, styles.testoTotale]}>{totPt}</Text>
+                            <Text style={[styles.cellaNumero, styles.testoTotale]}>{totNeu}</Text>
+                            <Text style={[styles.cellaNumero, styles.testoTotale]}>{totErr}</Text>
+                            <Text style={[styles.cellaEfficienza, styles.testoTotale, { color: coloreEfficienza(eff) }]}>{formattaEfficienza(eff)}</Text>
+                          </View>
+                        );
+                      })()}
+                      <Text style={styles.notaTabella}>Pt = punti, Neu = neutri, Err = errori. Efficienza = (punti − errori) / azioni.</Text>
+                    </View>
+                  )}
                 </View>
-                <Text style={[styles.saldoPersona, { color: p.saldo >= 0 ? brand.colors.success : brand.colors.error }]}>
-                  {p.saldo >= 0 ? "+" : ""}{p.saldo}
-                </Text>
-              </View>
-            ))
+              );
+            })
           )}
         </View>
 
@@ -181,7 +267,18 @@ const styles = StyleSheet.create({
   barraSfondo: { height: 8, backgroundColor: brand.colors.surfaceTertiary, borderRadius: 4, overflow: "hidden" },
   barraRiempimento: { height: "100%", borderRadius: 4 },
   dettaglioFondamentale: { color: brand.colors.muted, fontSize: 11 },
-  rigaPersona: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: brand.colors.border },
+  cardPersona: { borderBottomWidth: 1, borderBottomColor: brand.colors.border },
+  rigaPersona: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 8 },
+  tabellaDettaglio: { backgroundColor: brand.colors.surfaceSecondary, borderRadius: 10, padding: 10, marginBottom: 10, marginLeft: 30, gap: 4 },
+  rigaTabella: { flexDirection: "row", alignItems: "center", gap: 4 },
+  intestazioneTabella: { color: brand.colors.muted, fontSize: 10, fontWeight: "700", textTransform: "uppercase" },
+  cellaFondamentale: { flex: 1, color: brand.colors.onSurface, fontSize: 12, fontWeight: "600" },
+  cellaNumero: { width: 32, textAlign: "right", color: brand.colors.onSurfaceSecondary, fontSize: 12 },
+  cellaEfficienza: { width: 48, textAlign: "right", fontSize: 12, fontWeight: "800", color: brand.colors.onSurfaceSecondary },
+  dettaglioRicezione: { color: brand.colors.muted, fontSize: 11, paddingBottom: 2 },
+  rigaTotale: { borderTopWidth: 1, borderTopColor: brand.colors.border, paddingTop: 4, marginTop: 2 },
+  testoTotale: { fontWeight: "800", color: brand.colors.onSurface },
+  notaTabella: { color: brand.colors.muted, fontSize: 10, marginTop: 4 },
   posizionePersona: { color: brand.colors.muted, fontSize: 13, fontWeight: "700", width: 20 },
   nomePersona: { color: brand.colors.onSurface, fontSize: 14, fontWeight: "600" },
   dettaglioPersona: { color: brand.colors.muted, fontSize: 11, marginTop: 2 },

@@ -110,6 +110,23 @@ export async function elencaStoricoFormazioneSet(setId: string): Promise<MatchSe
   return data ?? [];
 }
 
+/**
+ * Formazione di PARTENZA di un set ({ posizione: athleteId }), prima di
+ * rotazioni e cambi. Vuota se non disponibile (set giocato prima che
+ * venisse registrata, o colonna non ancora presente nel database).
+ */
+export async function formazioneInizialeSet(setId: string): Promise<Record<number, string>> {
+  const { data, error } = await supabaseClient
+    .from("match_set_lineups")
+    .select("athlete_id, posizione_iniziale")
+    .eq("set_id", setId)
+    .not("posizione_iniziale", "is", null);
+  if (error) return {};
+  const risultato: Record<number, string> = {};
+  for (const r of data ?? []) if (r.posizione_iniziale) risultato[r.posizione_iniziale] = r.athlete_id;
+  return risultato;
+}
+
 /** Chi deve servire per prima nel prossimo set, secondo l'alternanza automatica — null se va richiesto (1° o 5° set). */
 export async function chiServeDefaultNuovoSet(matchId: string, numeroSet: number): Promise<"noi" | "avversario" | null> {
   const { data, error } = await supabaseClient.rpc("chi_serve_default_nuovo_set", { p_match_id: matchId, p_numero_nuovo_set: numeroSet });
@@ -262,6 +279,19 @@ export interface AnalisiPersona {
   fondamentale_peggiore: string | null;
 }
 
+/** Una riga per giocatore e fondamentale: i numeri dietro al riepilogo di ciascuno. */
+export interface AnalisiPersonaFondamentale {
+  athlete_id: string;
+  fondamentale: string;
+  azioni: number;
+  punti: number;
+  neutri: number;
+  errori: number;
+  ricezioni_ottime: number;
+  ricezioni_buone: number;
+  ricezioni_scarse: number;
+}
+
 export interface AndamentoPartita {
   match_id: string;
   avversario: string;
@@ -284,6 +314,13 @@ export async function analisiFondamentaliPartita(matchId: string): Promise<Anali
 /** Contributo di ciascuna persona in una partita. Chi non è staff vede solo le proprie righe (applicato dal database). */
 export async function analisiPersonePartita(matchId: string): Promise<AnalisiPersona[]> {
   const { data, error } = await supabaseClient.rpc("analisi_persone_partita", { p_match_id: matchId });
+  if (error) throw error;
+  return data ?? [];
+}
+
+/** Dettaglio per fondamentale di ciascun giocatore (stessa visibilità di analisiPersonePartita). */
+export async function analisiPersoneDettaglioPartita(matchId: string): Promise<AnalisiPersonaFondamentale[]> {
+  const { data, error } = await supabaseClient.rpc("analisi_persone_dettaglio_partita", { p_match_id: matchId });
   if (error) throw error;
   return data ?? [];
 }
