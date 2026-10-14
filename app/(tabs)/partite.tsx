@@ -2,7 +2,7 @@ import { useCallback, useState } from "react";
 import { View, Text, FlatList, TextInput, Pressable, StyleSheet, RefreshControl, ActivityIndicator, Modal, ScrollView } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { useAuth } from "@/src/context/AuthContext";
-import { andamentoSquadraPartite, convertiPartitaInAllenamento, creaMatch, elencaPartite, rendimentoRotazioniPartita, type AndamentoSquadraPartiteVoce, type RendimentoRotazionePartita } from "@/src/services/matches";
+import { andamentoSquadraPartite, convertiPartitaInAllenamento, creaMatch, eliminaPartita, elencaPartite, rendimentoRotazioniPartita, type AndamentoSquadraPartiteVoce, type RendimentoRotazionePartita } from "@/src/services/matches";
 import { elencaCampionati, riassegnaCampionatoPartita } from "@/src/services/championships";
 import { PannelloSporteasy } from "@/src/components/PannelloSporteasy";
 import { brand } from "@/src/config";
@@ -10,7 +10,10 @@ import type { Campionato, Match } from "@/src/types/database";
 import { avvisa, confermaAzione } from "@/src/lib/confermaAzione";
 
 export default function Partite() {
-  const { team, puoScrivere } = useAuth();
+  const { team, puoScrivere, isSuperuser } = useAuth();
+  // Stessa regola applicata dal database (funzione elimina_partita):
+  // allenatore/vice della squadra oppure superuser.
+  const puoEliminare = puoScrivere || isSuperuser;
   const [partite, setPartite] = useState<Match[]>([]);
   const [andamento, setAndamento] = useState<AndamentoSquadraPartiteVoce[]>([]);
   const [campionati, setCampionati] = useState<Campionato[]>([]);
@@ -82,6 +85,24 @@ export default function Partite() {
           avvisa("Convertito", "Lo trovi ora nella tab Allenamenti.");
         } catch (e) { avvisa("Impossibile convertire", (e as Error).message); }
       },
+    );
+  }
+
+  function chiediEliminazione(m: Match) {
+    const quando = new Date(m.data).toLocaleDateString("it-IT");
+    const haDati = m.stato !== "programmata";
+    confermaAzione(
+      "Eliminare la partita?",
+      `"vs ${m.avversario}" del ${quando} verrà eliminata definitivamente${haDati ? ", insieme a set, formazioni e azioni di scouting registrate" : ""}. L'operazione non si può annullare.`,
+      "Elimina",
+      async () => {
+        try {
+          await eliminaPartita(m.id);
+          setPartite((prev) => prev.filter((p) => p.id !== m.id));
+          carica();
+        } catch (e) { avvisa("Impossibile eliminare", (e as Error).message); }
+      },
+      true,
     );
   }
 
@@ -226,6 +247,11 @@ export default function Partite() {
                 </Pressable>
               </View>
             )}
+            {puoEliminare && (
+              <Pressable onPress={() => chiediEliminazione(item)} hitSlop={8} style={styles.bottoneElimina}>
+                <Text style={styles.bottoneEliminaTesto}>🗑 Elimina partita</Text>
+              </Pressable>
+            )}
           </Pressable>
         )}
       />
@@ -263,6 +289,8 @@ const styles = StyleSheet.create({
   cardSotto: { color: brand.colors.muted, fontSize: 13 },
   linkCampionato: { color: brand.colors.brandSecondary, fontSize: 12, fontWeight: "600", marginTop: 4 },
   linkConverti: { color: brand.colors.muted, fontSize: 11, marginTop: 4 },
+  bottoneElimina: { alignSelf: "flex-start", marginTop: 8, paddingVertical: 4, paddingHorizontal: 10, borderRadius: 8, borderWidth: 1, borderColor: brand.colors.error },
+  bottoneEliminaTesto: { color: brand.colors.error, fontSize: 12, fontWeight: "600" },
   cardRisultato: { color: brand.colors.brand, fontWeight: "700", marginTop: 4 },
   badge: { color: brand.colors.muted, fontSize: 12, textTransform: "uppercase" },
   badgeInCorso: { color: brand.colors.warning, fontWeight: "700" },

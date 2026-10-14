@@ -147,6 +147,16 @@ export async function convertiPartitaInAllenamento(matchId: string, titolo?: str
   return data as string;
 }
 
+/**
+ * Elimina definitivamente una partita con tutti i dati collegati (set,
+ * eventi di scouting, convocati, formazioni). Permessi verificati dal
+ * database: solo allenatore/vice della squadra o superuser.
+ */
+export async function eliminaPartita(matchId: string): Promise<void> {
+  const { error } = await supabaseClient.rpc("elimina_partita", { p_match_id: matchId });
+  if (error) throw error;
+}
+
 export interface RendimentoRotazionePartita {
   rotazione_di: string;
   punti_fatti: number;
