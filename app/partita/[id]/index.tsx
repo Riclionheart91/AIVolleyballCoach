@@ -552,8 +552,20 @@ export default function PartitaLive() {
     );
   }
 
+  // In verticale la pagina intera scorre: con i comandi in piu' (TO, Zone)
+  // su un telefono non tutto sta in una schermata e cio' che usciva dallo
+  // schermo non era raggiungibile. In orizzontale resta a schermo fisso.
+  const Radice: any = orizzontale ? View : ScrollView;
+  const propsRadice = orizzontale
+    ? { style: [styles.contenitore, { flexDirection: "row" }] }
+    : {
+        style: { flex: 1, backgroundColor: brand.colors.surface },
+        contentContainerStyle: [styles.contenitore, { flexGrow: 1, flexDirection: "column" }],
+        keyboardShouldPersistTaps: "handled",
+      };
+
   return (
-    <View style={[styles.contenitore, { flexDirection: orizzontale ? "row" : "column" }]}>
+    <Radice {...propsRadice}>
       <View style={[styles.colonnaCampo, orizzontale ? { width: latoCampo } : { width: "100%", alignItems: "center" }]}>
         <View style={{ width: latoCampo, height: latoCampo }}>
           <Campo9x9
@@ -609,7 +621,7 @@ export default function PartitaLive() {
   
         {puoScoutare ? (
           <>
-          <ScrollView style={{ flex: 1 }} contentContainerStyle={{ gap: 8, paddingBottom: 8 }}>
+          <ScrollView style={{ flex: 1, minHeight: orizzontale ? 0 : d(240) }} nestedScrollEnabled contentContainerStyle={{ gap: 8, paddingBottom: 8 }}>
             <Text style={styles.indicazionePasso}>
               {passo === "giocatrice" && "1. Tocca chi è in campo"}
               {passo === "fondamentale" && `2. ${selezionata ? etichettaAtleta(selezionata.id) : ""} — quale fondamentale?`}
@@ -908,7 +920,7 @@ export default function PartitaLive() {
       </Modal>
 
       <ModaleSituazione />
-    </View>
+    </Radice>
   );
 }
 
@@ -953,13 +965,13 @@ const styles = StyleSheet.create({
   sottoPulsante: { color: "rgba(255,255,255,0.7)", fontSize: 10 },
 
   rigaComandiSecondari: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
-  rigaComandiFissi: { flexDirection: "row", gap: 6, alignItems: "center" },
+  rigaComandiFissi: { flexDirection: "row", flexWrap: "wrap", gap: 6, alignItems: "center" },
   rigaToggleFisso: { flexDirection: "row", alignItems: "center", gap: 2 },
   zonaFissa: { gap: 6, paddingTop: 6, borderTopWidth: 1, borderTopColor: brand.colors.border },
   barraFissa: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
   bottoneDistruttivo: { borderColor: brand.colors.error, borderWidth: 1, paddingVertical: 12, borderRadius: 8, alignItems: "center" },
   bottoneDistruttivoTesto: { color: brand.colors.error, fontWeight: "700" },
-  tastoPiccolo: { flexGrow: 1, backgroundColor: brand.colors.surfaceSecondary, paddingVertical: 10, paddingHorizontal: 8, borderRadius: 8, alignItems: "center", minHeight: 40, justifyContent: "center" },
+  tastoPiccolo: { flexGrow: 1, backgroundColor: brand.colors.surfaceSecondary, paddingVertical: 10, paddingHorizontal: 6, borderRadius: 8, alignItems: "center", minHeight: 40, justifyContent: "center" },
   tastoPiccoloAttivo: { backgroundColor: brand.colors.brand },
   tastoPiccoloTestoAttivo: { color: "#000", fontWeight: "800" },
   tastoPiccoloTesto: { color: brand.colors.onSurface, fontWeight: "600", fontSize: 12 },
