@@ -690,9 +690,12 @@ export default function PartitaLive() {
             ) : (
               <>
                 <Text style={styles.nota}>
-                  Scegli chi esce per far entrare il Libero. Solo seconda linea (posizioni 5 e 6): in posizione 1 si va al servizio e il Libero non può servire.
+                  {noiAlServizio
+                    ? "Scegli chi esce per far entrare il Libero. Solo seconda linea (posizioni 5 e 6): ora serviamo noi, quindi la posizione 1 è alla battuta e il Libero non può servire."
+                    : "Scegli chi esce per far entrare il Libero. Solo seconda linea (posizioni 5, 6 e 1): serve l'avversario, quindi la posizione 1 è in ricezione e il Libero può entrarci."}
                 </Text>
-                {formazione.filter((f) => f.posizione === 5 || f.posizione === 6).map((f) => (
+                {/* La posizione 1 è consentita solo quando NON serviamo noi: la regola è la stessa applicata dal database. */}
+                {formazione.filter((f) => f.posizione === 5 || f.posizione === 6 || (f.posizione === 1 && !noiAlServizio)).map((f) => (
                   <Pressable key={f.athlete_id} style={styles.rigaScelta} onPress={() => onSceglieUscenteLibero(f.athlete_id)}>
                     <Text style={styles.rigaSceltaTesto}>esce {etichettaAtleta(f.athlete_id)} (posizione {f.posizione})</Text>
                   </Pressable>
