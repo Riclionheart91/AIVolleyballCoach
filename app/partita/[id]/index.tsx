@@ -400,6 +400,13 @@ export default function PartitaLive() {
   // Liberi indicati nella distinta di questa partita (possono essere più di uno).
   const liberiDisponibili = atlete.filter((a) => liberiIds.has(a.id) && convocateIds.includes(a.id));
 
+  /** Da browser ricarica proprio la pagina (utile per prendere la versione nuova dell'app); da app rilegge i dati della partita. */
+  function ricaricaPagina() {
+    const g = globalThis as any;
+    if (g.location && typeof g.location.reload === "function") { g.location.reload(); return; }
+    carica();
+  }
+
   function chiudiPopupLibero() {
     setPopupLibero(false);
     setTitolareLiberoScelto(null);
@@ -816,6 +823,9 @@ export default function PartitaLive() {
               <Pressable onPress={() => setPopupTimeout(true)} style={styles.tastoPiccolo}>
                 <Text style={styles.tastoPiccoloTesto}>⏱ TO</Text>
               </Pressable>
+              <Pressable onPress={ricaricaPagina} style={styles.tastoPiccolo} accessibilityLabel="Ricarica la pagina">
+                <Text style={styles.tastoPiccoloTesto}>🔄</Text>
+              </Pressable>
               <Pressable onPress={alternaZone} style={[styles.tastoPiccolo, zoneAttive && styles.tastoPiccoloAttivo]}>
                 <Text style={[styles.tastoPiccoloTesto, zoneAttive && styles.tastoPiccoloTestoAttivo]}>🎯 Zone {zoneAttive ? "ON" : "off"}</Text>
               </Pressable>
@@ -844,7 +854,12 @@ export default function PartitaLive() {
           </View>
           </>
         ) : (
-          <Text style={styles.nota}>Consultazione in sola lettura.</Text>
+          <>
+            <Text style={styles.nota}>Consultazione in sola lettura.</Text>
+            <Pressable onPress={ricaricaPagina} style={styles.tastoPiccolo}>
+              <Text style={styles.tastoPiccoloTesto}>🔄 Ricarica</Text>
+            </Pressable>
+          </>
         )}
       </View>
 
