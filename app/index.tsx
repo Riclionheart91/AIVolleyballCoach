@@ -1,10 +1,13 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { View, Text, ActivityIndicator, Pressable, StyleSheet } from "react-native";
 import { router } from "expo-router";
 import { useAuth } from "@/src/context/AuthContext";
 import { brand } from "@/src/config";
+import { miePartiteScoutOspite } from "@/src/services/scoutOspiti";
 
 export default function Index() {
+  // Evita controlli ospite sovrapposti se l'effetto riparte mentre si attende la risposta.
+  const controlloOspiteInCorso = useRef(false);
   const { session, caricamento, caricamentoContesto, caricamentoSocieta, erroreTeam, stagioneAttiva, squadreDisponibili, societaPresidenza, ruolo, ricaricaContesto } = useAuth();
 
   useEffect(() => {
@@ -40,7 +43,18 @@ export default function Index() {
     // subito lì — un ciclo che non lasciava mai entrare nessuno con più
     // di una squadra. La scelta resta comunque disponibile in ogni
     // momento dal pulsante nell'intestazione delle tab.
-    if (squadreDisponibili.length === 0) { router.replace("/crea-squadra"); return; }
+    if (squadreDisponibili.length === 0) {
+      // Chi non ha squadre ma e' stato invitato come SCOUT OSPITE su una
+      // partita va alla sua schermata dedicata, non alla creazione di una
+      // squadra (che per lui non ha senso).
+      if (controlloOspiteInCorso.current) return;
+      controlloOspiteInCorso.current = true;
+      miePartiteScoutOspite()
+        .then((partite) => router.replace(partite.length > 0 ? "/ospite" : "/crea-squadra"))
+        .catch(() => router.replace("/crea-squadra"))
+        .finally(() => { controlloOspiteInCorso.current = false; });
+      return;
+    }
     if (!stagioneAttiva) { router.replace("/apri-stagione"); return; }
     // Le persone con profilo atleta non hanno accesso ad allenamenti,
     // anagrafica ed esercizi: entrano direttamente nella propria scheda.

@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { View, Text, Pressable, StyleSheet, ScrollView, Switch, Modal, ActivityIndicator, FlatList, useWindowDimensions } from "react-native";
 import { useLocalSearchParams, useFocusEffect, router } from "expo-router";
 import { useAuth } from "@/src/context/AuthContext";
@@ -32,6 +32,7 @@ import { supabaseClient } from "@/src/lib/supabase";
 import { confermaAzione, avvisa } from "@/src/lib/confermaAzione";
 import { Campo9x9, type OccupanteCampo } from "@/src/components/Campo9x9";
 import { useSincronizzazioneLive } from "@/src/hooks/useSincronizzazioneLive";
+import { statoPartitaOspite } from "@/src/services/scoutOspiti";
 
 type Passo = "giocatrice" | "fondamentale" | "esito";
 
@@ -41,6 +42,9 @@ type Passo = "giocatrice" | "fondamentale" | "esito";
  * che leggono la storia recente): qui si limita solo ciò che si vede.
  */
 const AZIONI_RECENTI_MOSTRATE = 5;
+
+/** Ogni quanto lo scout OSPITE rilegge la partita (non riceve la trasmissione in tempo reale: non ha accesso diretto alle tabelle). */
+const INTERVALLO_AGGIORNAMENTO_OSPITE_MS = 4000;
 
 /**
  * Scouting live. Due scelte di impostazione volute:
@@ -56,8 +60,14 @@ const AZIONI_RECENTI_MOSTRATE = 5;
  *    attribuzione, che era il difetto del flusso precedente.
  */
 export default function PartitaLive() {
-  const { id } = useLocalSearchParams<{ id: string }>();
-  const { team, puoScrivere, puoScoutare } = useAuth();
+  const { id, ospite } = useLocalSearchParams<{ id: string; ospite?: string }>();
+  const { team, puoScrivere, puoScoutare: puoScoutareDaRuolo } = useAuth();
+  // Scout OSPITE: persona esterna alla squadra, invitata solo su questa partita.
+  // Legge tutto da una funzione dedicata del database e non puo' avviare/chiudere set o partita.
+  const modoOspite = ospite === "1";
+  const puoScoutare = modoOspite || puoScoutareDaRuolo;
+  const [nomeSquadraOspite, setNomeSquadraOspite] = useState<string | null>(null);
+  const [erroreOspite, setErroreOspite] = useState<string | null>(null);
   const [match, setMatch] = useState<Match | null>(null);
   const [setCorrente, setSetCorrente] = useState<MatchSet | null>(null);
   const [eventi, setEventi] = useState<MatchEvent[]>([]);
@@ -112,6 +122,26 @@ export default function PartitaLive() {
 
   const carica = useCallback(async () => {
     if (!id) return;
+    if (modoOspite) {
+      try {
+        const st = await statoPartitaOspite(id);
+        setErroreOspite(null);
+        setMatch(st.match);
+        setNomeSquadraOspite(st.team_nome);
+        setSetCorrente(st.sets.find((s) => s.id === st.set_attivo_id) ?? null);
+        setEventi(st.eventi);
+        setAtlete(st.atlete);
+        setConvocateIds(st.convocati.map((c) => c.athlete_id));
+        setLiberiIds(new Set(st.convocati.filter((c) => c.is_libero).map((c) => c.athlete_id)));
+        setRegolePunteggio(st.regole);
+        setFormazione(st.formazione.filter((f) => f.in_campo).sort((a, b) => (a.posizione ?? 0) - (b.posizione ?? 0)));
+        setStoricoFormazione(st.formazione);
+        setLibero(st.libero ?? null);
+      } catch (e) {
+        setErroreOspite((e as Error).message);
+      }
+      return;
+    }
     const { data: m } = await supabaseClient.from("matches").select("*").eq("id", id).single();
     setMatch(m ?? null);
     const set = await elencaSet(id);
@@ -131,10 +161,18 @@ export default function PartitaLive() {
       setStoricoFormazione(storico);
       setLibero(await liberoInCampo(attivo.id));
     }
-    if (attivo && m) verificaFineSet(attivo, m, set);
-  }, [id]);
+    if (attivo && m && !modoOspite) verificaFineSet(attivo, m, set);
+  }, [id, modoOspite]);
 
   useFocusEffect(useCallback(() => { carica(); }, [carica]));
+
+  // L'ospite non puo' leggere le tabelle direttamente, quindi niente
+  // trasmissione in tempo reale: si rilegge a intervalli brevi.
+  useEffect(() => {
+    if (!modoOspite) return;
+    const timer = setInterval(() => { carica(); }, INTERVALLO_AGGIORNAMENTO_OSPITE_MS);
+    return () => clearInterval(timer);
+  }, [modoOspite, carica]);
 
   // Se un'altra persona (vice, scout) registra da un altro
   // dispositivo, questa schermata si aggiorna da sola invece di
@@ -309,6 +347,21 @@ export default function PartitaLive() {
     setTitolareLiberoScelto(titolareId);
   }
 
+  if (modoOspite && erroreOspite && (!match || match.stato !== "in_corso" || erroreOspite === "Permesso negato")) {
+    return (
+      <View style={[styles.contenitore, { alignItems: "center", justifyContent: "center", gap: 16 }]}>
+        <Text style={styles.vuoto}>
+          {erroreOspite === "Permesso negato"
+            ? "Accesso terminato: la partita non è più in corso oppure non sei più abilitato."
+            : `Impossibile aggiornare la partita: ${erroreOspite}`}
+        </Text>
+        <Pressable style={styles.bottoneSecondario} onPress={() => router.replace("/ospite")}>
+          <Text style={styles.bottoneSecondarioTesto}>Torna alle tue partite</Text>
+        </Pressable>
+      </View>
+    );
+  }
+
   if (!match) return <View style={styles.contenitore}><Text style={styles.vuoto}>Caricamento…</Text></View>;
 
   if (match.stato !== "in_corso") {
@@ -320,7 +373,12 @@ export default function PartitaLive() {
             <Text style={styles.bottoneSecondarioTesto}>Vai alla preparazione</Text>
           </Pressable>
         )}
-        {match.stato === "conclusa" && (
+        {modoOspite && (
+          <Pressable style={styles.bottoneSecondario} onPress={() => router.replace("/ospite")}>
+            <Text style={styles.bottoneSecondarioTesto}>Torna alle tue partite</Text>
+          </Pressable>
+        )}
+        {match.stato === "conclusa" && !modoOspite && (
           <Pressable style={styles.bottoneSecondario} onPress={apriSituazione}>
             <Text style={styles.bottoneSecondarioTesto}>Vedi analisi rotazioni</Text>
           </Pressable>
@@ -450,7 +508,7 @@ export default function PartitaLive() {
           <View style={{ flex: 1, gap: 3 }}>
             <View style={styles.rigaSquadra}>
               <Text style={styles.indicatoreServizio}>{noiAlServizio ? "🏐" : ""}</Text>
-              <Text style={[styles.nomeSquadra, noiAlServizio && styles.nomeSquadraAlServizio]} numberOfLines={1}>{team?.nome ?? "Noi"}</Text>
+              <Text style={[styles.nomeSquadra, noiAlServizio && styles.nomeSquadraAlServizio]} numberOfLines={1}>{(modoOspite ? nomeSquadraOspite : team?.nome) ?? "Noi"}</Text>
             </View>
             <View style={styles.rigaSquadra}>
               <Text style={styles.indicatoreServizio}>{noiAlServizio ? "" : "🏐"}</Text>
@@ -557,9 +615,11 @@ export default function PartitaLive() {
             </View>
 
             <View style={styles.rigaComandiFissi}>
-              <Pressable onPress={apriSituazione} style={styles.tastoPiccolo}>
-                <Text style={styles.tastoPiccoloTesto}>📊 Situazione</Text>
-              </Pressable>
+              {!modoOspite && (
+                <Pressable onPress={apriSituazione} style={styles.tastoPiccolo}>
+                  <Text style={styles.tastoPiccoloTesto}>📊 Situazione</Text>
+                </Pressable>
+              )}
               <Pressable onPress={() => setPopupEventi(true)} style={styles.tastoPiccolo}>
                 <Text style={styles.tastoPiccoloTesto}>🕑 Ultime {Math.min(eventi.length, AZIONI_RECENTI_MOSTRATE)}</Text>
               </Pressable>

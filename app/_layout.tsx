@@ -8,6 +8,7 @@ export default function RootLayout() {
         <Stack.Screen name="login" />
         <Stack.Screen name="crea-squadra" />
         <Stack.Screen name="apri-stagione" />
+        <Stack.Screen name="ospite" />
         <Stack.Screen name="seleziona-squadra" options={{ headerShown: true, title: "Cambia squadra", presentation: "modal" }} />
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="atleta/[id]" />

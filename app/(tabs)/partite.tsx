@@ -8,6 +8,7 @@ import { PannelloSporteasy } from "@/src/components/PannelloSporteasy";
 import { brand } from "@/src/config";
 import type { Campionato, Match } from "@/src/types/database";
 import { avvisa, confermaAzione } from "@/src/lib/confermaAzione";
+import { elencaScoutOspiti, invitaScoutOspite, rimuoviScoutOspite, type ScoutOspite } from "@/src/services/scoutOspiti";
 
 export default function Partite() {
   const { team, puoScrivere, isSuperuser } = useAuth();
@@ -88,6 +89,39 @@ export default function Partite() {
     );
   }
 
+  // Scout ospite: persona esterna invitata su UNA partita (vede solo quella, solo finche' e' in corso).
+  const [ospitiPartita, setOspitiPartita] = useState<Match | null>(null);
+  const [ospitiElenco, setOspitiElenco] = useState<ScoutOspite[]>([]);
+  const [emailOspite, setEmailOspite] = useState("");
+  const [invioOspite, setInvioOspite] = useState(false);
+
+  async function apriOspiti(m: Match) {
+    setOspitiPartita(m);
+    setEmailOspite("");
+    setOspitiElenco([]);
+    try { setOspitiElenco(await elencaScoutOspiti(m.id)); }
+    catch (e) { avvisa("Impossibile leggere gli inviti", (e as Error).message); }
+  }
+
+  async function onInvitaOspite() {
+    if (!ospitiPartita || !emailOspite.trim()) return;
+    setInvioOspite(true);
+    try {
+      await invitaScoutOspite(ospitiPartita.id, emailOspite.trim());
+      setEmailOspite("");
+      setOspitiElenco(await elencaScoutOspiti(ospitiPartita.id));
+    } catch (e) { avvisa("Invito non riuscito", (e as Error).message); }
+    finally { setInvioOspite(false); }
+  }
+
+  async function onRimuoviOspite(o: ScoutOspite) {
+    if (!ospitiPartita) return;
+    try {
+      await rimuoviScoutOspite(o.id);
+      setOspitiElenco(await elencaScoutOspiti(ospitiPartita.id));
+    } catch (e) { avvisa("Impossibile rimuovere", (e as Error).message); }
+  }
+
   function chiediEliminazione(m: Match) {
     const quando = new Date(m.data).toLocaleDateString("it-IT");
     const haDati = m.stato !== "programmata";
@@ -136,6 +170,43 @@ export default function Partite() {
               ))}
             </ScrollView>
             <Pressable onPress={() => setRotazioniPartita(null)}><Text style={styles.chiudiPopup}>Chiudi</Text></Pressable>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={!!ospitiPartita} animationType="slide" transparent onRequestClose={() => setOspitiPartita(null)}>
+        <View style={styles.sfondoPopup}>
+          <View style={styles.cartaPopup}>
+            <Text style={styles.titoloPopup}>Scout ospite — vs {ospitiPartita?.avversario}</Text>
+            <Text style={styles.nota}>
+              Invita una persona esterna alla squadra: accede con Google usando questa email e vede soltanto questa partita, solo mentre è in corso. Può registrare azioni, annullare, fare cambi e gestire il Libero; non vede altro e non può avviare o chiudere set e partita. L'accesso termina da solo a partita conclusa.
+            </Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Email dello scout (account Google)"
+              placeholderTextColor={brand.colors.muted}
+              autoCapitalize="none"
+              autoCorrect={false}
+              keyboardType="email-address"
+              value={emailOspite}
+              onChangeText={setEmailOspite}
+            />
+            <Pressable style={styles.bottone} onPress={onInvitaOspite} disabled={invioOspite}>
+              <Text style={styles.bottoneTesto}>{invioOspite ? "Un attimo…" : "Invita"}</Text>
+            </Pressable>
+            <ScrollView style={{ maxHeight: 220 }}>
+              {ospitiElenco.length === 0 ? (
+                <Text style={styles.nota}>Nessuno scout ospite invitato.</Text>
+              ) : ospitiElenco.map((o) => (
+                <View key={o.id} style={styles.rigaRotazione}>
+                  <Text style={styles.rigaRotazioneNome} numberOfLines={1}>{o.email}</Text>
+                  <Pressable onPress={() => onRimuoviOspite(o)} hitSlop={8}>
+                    <Text style={styles.erroreTesto}>Rimuovi</Text>
+                  </Pressable>
+                </View>
+              ))}
+            </ScrollView>
+            <Pressable onPress={() => setOspitiPartita(null)}><Text style={styles.chiudiPopup}>Chiudi</Text></Pressable>
           </View>
         </View>
       </Modal>
@@ -247,6 +318,11 @@ export default function Partite() {
                 </Pressable>
               </View>
             )}
+            {puoEliminare && item.stato !== "conclusa" && (
+              <Pressable onPress={() => apriOspiti(item)} hitSlop={8} style={styles.bottoneOspite}>
+                <Text style={styles.bottoneOspiteTesto}>👁 Scout ospite</Text>
+              </Pressable>
+            )}
             {puoEliminare && (
               <Pressable onPress={() => chiediEliminazione(item)} hitSlop={8} style={styles.bottoneElimina}>
                 <Text style={styles.bottoneEliminaTesto}>🗑 Elimina partita</Text>
@@ -290,6 +366,8 @@ const styles = StyleSheet.create({
   linkCampionato: { color: brand.colors.brandSecondary, fontSize: 12, fontWeight: "600", marginTop: 4 },
   linkConverti: { color: brand.colors.muted, fontSize: 11, marginTop: 4 },
   bottoneElimina: { alignSelf: "flex-start", marginTop: 8, paddingVertical: 4, paddingHorizontal: 10, borderRadius: 8, borderWidth: 1, borderColor: brand.colors.error },
+  bottoneOspite: { alignSelf: "flex-start", marginTop: 8, paddingVertical: 4, paddingHorizontal: 10, borderRadius: 8, borderWidth: 1, borderColor: brand.colors.brandSecondary },
+  bottoneOspiteTesto: { color: brand.colors.brandSecondary, fontSize: 12, fontWeight: "600" },
   bottoneEliminaTesto: { color: brand.colors.error, fontSize: 12, fontWeight: "600" },
   cardRisultato: { color: brand.colors.brand, fontWeight: "700", marginTop: 4 },
   badge: { color: brand.colors.muted, fontSize: 12, textTransform: "uppercase" },
