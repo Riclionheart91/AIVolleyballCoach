@@ -136,12 +136,14 @@ export default function PartitaLive() {
   // intero senza tagliare i comandi. Ridotto del 20% (0.52->0.42,
   // 0.40->0.32) perché su schermo da telefono il campo pieno lasciava
   // troppo poco spazio ai pulsanti sottostanti.
-  // Il pulsante Libero sta a destra della formazione, in una colonna
-  // stretta: libera una riga nella barra dei comandi.
-  const LARGHEZZA_TASTO_LIBERO = 64;
+  // Il pulsante Libero sta a sinistra della formazione, in una colonna
+  // stretta. In verticale il tabellone sta a destra del campo: cosi'
+  // campo, Libero e punteggio occupano una sola fascia in alto e tutto
+  // il resto entra in una schermata senza scorrere.
+  const LARGHEZZA_TASTO_LIBERO = 52;
   const latoCampo = orizzontale
     ? Math.min(altezzaSchermo - 32, (larghezzaSchermo - LARGHEZZA_TASTO_LIBERO) * 0.42)
-    : Math.min(larghezzaSchermo - 16 - LARGHEZZA_TASTO_LIBERO - 6, altezzaSchermo * 0.32);
+    : Math.min(altezzaSchermo * 0.30, (larghezzaSchermo - 16 - LARGHEZZA_TASTO_LIBERO - 12) * 0.68);
   // I comandi si ridimensionano con lo spazio disponibile invece di
   // avere misure fisse che su schermi piccoli escono e su grandi
   // sprecano spazio. Scala ridotta del 20% rispetto a prima, per lo
@@ -555,22 +557,40 @@ export default function PartitaLive() {
     );
   }
 
-  // In verticale la pagina intera scorre: con i comandi in piu' (TO, Zone)
-  // su un telefono non tutto sta in una schermata e cio' che usciva dallo
-  // schermo non era raggiungibile. In orizzontale resta a schermo fisso.
-  const Radice: any = orizzontale ? View : ScrollView;
-  const propsRadice = orizzontale
-    ? { style: [styles.contenitore, { flexDirection: "row" }] }
-    : {
-        style: { flex: 1, backgroundColor: brand.colors.surface },
-        contentContainerStyle: [styles.contenitore, { flexGrow: 1, flexDirection: "column" }],
-        keyboardShouldPersistTaps: "handled",
-      };
+  const tabelloneJsx = (
+    <View style={[styles.tabellone, !orizzontale && styles.tabelloneCompatto]}>
+      {/* Le due squadre una sopra l'altra: la palla indica chi serve. */}
+      <View style={{ flex: orizzontale ? 1 : undefined, gap: 3 }}>
+        <View style={styles.rigaSquadra}>
+          <Text style={styles.indicatoreServizio}>{noiAlServizio ? "🏐" : ""}</Text>
+          <Text style={[styles.nomeSquadra, noiAlServizio && styles.nomeSquadraAlServizio]} numberOfLines={1}>{(modoOspite ? nomeSquadraOspite : team?.nome) ?? "Noi"}</Text>
+        </View>
+        <View style={styles.rigaSquadra}>
+          <Text style={styles.indicatoreServizio}>{noiAlServizio ? "" : "🏐"}</Text>
+          <Text style={[styles.nomeSquadra, !noiAlServizio && styles.nomeSquadraAlServizio]} numberOfLines={1}>{match.avversario}</Text>
+        </View>
+      </View>
+      <View style={{ alignItems: orizzontale ? "flex-end" : "center" }}>
+        <Text style={styles.setNumero}>Set {setCorrente.numero_set} · TO {timeoutNoi}-{timeoutLoro}</Text>
+        <Text style={[styles.punteggio, { fontSize: orizzontale ? d(26) : 24 }]}>{setCorrente.punti_noi}-{setCorrente.punti_avversario}</Text>
+        {!orizzontale && (
+          <Text style={styles.nota} numberOfLines={1}>
+            🏐 {setCorrente.squadra_al_servizio === "noi" ? (alServizio ? etichettaAtleta(alServizio.athlete_id) : "noi") : "loro"}
+          </Text>
+        )}
+      </View>
+    </View>
+  );
 
   return (
-    <Radice {...propsRadice}>
+    <View style={[styles.contenitore, { flexDirection: orizzontale ? "row" : "column" }]}>
       <View style={[styles.colonnaCampo, orizzontale ? { width: latoCampo + LARGHEZZA_TASTO_LIBERO + 6 } : { width: "100%", alignItems: "center" }]}>
-        <View style={{ flexDirection: "row", gap: 6, alignItems: "stretch" }}>
+        <View style={{ flexDirection: "row", gap: 6, alignItems: "stretch", width: orizzontale ? undefined : "100%" }}>
+        {puoScoutare && (
+          <Pressable onPress={() => setPopupLibero(true)} style={[styles.tastoLibero, { width: LARGHEZZA_TASTO_LIBERO }, libero && styles.tastoPiccoloAttivo]}>
+            <Text style={[styles.tastoPiccoloTesto, libero && styles.tastoPiccoloTestoAttivo]}>{libero ? "L ✓" : "Libero"}</Text>
+          </Pressable>
+        )}
         <View style={{ width: latoCampo, height: latoCampo }}>
           <Campo9x9
             occupanti={occupanti}
@@ -586,35 +606,17 @@ export default function PartitaLive() {
             }}
           />
         </View>
-        {puoScoutare && (
-          <Pressable onPress={() => setPopupLibero(true)} style={[styles.tastoLibero, { width: LARGHEZZA_TASTO_LIBERO }, libero && styles.tastoPiccoloAttivo]}>
-            <Text style={[styles.tastoPiccoloTesto, libero && styles.tastoPiccoloTestoAttivo]}>{libero ? "L ✓" : "Libero"}</Text>
-          </Pressable>
-        )}
+        {!orizzontale && <View style={{ flex: 1 }}>{tabelloneJsx}</View>}
         </View>
-        <Text style={styles.nota} numberOfLines={1}>
-          servizio: {setCorrente.squadra_al_servizio === "noi" ? (alServizio ? etichettaAtleta(alServizio.athlete_id) : "noi") : "loro"}
-        </Text>
+        {orizzontale && (
+          <Text style={styles.nota} numberOfLines={1}>
+            servizio: {setCorrente.squadra_al_servizio === "noi" ? (alServizio ? etichettaAtleta(alServizio.athlete_id) : "noi") : "loro"}
+          </Text>
+        )}
       </View>
 
       <View style={[styles.colonnaComandi, orizzontale ? { flex: 1 } : { flex: 1, width: "100%" }]}>
-        <View style={styles.tabellone}>
-          {/* Le due squadre una sopra l'altra: la palla indica chi serve. */}
-          <View style={{ flex: 1, gap: 3 }}>
-            <View style={styles.rigaSquadra}>
-              <Text style={styles.indicatoreServizio}>{noiAlServizio ? "🏐" : ""}</Text>
-              <Text style={[styles.nomeSquadra, noiAlServizio && styles.nomeSquadraAlServizio]} numberOfLines={1}>{(modoOspite ? nomeSquadraOspite : team?.nome) ?? "Noi"}</Text>
-            </View>
-            <View style={styles.rigaSquadra}>
-              <Text style={styles.indicatoreServizio}>{noiAlServizio ? "" : "🏐"}</Text>
-              <Text style={[styles.nomeSquadra, !noiAlServizio && styles.nomeSquadraAlServizio]} numberOfLines={1}>{match.avversario}</Text>
-            </View>
-          </View>
-          <View style={{ alignItems: "flex-end" }}>
-            <Text style={styles.setNumero}>Set {setCorrente.numero_set} · TO {timeoutNoi}-{timeoutLoro}</Text>
-            <Text style={[styles.punteggio, { fontSize: d(26) }]}>{setCorrente.punti_noi}-{setCorrente.punti_avversario}</Text>
-          </View>
-        </View>
+        {orizzontale && tabelloneJsx}
 
         {puoScoutare && avvisoSerie && (
           <Pressable style={styles.bannerSerie} onPress={() => setPopupTimeout(true)}>
@@ -631,7 +633,7 @@ export default function PartitaLive() {
   
         {puoScoutare ? (
           <>
-          <ScrollView style={{ flex: 1, minHeight: orizzontale ? 0 : d(240) }} nestedScrollEnabled contentContainerStyle={{ gap: 8, paddingBottom: 8 }}>
+          <ScrollView style={{ flex: 1, minHeight: 0 }} contentContainerStyle={{ gap: 6, paddingBottom: 4 }}>
             <Text style={styles.indicazionePasso}>
               {passo === "giocatrice" && "1. Tocca chi è in campo"}
               {passo === "fondamentale" && `2. ${selezionata ? etichettaAtleta(selezionata.id) : ""} — quale fondamentale?`}
@@ -644,7 +646,7 @@ export default function PartitaLive() {
             {passo === "fondamentale" && (
               <View style={styles.griglia}>
                 {skills.map((s) => (
-                  <Pressable key={s.skill} onPress={() => setSkillSel(s.skill)} style={[styles.tastoGriglia, { paddingVertical: d(16) }]}>
+                  <Pressable key={s.skill} onPress={() => setSkillSel(s.skill)} style={[styles.tastoGriglia, { paddingVertical: d(12) }]}>
                     <Text style={[styles.tastoGrigliaTesto, { fontSize: d(13) }]}>{s.etichetta}</Text>
                   </Pressable>
                 ))}
@@ -663,16 +665,16 @@ export default function PartitaLive() {
               // impilati di prima: resta tutto in una sola schermata.
               <>
                 <View style={styles.griglia}>
-                  <Pressable style={[styles.tastoEsitoGriglia, styles.esitoOttima, { paddingVertical: d(16) }]} onPress={() => registra(skillSel, "neutro", atletaSelId, "ottima")}>
+                  <Pressable style={[styles.tastoEsitoGriglia, styles.esitoOttima, { paddingVertical: d(12) }]} onPress={() => registra(skillSel, "neutro", atletaSelId, "ottima")}>
                     <Text style={[styles.tastoEsitoTesto, { fontSize: d(13) }]}>Perfetta</Text>
                   </Pressable>
-                  <Pressable style={[styles.tastoEsitoGriglia, styles.esitoBuona, { paddingVertical: d(16) }]} onPress={() => registra(skillSel, "neutro", atletaSelId, "buona")}>
+                  <Pressable style={[styles.tastoEsitoGriglia, styles.esitoBuona, { paddingVertical: d(12) }]} onPress={() => registra(skillSel, "neutro", atletaSelId, "buona")}>
                     <Text style={[styles.tastoEsitoTesto, { fontSize: d(13) }]}>Buona</Text>
                   </Pressable>
-                  <Pressable style={[styles.tastoEsitoGriglia, styles.esitoScarsaRic, { paddingVertical: d(16) }]} onPress={() => registra(skillSel, "neutro", atletaSelId, "scarsa")}>
+                  <Pressable style={[styles.tastoEsitoGriglia, styles.esitoScarsaRic, { paddingVertical: d(12) }]} onPress={() => registra(skillSel, "neutro", atletaSelId, "scarsa")}>
                     <Text style={[styles.tastoEsitoTesto, { fontSize: d(13) }]}>Scarsa</Text>
                   </Pressable>
-                  <Pressable style={[styles.tastoEsitoGriglia, styles.esitoErrore, { paddingVertical: d(16) }]} onPress={() => registra(skillSel, "errore", atletaSelId)}>
+                  <Pressable style={[styles.tastoEsitoGriglia, styles.esitoErrore, { paddingVertical: d(12) }]} onPress={() => registra(skillSel, "errore", atletaSelId)}>
                     <Text style={[styles.tastoEsitoTesto, { fontSize: d(13) }]}>Errore</Text>
                   </Pressable>
                 </View>
@@ -684,15 +686,17 @@ export default function PartitaLive() {
 
             {passo === "esito" && skillSel && skillSel !== "Ricezione" && (
               <>
-                <Pressable style={[styles.tastoEsito, styles.esitoPunto, { paddingVertical: d(18) }]} onPress={() => scegliEsito("punto")}>
-                  <Text style={[styles.tastoEsitoTesto, { fontSize: d(16) }]}>Punto</Text>
+                <View style={{ flexDirection: "row", gap: 6 }}>
+                <Pressable style={[styles.tastoEsito, { flex: 1 }, styles.esitoPunto, { paddingVertical: d(14) }]} onPress={() => scegliEsito("punto")}>
+                  <Text style={[styles.tastoEsitoTesto, { fontSize: d(15) }]}>Punto</Text>
                 </Pressable>
-                <Pressable style={[styles.tastoEsito, styles.esitoNeutro, { paddingVertical: d(18) }]} onPress={() => scegliEsito("neutro")}>
-                  <Text style={[styles.tastoEsitoTesto, { fontSize: d(16) }]}>Neutro</Text>
+                <Pressable style={[styles.tastoEsito, { flex: 1 }, styles.esitoNeutro, { paddingVertical: d(14) }]} onPress={() => scegliEsito("neutro")}>
+                  <Text style={[styles.tastoEsitoTesto, { fontSize: d(15) }]}>Neutro</Text>
                 </Pressable>
-                <Pressable style={[styles.tastoEsito, styles.esitoErrore, { paddingVertical: d(18) }]} onPress={() => scegliEsito("errore")}>
-                  <Text style={[styles.tastoEsitoTesto, { fontSize: d(16) }]}>Errore</Text>
+                <Pressable style={[styles.tastoEsito, { flex: 1 }, styles.esitoErrore, { paddingVertical: d(14) }]} onPress={() => scegliEsito("errore")}>
+                  <Text style={[styles.tastoEsitoTesto, { fontSize: d(15) }]}>Errore</Text>
                 </Pressable>
+                </View>
                 <Pressable onPress={() => setSkillSel(null)} style={styles.tastoAnnullaPasso}>
                   <Text style={styles.nota}>← cambia fondamentale</Text>
                 </Pressable>
@@ -701,7 +705,7 @@ export default function PartitaLive() {
 
             {passo === "zona" && zonaInAttesa && (
               <>
-                <SelettoreZona altezzaRiga={d(46)} onScegli={(z) => confermaZona(z)} />
+                <SelettoreZona altezzaRiga={d(38)} onScegli={(z) => confermaZona(z)} />
                 <Pressable onPress={() => confermaZona(null)} style={styles.tastoAnnullaPasso}>
                   <Text style={styles.nota}>Salta (non so la zona)</Text>
                 </Pressable>
@@ -718,11 +722,11 @@ export default function PartitaLive() {
               l'orientamento. */}
           <View style={styles.zonaFissa}>
             <View style={styles.rigaPuntiDiretti}>
-              <Pressable style={[styles.bottonePuntoNostro, { paddingVertical: d(12) }]} onPress={() => registra("Punto_nostro", null, null)}>
+              <Pressable style={[styles.bottonePuntoNostro, { paddingVertical: d(8) }]} onPress={() => registra("Punto_nostro", null, null)}>
                 <Text style={styles.bottonePuntoNostroTesto}>+1 NOI</Text>
                 <Text style={styles.sottoPulsante}>errore loro</Text>
               </Pressable>
-              <Pressable style={[styles.bottonePuntoAvversario, { paddingVertical: d(12) }]} onPress={() => registra("Punto_avversario", null, null)}>
+              <Pressable style={[styles.bottonePuntoAvversario, { paddingVertical: d(8) }]} onPress={() => registra("Punto_avversario", null, null)}>
                 <Text style={styles.bottonePuntoAvversarioTesto}>+1 LORO</Text>
                 <Text style={styles.sottoPulsante}>errore nostro</Text>
               </Pressable>
@@ -927,18 +931,19 @@ export default function PartitaLive() {
       </Modal>
 
       <ModaleSituazione />
-    </Radice>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   // Riga anziché colonna: garantisce la disposizione "orizzontale"
   // anche quando il telefono è bloccato in verticale.
-  contenitore: { flex: 1, backgroundColor: brand.colors.surface, padding: 8, gap: 8 },
+  contenitore: { flex: 1, backgroundColor: brand.colors.surface, padding: 6, gap: 6 },
   colonnaCampo: { gap: 6 },
   rigaSottoCampo: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  colonnaComandi: { gap: 8 },
+  colonnaComandi: { gap: 6 },
 
+  tabelloneCompatto: { flexDirection: "column", alignItems: "stretch", justifyContent: "space-around", padding: 6, gap: 4, flex: 1 },
   tabellone: { flexDirection: "row", alignItems: "center", backgroundColor: brand.colors.surfaceSecondary, borderRadius: 10, padding: 10, gap: 8 },
   rigaSquadra: { flexDirection: "row", alignItems: "center", gap: 4 },
   // Larghezza fissa anche quando la palla non c'è: i due nomi restano allineati.
@@ -974,16 +979,16 @@ const styles = StyleSheet.create({
   rigaComandiSecondari: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
   rigaComandiFissi: { flexDirection: "row", flexWrap: "wrap", gap: 6, alignItems: "center" },
   rigaToggleFisso: { flexDirection: "row", alignItems: "center", gap: 2 },
-  zonaFissa: { gap: 6, paddingTop: 6, borderTopWidth: 1, borderTopColor: brand.colors.border },
+  zonaFissa: { gap: 4, paddingTop: 4, borderTopWidth: 1, borderTopColor: brand.colors.border },
   barraFissa: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
   bottoneDistruttivo: { borderColor: brand.colors.error, borderWidth: 1, paddingVertical: 12, borderRadius: 8, alignItems: "center" },
   bottoneDistruttivoTesto: { color: brand.colors.error, fontWeight: "700" },
   tastoLibero: { backgroundColor: brand.colors.surfaceSecondary, borderRadius: 8, alignItems: "center", justifyContent: "center", paddingHorizontal: 4 },
-  tastoPiccolo: { flexGrow: 1, backgroundColor: brand.colors.surfaceSecondary, paddingVertical: 10, paddingHorizontal: 6, borderRadius: 8, alignItems: "center", minHeight: 40, justifyContent: "center" },
+  tastoPiccolo: { flexGrow: 1, backgroundColor: brand.colors.surfaceSecondary, paddingVertical: 6, paddingHorizontal: 6, borderRadius: 8, alignItems: "center", minHeight: 34, justifyContent: "center" },
   tastoPiccoloAttivo: { backgroundColor: brand.colors.brand },
   tastoPiccoloTestoAttivo: { color: "#000", fontWeight: "800" },
   tastoPiccoloTesto: { color: brand.colors.onSurface, fontWeight: "600", fontSize: 12 },
-  tastoPiccoloDistruttivo: { flexGrow: 1, borderColor: brand.colors.error, borderWidth: 1, paddingVertical: 10, borderRadius: 8, alignItems: "center", minHeight: 40, justifyContent: "center" },
+  tastoPiccoloDistruttivo: { flexGrow: 1, borderColor: brand.colors.error, borderWidth: 1, paddingVertical: 6, borderRadius: 8, alignItems: "center", minHeight: 34, justifyContent: "center" },
   tastoPiccoloDistruttivoTesto: { color: brand.colors.error, fontWeight: "600", fontSize: 12 },
 
   rigaToggle: { flexDirection: "row", alignItems: "center", gap: 4 },
