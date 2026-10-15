@@ -98,6 +98,8 @@ export default function PartitaLive() {
   const [liberiIds, setLiberiIds] = useState<Set<string>>(new Set());
   const [libero, setLibero] = useState<LiberoInCampo | null>(null);
   const [popupLibero, setPopupLibero] = useState(false);
+  // Secondo tocco sul Libero in campo: si sceglie solo tra far rientrare la titolare o far entrare l'altro Libero.
+  const [popupCambioLibero, setPopupCambioLibero] = useState(false);
   // Chi esce, già scelto, in attesa di sapere quale Libero entra (solo se i Liberi sono più d'uno).
   const [titolareLiberoScelto, setTitolareLiberoScelto] = useState<string | null>(null);
   const [formazione, setFormazione] = useState<MatchSetLineup[]>([]);
@@ -412,6 +414,33 @@ export default function PartitaLive() {
     } catch (e) { avvisa("Errore", (e as Error).message); }
   }
 
+  /** Il Libero in campo esce e rientra la giocatrice che aveva rimpiazzato. */
+  async function liberoLasciaIlCampo() {
+    if (!setCorrente) return;
+    try {
+      await faiUscireLibero(setCorrente.id);
+      setPopupCambioLibero(false);
+      setAtletaSelId(null);
+      carica();
+    } catch (e) { avvisa("Errore", (e as Error).message); }
+  }
+
+  /** Cambio fra Liberi: esce quello in campo (rientra la titolare) ed entra l'altro nella stessa posizione. */
+  async function cambiaLiberoInCampo(nuovoLiberoId: string) {
+    if (!setCorrente || !libero) return;
+    const titolareId = libero.titolare_id;
+    try {
+      await faiUscireLibero(setCorrente.id);
+      await rimpiazzaConLibero(setCorrente.id, nuovoLiberoId, titolareId);
+      setPopupCambioLibero(false);
+      setAtletaSelId(null);
+      carica();
+    } catch (e) {
+      carica();
+      avvisa("Cambio del Libero non riuscito", (e as Error).message);
+    }
+  }
+
   /** Con un solo Libero in distinta entra subito; con due o più si chiede quale, invece di sceglierne uno a caso. */
   function onSceglieUscenteLibero(titolareId: string) {
     if (liberiDisponibili.length === 0) { avvisa("Nessun Libero", "Nessuno è indicato come Libero nella distinta di questa partita."); return; }
@@ -633,7 +662,11 @@ export default function PartitaLive() {
               if (!riga) return;
               // Secondo tocco sulla stessa persona: apre il cambio.
               // Evita un pulsante dedicato e ricalca il gesto naturale.
-              if (atletaSelId === riga.athlete_id) { setPopupCambio(true); return; }
+              if (atletaSelId === riga.athlete_id) {
+                if (libero && libero.libero_id === riga.athlete_id) setPopupCambioLibero(true);
+                else setPopupCambio(true);
+                return;
+              }
               setZonaInAttesa(null);
               setAtletaSelId(riga.athlete_id);
               setSkillSel(null);
@@ -907,6 +940,32 @@ export default function PartitaLive() {
         </View>
       </Modal>
 
+
+      <Modal visible={popupCambioLibero} animationType="fade" transparent onRequestClose={() => setPopupCambioLibero(false)}>
+        <View style={styles.sfondoPopup}>
+          <View style={styles.cartaPopup}>
+            <View style={styles.intestazionePopup}>
+              <Text style={styles.titoloPopup}>{libero ? `Libero ${etichettaAtleta(libero.libero_id)}` : "Libero"}</Text>
+              <Pressable onPress={() => setPopupCambioLibero(false)} hitSlop={12}><Text style={styles.chiudiPopup}>✕</Text></Pressable>
+            </View>
+            {libero ? (
+              <>
+                <Pressable style={styles.rigaScelta} onPress={liberoLasciaIlCampo}>
+                  <Text style={styles.rigaSceltaTesto}>Rientra {etichettaAtleta(libero.titolare_id)}</Text>
+                </Pressable>
+                {liberiDisponibili.filter((l) => l.id !== libero.libero_id).map((l) => (
+                  <Pressable key={l.id} style={styles.rigaScelta} onPress={() => cambiaLiberoInCampo(l.id)}>
+                    <Text style={styles.rigaSceltaTesto}>Entra il Libero #{l.numero_maglia ?? "-"} {l.nome} {l.cognome}</Text>
+                  </Pressable>
+                ))}
+                <Text style={styles.nota}>Il Libero non conta come sostituzione: puoi alternarlo quante volte vuoi.</Text>
+              </>
+            ) : (
+              <Text style={styles.nota}>Nessun Libero in campo.</Text>
+            )}
+          </View>
+        </View>
+      </Modal>
 
       <Modal visible={popupLibero} animationType="fade" transparent onRequestClose={chiudiPopupLibero}>
         <View style={styles.sfondoPopup}>
