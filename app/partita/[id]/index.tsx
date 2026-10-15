@@ -266,16 +266,6 @@ export default function PartitaLive() {
   const idGiaUscite = new Set(storicoFormazione.filter((r) => !r.in_campo).map((r) => r.athlete_id));
   const inPanchina = atlete.filter((a) => convocateIds.includes(a.id) && !formazione.some((f) => f.athlete_id === a.id) && !idGiaUscite.has(a.id));
 
-  const occupanti: OccupanteCampo[] = formazione.map((f) => {
-    const a = nomeAtleta(f.athlete_id);
-    return {
-      posizione: f.posizione ?? 0,
-      cognome: a?.cognome ?? "?",
-      numeroMaglia: a?.numero_maglia ?? null,
-      ruolo: a?.ruolo_campo ?? null,
-      attivo: atletaEff === f.athlete_id,
-    };
-  }).filter((o) => o.posizione > 0);
 
   function applicaDelta(skill: Skill, esito: Esito | null, segno: 1 | -1) {
     setSetCorrente((prev) => {
@@ -542,6 +532,18 @@ export default function PartitaLive() {
   const skillEff: Skill | null = skillSel ?? skillAuto;
   const passo: Passo = !atletaEff ? "giocatrice" : !skillEff ? "fondamentale" : zonaInAttesa ? "zona" : "esito";
   const nomeEff = atletaEff ? etichettaAtleta(atletaEff) : "";
+
+  // Dopo atletaEff: usa la giocatrice scelta (anche quella proposta in automatico).
+  const occupanti: OccupanteCampo[] = formazione.map((f) => {
+    const a = nomeAtleta(f.athlete_id);
+    return {
+      posizione: f.posizione ?? 0,
+      cognome: a?.cognome ?? "?",
+      numeroMaglia: a?.numero_maglia ?? null,
+      ruolo: a?.ruolo_campo ?? null,
+      attivo: atletaEff === f.athlete_id,
+    };
+  }).filter((o) => o.posizione > 0);
 
   function ModaleSituazione() {
     const segnalazioni: SegnalazioneSituazione[] = analizzaSituazione(eventi, (aid) => etichettaAtleta(aid));
