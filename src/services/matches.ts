@@ -398,3 +398,26 @@ export async function andamentoPersonePartite(teamId: string, ultime = 5): Promi
   if (error) throw error;
   return (data ?? []) as AndamentoPersonaPartita[];
 }
+
+/** Aggiunge zona di arrivo (e di partenza) a un evento di battuta o attacco appena registrato. */
+export async function impostaZoneEvento(eventId: string, zonaArrivo: number | null, zonaPartenza: number | null = null): Promise<void> {
+  const { error } = await supabaseClient.rpc("imposta_zone_evento", { p_event_id: eventId, p_zona_arrivo: zonaArrivo, p_zona_partenza: zonaPartenza });
+  if (error) throw error;
+}
+
+/** Una riga = giocatore, fondamentale (Servizio/Attacco), zona di partenza e di arrivo. */
+export interface AnalisiZona {
+  athlete_id: string;
+  fondamentale: string;
+  zona_partenza: number | null;
+  zona_arrivo: number | null;
+  azioni: number;
+  punti: number;
+  errori: number;
+}
+
+export async function analisiZonePartita(matchId: string): Promise<AnalisiZona[]> {
+  const { data, error } = await supabaseClient.rpc("analisi_zone_partita", { p_match_id: matchId });
+  if (error) throw error;
+  return (data ?? []) as AnalisiZona[];
+}

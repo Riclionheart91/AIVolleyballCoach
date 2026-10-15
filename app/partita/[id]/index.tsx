@@ -14,6 +14,7 @@ import {
   elencaSet,
   elencaStoricoFormazioneSet,
   elencaTimeout,
+  impostaZoneEvento,
   leggiRegolePunteggio,
   nuovoSet,
   registraEvento,
@@ -37,9 +38,25 @@ import { confermaAzione, avvisa } from "@/src/lib/confermaAzione";
 import { Campo9x9, type OccupanteCampo } from "@/src/components/Campo9x9";
 import { useSincronizzazioneLive } from "@/src/hooks/useSincronizzazioneLive";
 import { statoPartitaOspite } from "@/src/services/scoutOspiti";
+import { SelettoreZona } from "@/src/components/ZoneCampo";
 import { SOGLIA_SERIE_AVVERSARIA, serieAvversariaInCorso } from "@/src/lib/andamentoPunti";
 
-type Passo = "giocatrice" | "fondamentale" | "esito";
+type Passo = "giocatrice" | "fondamentale" | "esito" | "zona";
+
+/** La modalita' "zone" (dove e' caduta la palla) si ricorda tra una partita e l'altra su questo dispositivo. */
+const CHIAVE_ZONE_ATTIVE = "scout_zone_attive";
+function leggiZoneAttive(): boolean {
+  try {
+    const ls = (globalThis as any).localStorage;
+    return !!ls && ls.getItem(CHIAVE_ZONE_ATTIVE) === "1";
+  } catch { return false; }
+}
+function salvaZoneAttive(valore: boolean) {
+  try {
+    const ls = (globalThis as any).localStorage;
+    if (ls) ls.setItem(CHIAVE_ZONE_ATTIVE, valore ? "1" : "0");
+  } catch { /* la preferenza non si salva, nessun danno */ }
+}
 
 /**
  * Quante azioni recenti mostra l'elenco "Ultime azioni". Se ne caricano
@@ -103,6 +120,9 @@ export default function PartitaLive() {
   const [popupEventi, setPopupEventi] = useState(false);
   const [timeouts, setTimeouts] = useState<MatchTimeout[]>([]);
   const [popupTimeout, setPopupTimeout] = useState(false);
+  // Modalita' facoltativa: dopo l'esito di battuta/attacco si indica dove e' caduta la palla (zone 1-6).
+  const [zoneAttive, setZoneAttive] = useState<boolean>(() => leggiZoneAttive());
+  const [zonaInAttesa, setZonaInAttesa] = useState<{ skill: Skill; esito: Esito; athleteId: string } | null>(null);
 
   // Adatta la disposizione alla forma dello schermo: in orizzontale il
   // campo sta a sinistra alto quanto lo schermo, in verticale sta in
@@ -261,12 +281,36 @@ export default function PartitaLive() {
     });
   }
 
-  async function registra(skill: Skill, esito: Esito | null, athleteId: string | null, qualita: QualitaRicezione | null = null) {
+  function alternaZone() {
+    const nuovo = !zoneAttive;
+    setZoneAttive(nuovo);
+    salvaZoneAttive(nuovo);
+    setZonaInAttesa(null);
+  }
+
+  /** Esito scelto: con le zone attive, per battuta e attacco si chiede prima dove e' caduta la palla. */
+  function scegliEsito(esito: Esito) {
+    if (!skillSel || !atletaSelId) return;
+    if (zoneAttive && (skillSel === "Servizio" || skillSel === "Attacco")) {
+      setZonaInAttesa({ skill: skillSel, esito, athleteId: atletaSelId });
+      return;
+    }
+    registra(skillSel, esito, atletaSelId);
+  }
+
+  function confermaZona(zona: number | null) {
+    if (!zonaInAttesa) return;
+    const z = zonaInAttesa;
+    setZonaInAttesa(null);
+    registra(z.skill, z.esito, z.athleteId, null, zona);
+  }
+
+  async function registra(skill: Skill, esito: Esito | null, athleteId: string | null, qualita: QualitaRicezione | null = null, zonaArrivo: number | null = null) {
     if (!match || !setCorrente) return;
     setErroreVisibile(null);
     const provvisorio: MatchEvent = {
       id: `temp-${Date.now()}`, match_id: match.id, set_id: setCorrente.id, skill, esito,
-      athlete_id: athleteId, creato_il: new Date().toISOString(), creato_da: null, qualita,
+      athlete_id: athleteId, creato_il: new Date().toISOString(), creato_da: null, qualita, zona_arrivo: zonaArrivo,
     };
     setEventi((prev) => [provvisorio, ...prev]);
     applicaDelta(skill, esito, 1);
@@ -274,7 +318,15 @@ export default function PartitaLive() {
     setAtletaSelId(null);
 
     try {
-      await registraEvento(match.id, setCorrente.id, skill, esito, athleteId, qualita);
+      const nuovoId = await registraEvento(match.id, setCorrente.id, skill, esito, athleteId, qualita);
+      // Zone (solo con la modalita' attiva): l'arrivo e' quello toccato, la partenza dell'attacco e' la posizione di rotazione di chi attacca.
+      if (zoneAttive && (skill === "Servizio" || skill === "Attacco")) {
+        const partenza = skill === "Attacco" ? (formazione.find((f) => f.athlete_id === athleteId)?.posizione ?? null) : null;
+        if (zonaArrivo !== null || partenza !== null) {
+          try { await impostaZoneEvento(nuovoId, zonaArrivo, partenza); }
+          catch (errZone) { console.warn("Zone non salvate:", (errZone as Error).message); }
+        }
+      }
       carica();
     } catch (e) {
       const msg = (e as Error).message;
@@ -414,7 +466,7 @@ export default function PartitaLive() {
   const inizioSerieAvv = setCorrente.punti_avversario - serieAvversaria;
   const timeoutDuranteSerie = timeoutSet.some((t) => t.squadra === "noi" && t.punti_avversario > inizioSerieAvv);
   const avvisoSerie = serieAvversaria >= SOGLIA_SERIE_AVVERSARIA && !timeoutDuranteSerie;
-  const passo: Passo = !atletaSelId ? "giocatrice" : !skillSel ? "fondamentale" : "esito";
+  const passo: Passo = !atletaSelId ? "giocatrice" : !skillSel ? "fondamentale" : zonaInAttesa ? "zona" : "esito";
 
   function ModaleSituazione() {
     const segnalazioni: SegnalazioneSituazione[] = analizzaSituazione(eventi, (aid) => etichettaAtleta(aid));
@@ -512,6 +564,7 @@ export default function PartitaLive() {
               // Secondo tocco sulla stessa persona: apre il cambio.
               // Evita un pulsante dedicato e ricalca il gesto naturale.
               if (atletaSelId === riga.athlete_id) { setPopupCambio(true); return; }
+              setZonaInAttesa(null);
               setAtletaSelId(riga.athlete_id);
               setSkillSel(null);
             }}
@@ -561,6 +614,7 @@ export default function PartitaLive() {
               {passo === "giocatrice" && "1. Tocca chi è in campo"}
               {passo === "fondamentale" && `2. ${selezionata ? etichettaAtleta(selezionata.id) : ""} — quale fondamentale?`}
               {passo === "esito" && `3. ${skillSel} — com'è andata?`}
+              {passo === "zona" && "4. Dove è caduta la palla? (campo avversario)"}
             </Text>
 
 
@@ -608,17 +662,29 @@ export default function PartitaLive() {
 
             {passo === "esito" && skillSel && skillSel !== "Ricezione" && (
               <>
-                <Pressable style={[styles.tastoEsito, styles.esitoPunto, { paddingVertical: d(18) }]} onPress={() => registra(skillSel, "punto", atletaSelId)}>
+                <Pressable style={[styles.tastoEsito, styles.esitoPunto, { paddingVertical: d(18) }]} onPress={() => scegliEsito("punto")}>
                   <Text style={[styles.tastoEsitoTesto, { fontSize: d(16) }]}>Punto</Text>
                 </Pressable>
-                <Pressable style={[styles.tastoEsito, styles.esitoNeutro, { paddingVertical: d(18) }]} onPress={() => registra(skillSel, "neutro", atletaSelId)}>
+                <Pressable style={[styles.tastoEsito, styles.esitoNeutro, { paddingVertical: d(18) }]} onPress={() => scegliEsito("neutro")}>
                   <Text style={[styles.tastoEsitoTesto, { fontSize: d(16) }]}>Neutro</Text>
                 </Pressable>
-                <Pressable style={[styles.tastoEsito, styles.esitoErrore, { paddingVertical: d(18) }]} onPress={() => registra(skillSel, "errore", atletaSelId)}>
+                <Pressable style={[styles.tastoEsito, styles.esitoErrore, { paddingVertical: d(18) }]} onPress={() => scegliEsito("errore")}>
                   <Text style={[styles.tastoEsitoTesto, { fontSize: d(16) }]}>Errore</Text>
                 </Pressable>
                 <Pressable onPress={() => setSkillSel(null)} style={styles.tastoAnnullaPasso}>
                   <Text style={styles.nota}>← cambia fondamentale</Text>
+                </Pressable>
+              </>
+            )}
+
+            {passo === "zona" && zonaInAttesa && (
+              <>
+                <SelettoreZona altezzaRiga={d(46)} onScegli={(z) => confermaZona(z)} />
+                <Pressable onPress={() => confermaZona(null)} style={styles.tastoAnnullaPasso}>
+                  <Text style={styles.nota}>Salta (non so la zona)</Text>
+                </Pressable>
+                <Pressable onPress={() => setZonaInAttesa(null)} style={styles.tastoAnnullaPasso}>
+                  <Text style={styles.nota}>← cambia esito</Text>
                 </Pressable>
               </>
             )}
@@ -651,6 +717,9 @@ export default function PartitaLive() {
               </Pressable>
               <Pressable onPress={() => setPopupTimeout(true)} style={styles.tastoPiccolo}>
                 <Text style={styles.tastoPiccoloTesto}>⏱ TO</Text>
+              </Pressable>
+              <Pressable onPress={alternaZone} style={[styles.tastoPiccolo, zoneAttive && styles.tastoPiccoloAttivo]}>
+                <Text style={[styles.tastoPiccoloTesto, zoneAttive && styles.tastoPiccoloTestoAttivo]}>🎯 Zone {zoneAttive ? "ON" : "off"}</Text>
               </Pressable>
               <Pressable onPress={() => setPopupLibero(true)} style={styles.tastoPiccolo}>
                 <Text style={styles.tastoPiccoloTesto}>{libero ? "L ✓" : "Libero"}</Text>
@@ -765,6 +834,7 @@ export default function PartitaLive() {
                 <Text style={styles.rigaLog}>
                   {new Date(item.creato_il).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })} · {item.skill === "Punto_avversario" ? "Punto avversario" : `${item.skill} ${item.esito}`}
                   {item.athlete_id ? ` · ${etichettaAtleta(item.athlete_id)}` : ""}
+                  {item.zona_partenza ? ` · da z${item.zona_partenza}` : ""}{item.zona_arrivo ? ` → z${item.zona_arrivo}` : ""}
                 </Text>
               )}
             />
@@ -890,6 +960,8 @@ const styles = StyleSheet.create({
   bottoneDistruttivo: { borderColor: brand.colors.error, borderWidth: 1, paddingVertical: 12, borderRadius: 8, alignItems: "center" },
   bottoneDistruttivoTesto: { color: brand.colors.error, fontWeight: "700" },
   tastoPiccolo: { flexGrow: 1, backgroundColor: brand.colors.surfaceSecondary, paddingVertical: 10, paddingHorizontal: 8, borderRadius: 8, alignItems: "center", minHeight: 40, justifyContent: "center" },
+  tastoPiccoloAttivo: { backgroundColor: brand.colors.brand },
+  tastoPiccoloTestoAttivo: { color: "#000", fontWeight: "800" },
   tastoPiccoloTesto: { color: brand.colors.onSurface, fontWeight: "600", fontSize: 12 },
   tastoPiccoloDistruttivo: { flexGrow: 1, borderColor: brand.colors.error, borderWidth: 1, paddingVertical: 10, borderRadius: 8, alignItems: "center", minHeight: 40, justifyContent: "center" },
   tastoPiccoloDistruttivoTesto: { color: brand.colors.error, fontWeight: "600", fontSize: 12 },

@@ -17,6 +17,7 @@ export interface SchedaPartita {
   }[];
   timeouts: { set: number; squadra: string; punteggio: string }[];
   serie: { set: number; noi: number; avversario: number }[];
+  zone: { fondamentale: string; vista: string; zona: number; azioni: number; punti: number; errori: number }[];
 }
 
 function eff(punti: number, errori: number, azioni: number): string {
@@ -75,6 +76,13 @@ export function costruisciCsv(scheda: SchedaPartita): string {
     righe.push([]);
   }
 
+  if (scheda.zone.length > 0) {
+    righe.push(["ZONE DI BATTUTA E ATTACCO"]);
+    righe.push(["Fondamentale", "Vista", "Zona", "Azioni", "Punti", "Errori", "Efficienza"]);
+    for (const z of scheda.zone) righe.push([z.fondamentale, z.vista, z.zona, z.azioni, z.punti, z.errori, eff(z.punti, z.errori, z.azioni)]);
+    righe.push([]);
+  }
+
   if (scheda.serie.length > 0) {
     righe.push(["SERIE PIU' LUNGHE DI PUNTI CONSECUTIVI"]);
     righe.push(["Set", "Noi", "Loro"]);
@@ -126,6 +134,12 @@ export function costruisciHtmlStampa(scheda: SchedaPartita): string {
   }
   if (scheda.timeouts.length > 0) {
     parti.push("<h2>Time-out</h2>" + tabella(["Set", "Chi", "Punteggio"], scheda.timeouts.map((t) => [t.set, t.squadra, t.punteggio])));
+  }
+  if (scheda.zone.length > 0) {
+    parti.push(
+      "<h2>Zone di battuta e attacco</h2>" +
+        tabella(["Fondamentale", "Vista", "Zona", "Az.", "Pt", "Err", "Eff."], scheda.zone.map((z) => [z.fondamentale, z.vista, z.zona, z.azioni, z.punti, z.errori, eff(z.punti, z.errori, z.azioni) || "—"])),
+    );
   }
   if (scheda.serie.length > 0) {
     parti.push("<h2>Serie più lunghe di punti consecutivi</h2>" + tabella(["Set", "Noi", "Loro"], scheda.serie.map((s) => [s.set, s.noi, s.avversario])));

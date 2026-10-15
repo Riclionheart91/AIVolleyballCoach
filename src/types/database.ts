@@ -222,6 +222,10 @@ export interface MatchEvent {
   creato_da: string | null;
   /** Solo per skill="Ricezione" con esito="neutro"; null altrimenti. */
   qualita: QualitaRicezione | null;
+  /** Zona (1-6) del campo avversario dove e' caduta la palla; solo battuta e attacco, solo se la modalita' zone era attiva. */
+  zona_arrivo?: number | null;
+  /** Zona (1-6) da cui e' partito l'attacco, ricavata dalla rotazione. */
+  zona_partenza?: number | null;
 }
 
 export interface MatchSetLineup {

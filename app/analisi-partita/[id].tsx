@@ -3,11 +3,12 @@ import { View, Text, Pressable, StyleSheet, ScrollView, ActivityIndicator } from
 import { useLocalSearchParams, useFocusEffect, router } from "expo-router";
 import { useAuth } from "@/src/context/AuthContext";
 import {
-  analisiFondamentaliPartita, analisiPersoneDettaglioPartita, analisiPersonePartita, andamentoPersonePartite, andamentoTraPartite,
+  analisiFondamentaliPartita, analisiPersoneDettaglioPartita, analisiZonePartita, analisiPersonePartita, andamentoPersonePartite, andamentoTraPartite,
   elencaEventiPerAndamento, elencaPartite, elencaSet, elencaTimeout, rendimentoServizioRicezionePartita,
-  type AnalisiFondamentale, type AnalisiPersona, type AnalisiPersonaFondamentale, type AndamentoPartita, type AndamentoPersonaPartita,
+  type AnalisiFondamentale, type AnalisiPersona, type AnalisiPersonaFondamentale, type AnalisiZona, type AndamentoPartita, type AndamentoPersonaPartita,
   type EventoAndamento, type MatchTimeout, type RendimentoServizioRicezione,
 } from "@/src/services/matches";
+import { GrigliaZone, type ValoreZona } from "@/src/components/ZoneCampo";
 import { GraficoAndamentoSet } from "@/src/components/GraficoAndamentoSet";
 import { costruisciAndamentoPerSet, seriePiuLunghe } from "@/src/lib/andamentoPunti";
 import { esportaCsv, stampaScheda, type SchedaPartita } from "@/src/lib/esportaPartita";
@@ -39,6 +40,9 @@ export default function AnalisiPartita() {
   const [eventiAndamento, setEventiAndamento] = useState<EventoAndamento[]>([]);
   const [timeouts, setTimeouts] = useState<MatchTimeout[]>([]);
   const [partiteSquadra, setPartiteSquadra] = useState<Match[]>([]);
+  const [zone, setZone] = useState<AnalisiZona[]>([]);
+  // Per l'attacco si puo' guardare dove e' caduta la palla oppure da dove e' partito l'attacco.
+  const [zonaAttaccoVista, setZonaAttaccoVista] = useState<"arrivo" | "partenza">("arrivo");
   const [trendPersone, setTrendPersone] = useState<Record<string, AndamentoPersonaPartita[]>>({});
 
   const carica = useCallback(async () => {
@@ -47,7 +51,7 @@ export default function AnalisiPartita() {
     try {
       const { data: m } = await supabaseClient.from("matches").select("*").eq("id", id).single();
       setMatch(m ?? null);
-      const [f, p, det, a, sr, setLista, evAnd, to, partite, trend] = await Promise.all([
+      const [f, p, det, a, sr, setLista, evAnd, to, partite, trend, zoneRighe] = await Promise.all([
         analisiFondamentaliPartita(id).catch(() => []),
         analisiPersonePartita(id).catch(() => []),
         analisiPersoneDettaglioPartita(id).catch(() => [] as AnalisiPersonaFondamentale[]),
@@ -58,7 +62,9 @@ export default function AnalisiPartita() {
         elencaTimeout(id).catch(() => [] as MatchTimeout[]),
         elencaPartite(team.id).catch(() => [] as Match[]),
         andamentoPersonePartite(team.id, 5).catch(() => [] as AndamentoPersonaPartita[]),
+        analisiZonePartita(id).catch(() => [] as AnalisiZona[]),
       ]);
+      setZone(zoneRighe);
       setSetGiocati(setLista);
       setEventiAndamento(evAnd);
       setTimeouts(to);
@@ -176,6 +182,13 @@ export default function AnalisiPartita() {
         squadra: t.squadra === "noi" ? "Noi" : "Loro",
         punteggio: `${t.punti_noi}-${t.punti_avversario}`,
       })),
+      zone: zone.length === 0 ? [] : (["Servizio", "Attacco"] as const).flatMap((fond) =>
+        (["arrivo", "partenza"] as const).flatMap((dim) => {
+          if (fond === "Servizio" && dim === "partenza") return [];
+          const val = valoriPerZona(fond, dim);
+          return Object.keys(val).map((k) => ({ fondamentale: fond, vista: dim === "arrivo" ? "Arrivo" : "Partenza", zona: Number(k), azioni: val[Number(k)].azioni, punti: val[Number(k)].punti, errori: val[Number(k)].errori }));
+        }),
+      ),
       serie: setGiocati.map((x) => { const sr2 = seriePiuLunghe(andamentoPerSet[x.id] ?? []); return { set: x.numero_set, noi: sr2.noi, avversario: sr2.avversario }; }),
     };
   }
@@ -190,6 +203,20 @@ export default function AnalisiPartita() {
     if (!match) return;
     if (!stampaScheda(costruisciScheda())) avvisa("Stampa non disponibile", "La stampa/PDF funziona dal browser. Se si è bloccata la finestra, consenti i popup per questo sito e riprova.");
   }
+
+  /** Somma le righe per zona (di arrivo o di partenza) per un fondamentale. */
+  function valoriPerZona(fondamentale: string, dimensione: "arrivo" | "partenza"): Record<number, ValoreZona> {
+    const out: Record<number, ValoreZona> = {};
+    for (const r of zone) {
+      if (r.fondamentale !== fondamentale) continue;
+      const z = dimensione === "arrivo" ? r.zona_arrivo : r.zona_partenza;
+      if (!z) continue;
+      const v = out[z] ?? (out[z] = { azioni: 0, punti: 0, errori: 0 });
+      v.azioni += r.azioni; v.punti += r.punti; v.errori += r.errori;
+    }
+    return out;
+  }
+  const haZone = (fondamentale: string, dimensione: "arrivo" | "partenza") => Object.keys(valoriPerZona(fondamentale, dimensione)).length > 0;
 
   const chiaveAvversario = (nome: string) => nome.toLowerCase().replace(/\s+/g, " ").trim();
 
@@ -252,6 +279,40 @@ export default function AnalisiPartita() {
             <Text style={styles.dettaglioFondamentale}>
               Ricezioni: {servizioRicezione.ricezioni_ottime} perfette, {servizioRicezione.ricezioni_buone} buone, {servizioRicezione.ricezioni_scarse} scarse, {servizioRicezione.ricezioni_errori} errori.
             </Text>
+          </View>
+        )}
+
+        {zone.length > 0 && (
+          <View>
+            <Text style={styles.sezione}>Zone di battuta e attacco</Text>
+            <Text style={styles.nota}>
+              Campo avversario visto dalla nostra parte (rete in basso). Per ogni zona: quante azioni, punti/errori ed efficienza. Compaiono solo le azioni registrate con la modalità "Zone" attiva.
+            </Text>
+            {haZone("Servizio", "arrivo") && (
+              <View style={styles.bloccoSet}>
+                <Text style={styles.titoloSet}>Battuta — dove cade</Text>
+                <GrigliaZone valori={valoriPerZona("Servizio", "arrivo")} />
+              </View>
+            )}
+            {(haZone("Attacco", "arrivo") || haZone("Attacco", "partenza")) && (
+              <View style={styles.bloccoSet}>
+                <Text style={styles.titoloSet}>Attacco — {zonaAttaccoVista === "arrivo" ? "dove cade" : "da dove parte (posizione di rotazione)"}</Text>
+                <View style={{ flexDirection: "row", gap: 8, marginBottom: 4 }}>
+                  <Pressable onPress={() => setZonaAttaccoVista("arrivo")} style={[styles.chipZona, zonaAttaccoVista === "arrivo" && styles.chipZonaAttivo]}>
+                    <Text style={[styles.chipZonaTesto, zonaAttaccoVista === "arrivo" && styles.chipZonaTestoAttivo]}>Arrivo</Text>
+                  </Pressable>
+                  <Pressable onPress={() => setZonaAttaccoVista("partenza")} style={[styles.chipZona, zonaAttaccoVista === "partenza" && styles.chipZonaAttivo]}>
+                    <Text style={[styles.chipZonaTesto, zonaAttaccoVista === "partenza" && styles.chipZonaTestoAttivo]}>Partenza</Text>
+                  </Pressable>
+                </View>
+                {haZone("Attacco", zonaAttaccoVista)
+                  ? <GrigliaZone valori={valoriPerZona("Attacco", zonaAttaccoVista)} />
+                  : <Text style={styles.nota}>Nessun dato per questa vista.</Text>}
+                {zonaAttaccoVista === "partenza" && (
+                  <Text style={styles.dettaglioFondamentale}>La partenza è la posizione di rotazione di chi attacca: è un'approssimazione (es. un'alzatrice o chi attacca fuori posto).</Text>
+                )}
+              </View>
+            )}
           </View>
         )}
 
@@ -456,6 +517,10 @@ const styles = StyleSheet.create({
   rigaAndamentoTesto: { color: brand.colors.onSurfaceSecondary, fontSize: 12, flex: 1 },
   bottoneEsporta: { borderWidth: 1, borderColor: brand.colors.brandSecondary, borderRadius: 8, paddingVertical: 4, paddingHorizontal: 8 },
   bottoneEsportaTesto: { color: brand.colors.brandSecondary, fontSize: 12, fontWeight: "700" },
+  chipZona: { paddingVertical: 4, paddingHorizontal: 12, borderRadius: 14, backgroundColor: brand.colors.surfaceTertiary },
+  chipZonaAttivo: { backgroundColor: brand.colors.brand },
+  chipZonaTesto: { color: brand.colors.onSurfaceSecondary, fontSize: 12 },
+  chipZonaTestoAttivo: { color: "#000", fontWeight: "700" },
   bloccoSet: { marginBottom: 14, gap: 4 },
   titoloSet: { color: brand.colors.onSurface, fontSize: 13, fontWeight: "700" },
   trendBox: { marginTop: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: brand.colors.border, gap: 4 },
