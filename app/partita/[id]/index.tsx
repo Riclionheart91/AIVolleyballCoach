@@ -39,7 +39,7 @@ import { Campo9x9, type OccupanteCampo } from "@/src/components/Campo9x9";
 import { useSincronizzazioneLive } from "@/src/hooks/useSincronizzazioneLive";
 import { statoPartitaOspite } from "@/src/services/scoutOspiti";
 import { SelettoreZona } from "@/src/components/ZoneCampo";
-import { SOGLIA_SERIE_AVVERSARIA, serieAvversariaInCorso } from "@/src/lib/andamentoPunti";
+import { SOGLIA_SERIE_AVVERSARIA, chiHaSegnato, serieAvversariaInCorso } from "@/src/lib/andamentoPunti";
 
 type Passo = "giocatrice" | "fondamentale" | "esito" | "zona";
 
@@ -105,6 +105,8 @@ export default function PartitaLive() {
 
   const [atletaSelId, setAtletaSelId] = useState<string | null>(null);
   const [skillSel, setSkillSel] = useState<Skill | null>(null);
+  // Se vero, il passo "fondamentale" mostra tutti i fondamentali e non solo quelli possibili in questo momento dello scambio.
+  const [mostraTuttiFondamentali, setMostraTuttiFondamentali] = useState(false);
   const [modalitaEssenziale, setModalitaEssenziale] = useState(true);
   const [popupCambio, setPopupCambio] = useState(false);
   const [erroreVisibile, setErroreVisibile] = useState<string | null>(null);
@@ -269,7 +271,7 @@ export default function PartitaLive() {
       cognome: a?.cognome ?? "?",
       numeroMaglia: a?.numero_maglia ?? null,
       ruolo: a?.ruolo_campo ?? null,
-      attivo: atletaSelId === f.athlete_id,
+      attivo: atletaEff === f.athlete_id,
     };
   }).filter((o) => o.posizione > 0);
 
@@ -295,12 +297,12 @@ export default function PartitaLive() {
 
   /** Esito scelto: con le zone attive, per battuta e attacco si chiede prima dove e' caduta la palla. */
   function scegliEsito(esito: Esito) {
-    if (!skillSel || !atletaSelId) return;
-    if (zoneAttive && (skillSel === "Servizio" || skillSel === "Attacco")) {
-      setZonaInAttesa({ skill: skillSel, esito, athleteId: atletaSelId });
+    if (!skillEff || !atletaEff) return;
+    if (zoneAttive && (skillEff === "Servizio" || skillEff === "Attacco")) {
+      setZonaInAttesa({ skill: skillEff, esito, athleteId: atletaEff });
       return;
     }
-    registra(skillSel, esito, atletaSelId);
+    registra(skillEff, esito, atletaEff);
   }
 
   function confermaZona(zona: number | null) {
@@ -321,6 +323,7 @@ export default function PartitaLive() {
     applicaDelta(skill, esito, 1);
     setSkillSel(null);
     setAtletaSelId(null);
+    setMostraTuttiFondamentali(false);
 
     try {
       const nuovoId = await registraEvento(match.id, setCorrente.id, skill, esito, athleteId, qualita);
@@ -471,7 +474,38 @@ export default function PartitaLive() {
   const inizioSerieAvv = setCorrente.punti_avversario - serieAvversaria;
   const timeoutDuranteSerie = timeoutSet.some((t) => t.squadra === "noi" && t.punti_avversario > inizioSerieAvv);
   const avvisoSerie = serieAvversaria >= SOGLIA_SERIE_AVVERSARIA && !timeoutDuranteSerie;
-  const passo: Passo = !atletaSelId ? "giocatrice" : !skillSel ? "fondamentale" : zonaInAttesa ? "zona" : "esito";
+
+  // --- Scambio in corso: cosa puo' succedere adesso -------------------
+  // L'ultima azione di gioco dopo l'ultimo punto dice cosa viene dopo:
+  // a inizio scambio, se serviamo noi la prima azione e' il nostro
+  // servizio (di chi e' in posizione 1), altrimenti e' la nostra
+  // ricezione. Durante lo scambio un servizio o una ricezione non
+  // possono ripetersi: si propongono solo i fondamentali plausibili.
+  const FONDAMENTALI_DI_GIOCO: string[] = ["Servizio", "Ricezione", "Attacco", "Muro", "Difesa"];
+  let ultimaAzioneScambio: MatchEvent | null = null;
+  for (const e of eventi) {
+    if (e.set_id !== setCorrente.id) continue;
+    if (chiHaSegnato(e.skill, e.esito) !== null) break;
+    if (FONDAMENTALI_DI_GIOCO.includes(e.skill)) { ultimaAzioneScambio = e; break; }
+  }
+  const inizioScambio = ultimaAzioneScambio === null;
+  const possibili: string[] = inizioScambio
+    ? [noiAlServizio ? "Servizio" : "Ricezione"]
+    : ultimaAzioneScambio!.skill === "Servizio" ? ["Muro", "Difesa", "Attacco"]
+    : ultimaAzioneScambio!.skill === "Ricezione" ? ["Attacco"]
+    : ultimaAzioneScambio!.skill === "Attacco" ? ["Difesa", "Muro", "Attacco"]
+    : ultimaAzioneScambio!.skill === "Muro" ? ["Difesa", "Attacco"]
+    : ["Attacco", "Difesa"];
+  // Con la modalita' essenziale alcuni fondamentali non ci sono: restano quelli disponibili, nell'ordine di probabilita'.
+  const skillsPossibili = possibili.map((n) => skills.find((x) => x.skill === n)).filter((x): x is (typeof skills)[number] => !!x);
+  const skillsDaMostrare = mostraTuttiFondamentali || skillsPossibili.length === 0 ? skills : skillsPossibili;
+  const skillAuto = !mostraTuttiFondamentali && skillsPossibili.length === 1 ? skillsPossibili[0].skill : null;
+  // A inizio scambio, se serviamo noi, a battere e' per forza chi e' in posizione 1.
+  const atletaAuto = inizioScambio && noiAlServizio && alServizio ? alServizio.athlete_id : null;
+  const atletaEff = atletaSelId ?? atletaAuto;
+  const skillEff: Skill | null = skillSel ?? skillAuto;
+  const passo: Passo = !atletaEff ? "giocatrice" : !skillEff ? "fondamentale" : zonaInAttesa ? "zona" : "esito";
+  const nomeEff = atletaEff ? etichettaAtleta(atletaEff) : "";
 
   function ModaleSituazione() {
     const segnalazioni: SegnalazioneSituazione[] = analizzaSituazione(eventi, (aid) => etichettaAtleta(aid));
@@ -635,9 +669,9 @@ export default function PartitaLive() {
           <>
           <ScrollView style={{ flex: 1, minHeight: 0 }} contentContainerStyle={{ gap: 6, paddingBottom: 4 }}>
             <Text style={styles.indicazionePasso}>
-              {passo === "giocatrice" && "1. Tocca chi è in campo"}
-              {passo === "fondamentale" && `2. ${selezionata ? etichettaAtleta(selezionata.id) : ""} — quale fondamentale?`}
-              {passo === "esito" && `3. ${skillSel} — com'è andata?`}
+              {passo === "giocatrice" && (skillAuto === "Ricezione" ? "Chi ha ricevuto? Tocca la giocatrice" : skillAuto === "Attacco" ? "Chi ha attaccato? Tocca la giocatrice" : skillAuto === "Servizio" ? "Chi ha servito? Tocca la giocatrice" : "1. Tocca chi è in campo")}
+              {passo === "fondamentale" && `2. ${nomeEff} — quale fondamentale?`}
+              {passo === "esito" && `${skillEff} · ${nomeEff} — com'è andata?`}
               {passo === "zona" && "4. Dove è caduta la palla? (campo avversario)"}
             </Text>
 
@@ -645,18 +679,23 @@ export default function PartitaLive() {
 
             {passo === "fondamentale" && (
               <View style={styles.griglia}>
-                {skills.map((s) => (
+                {skillsDaMostrare.map((s) => (
                   <Pressable key={s.skill} onPress={() => setSkillSel(s.skill)} style={[styles.tastoGriglia, { paddingVertical: d(12) }]}>
                     <Text style={[styles.tastoGrigliaTesto, { fontSize: d(13) }]}>{s.etichetta}</Text>
                   </Pressable>
                 ))}
+                {!mostraTuttiFondamentali && skillsPossibili.length > 0 && skillsPossibili.length < skills.length && (
+                  <Pressable onPress={() => setMostraTuttiFondamentali(true)} style={styles.tastoAnnullaPasso}>
+                    <Text style={styles.nota}>Altro fondamentale…</Text>
+                  </Pressable>
+                )}
                 <Pressable onPress={() => { setAtletaSelId(null); setSkillSel(null); }} style={styles.tastoAnnullaPasso}>
                   <Text style={styles.nota}>← cambia giocatrice</Text>
                 </Pressable>
               </View>
             )}
 
-            {passo === "esito" && skillSel && skillSel === "Ricezione" && (
+            {passo === "esito" && skillEff && skillEff === "Ricezione" && (
               // Griglia 2x2 invece dei 3 pulsanti impilati: la ricezione
               // non può mai valere "punto" con le regole standard, quindi
               // il bucket "neutro" si apre in una scala di qualità
@@ -665,26 +704,26 @@ export default function PartitaLive() {
               // impilati di prima: resta tutto in una sola schermata.
               <>
                 <View style={styles.griglia}>
-                  <Pressable style={[styles.tastoEsitoGriglia, styles.esitoOttima, { paddingVertical: d(12) }]} onPress={() => registra(skillSel, "neutro", atletaSelId, "ottima")}>
+                  <Pressable style={[styles.tastoEsitoGriglia, styles.esitoOttima, { paddingVertical: d(12) }]} onPress={() => registra(skillEff, "neutro", atletaSelId, "ottima")}>
                     <Text style={[styles.tastoEsitoTesto, { fontSize: d(13) }]}>Perfetta</Text>
                   </Pressable>
-                  <Pressable style={[styles.tastoEsitoGriglia, styles.esitoBuona, { paddingVertical: d(12) }]} onPress={() => registra(skillSel, "neutro", atletaSelId, "buona")}>
+                  <Pressable style={[styles.tastoEsitoGriglia, styles.esitoBuona, { paddingVertical: d(12) }]} onPress={() => registra(skillEff, "neutro", atletaSelId, "buona")}>
                     <Text style={[styles.tastoEsitoTesto, { fontSize: d(13) }]}>Buona</Text>
                   </Pressable>
-                  <Pressable style={[styles.tastoEsitoGriglia, styles.esitoScarsaRic, { paddingVertical: d(12) }]} onPress={() => registra(skillSel, "neutro", atletaSelId, "scarsa")}>
+                  <Pressable style={[styles.tastoEsitoGriglia, styles.esitoScarsaRic, { paddingVertical: d(12) }]} onPress={() => registra(skillEff, "neutro", atletaSelId, "scarsa")}>
                     <Text style={[styles.tastoEsitoTesto, { fontSize: d(13) }]}>Scarsa</Text>
                   </Pressable>
-                  <Pressable style={[styles.tastoEsitoGriglia, styles.esitoErrore, { paddingVertical: d(12) }]} onPress={() => registra(skillSel, "errore", atletaSelId)}>
+                  <Pressable style={[styles.tastoEsitoGriglia, styles.esitoErrore, { paddingVertical: d(12) }]} onPress={() => registra(skillEff, "errore", atletaSelId)}>
                     <Text style={[styles.tastoEsitoTesto, { fontSize: d(13) }]}>Errore</Text>
                   </Pressable>
                 </View>
-                <Pressable onPress={() => setSkillSel(null)} style={styles.tastoAnnullaPasso}>
-                  <Text style={styles.nota}>← cambia fondamentale</Text>
+                <Pressable onPress={() => { setSkillSel(null); setMostraTuttiFondamentali(true); }} style={styles.tastoAnnullaPasso}>
+                  <Text style={styles.nota}>← altro fondamentale</Text>
                 </Pressable>
               </>
             )}
 
-            {passo === "esito" && skillSel && skillSel !== "Ricezione" && (
+            {passo === "esito" && skillEff && skillEff !== "Ricezione" && (
               <>
                 <View style={{ flexDirection: "row", gap: 6 }}>
                 <Pressable style={[styles.tastoEsito, { flex: 1 }, styles.esitoPunto, { paddingVertical: d(14) }]} onPress={() => scegliEsito("punto")}>
@@ -697,8 +736,8 @@ export default function PartitaLive() {
                   <Text style={[styles.tastoEsitoTesto, { fontSize: d(15) }]}>Errore</Text>
                 </Pressable>
                 </View>
-                <Pressable onPress={() => setSkillSel(null)} style={styles.tastoAnnullaPasso}>
-                  <Text style={styles.nota}>← cambia fondamentale</Text>
+                <Pressable onPress={() => { setSkillSel(null); setMostraTuttiFondamentali(true); }} style={styles.tastoAnnullaPasso}>
+                  <Text style={styles.nota}>← altro fondamentale</Text>
                 </Pressable>
               </>
             )}
