@@ -136,14 +136,17 @@ export default function PartitaLive() {
   // intero senza tagliare i comandi. Ridotto del 20% (0.52->0.42,
   // 0.40->0.32) perché su schermo da telefono il campo pieno lasciava
   // troppo poco spazio ai pulsanti sottostanti.
+  // Il pulsante Libero sta a destra della formazione, in una colonna
+  // stretta: libera una riga nella barra dei comandi.
+  const LARGHEZZA_TASTO_LIBERO = 64;
   const latoCampo = orizzontale
-    ? Math.min(altezzaSchermo - 32, larghezzaSchermo * 0.42)
-    : Math.min(larghezzaSchermo - 16, altezzaSchermo * 0.32);
+    ? Math.min(altezzaSchermo - 32, (larghezzaSchermo - LARGHEZZA_TASTO_LIBERO) * 0.42)
+    : Math.min(larghezzaSchermo - 16 - LARGHEZZA_TASTO_LIBERO - 6, altezzaSchermo * 0.32);
   // I comandi si ridimensionano con lo spazio disponibile invece di
   // avere misure fisse che su schermi piccoli escono e su grandi
   // sprecano spazio. Scala ridotta del 20% rispetto a prima, per lo
   // stesso motivo del campo: tutto deve stare in una sola schermata.
-  const spazioComandi = orizzontale ? larghezzaSchermo - latoCampo - 24 : larghezzaSchermo - 16;
+  const spazioComandi = orizzontale ? larghezzaSchermo - latoCampo - LARGHEZZA_TASTO_LIBERO - 30 : larghezzaSchermo - 16;
   const scala = Math.max(0.68, Math.min(1.08, spazioComandi / 340)) * 0.8;
   const d = (valore: number) => Math.round(valore * scala);
 
@@ -566,7 +569,8 @@ export default function PartitaLive() {
 
   return (
     <Radice {...propsRadice}>
-      <View style={[styles.colonnaCampo, orizzontale ? { width: latoCampo } : { width: "100%", alignItems: "center" }]}>
+      <View style={[styles.colonnaCampo, orizzontale ? { width: latoCampo + LARGHEZZA_TASTO_LIBERO + 6 } : { width: "100%", alignItems: "center" }]}>
+        <View style={{ flexDirection: "row", gap: 6, alignItems: "stretch" }}>
         <View style={{ width: latoCampo, height: latoCampo }}>
           <Campo9x9
             occupanti={occupanti}
@@ -581,6 +585,12 @@ export default function PartitaLive() {
               setSkillSel(null);
             }}
           />
+        </View>
+        {puoScoutare && (
+          <Pressable onPress={() => setPopupLibero(true)} style={[styles.tastoLibero, { width: LARGHEZZA_TASTO_LIBERO }, libero && styles.tastoPiccoloAttivo]}>
+            <Text style={[styles.tastoPiccoloTesto, libero && styles.tastoPiccoloTestoAttivo]}>{libero ? "L ✓" : "Libero"}</Text>
+          </Pressable>
+        )}
         </View>
         <Text style={styles.nota} numberOfLines={1}>
           servizio: {setCorrente.squadra_al_servizio === "noi" ? (alServizio ? etichettaAtleta(alServizio.athlete_id) : "noi") : "loro"}
@@ -732,9 +742,6 @@ export default function PartitaLive() {
               </Pressable>
               <Pressable onPress={alternaZone} style={[styles.tastoPiccolo, zoneAttive && styles.tastoPiccoloAttivo]}>
                 <Text style={[styles.tastoPiccoloTesto, zoneAttive && styles.tastoPiccoloTestoAttivo]}>🎯 Zone {zoneAttive ? "ON" : "off"}</Text>
-              </Pressable>
-              <Pressable onPress={() => setPopupLibero(true)} style={styles.tastoPiccolo}>
-                <Text style={styles.tastoPiccoloTesto}>{libero ? "L ✓" : "Libero"}</Text>
               </Pressable>
               <View style={styles.rigaToggleFisso}>
                 <Text style={styles.nota}>Ess.</Text>
@@ -971,6 +978,7 @@ const styles = StyleSheet.create({
   barraFissa: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
   bottoneDistruttivo: { borderColor: brand.colors.error, borderWidth: 1, paddingVertical: 12, borderRadius: 8, alignItems: "center" },
   bottoneDistruttivoTesto: { color: brand.colors.error, fontWeight: "700" },
+  tastoLibero: { backgroundColor: brand.colors.surfaceSecondary, borderRadius: 8, alignItems: "center", justifyContent: "center", paddingHorizontal: 4 },
   tastoPiccolo: { flexGrow: 1, backgroundColor: brand.colors.surfaceSecondary, paddingVertical: 10, paddingHorizontal: 6, borderRadius: 8, alignItems: "center", minHeight: 40, justifyContent: "center" },
   tastoPiccoloAttivo: { backgroundColor: brand.colors.brand },
   tastoPiccoloTestoAttivo: { color: "#000", fontWeight: "800" },
