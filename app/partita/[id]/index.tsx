@@ -768,9 +768,12 @@ export default function PartitaLive() {
             {passo === "esito" && skillEff && skillEff !== "Ricezione" && (
               <>
                 <View style={{ flexDirection: "row", gap: 6 }}>
-                <Pressable style={[styles.tastoEsito, { flex: 1 }, styles.esitoPunto, { paddingVertical: d(14) }]} onPress={() => scegliEsito("punto")}>
-                  <Text style={[styles.tastoEsitoTesto, { fontSize: d(15) }]}>Punto</Text>
-                </Pressable>
+                {/* Una difesa non puo' essere "punto": il punto lo fa l'attacco che segue. */}
+                {skillEff !== "Difesa" && (
+                  <Pressable style={[styles.tastoEsito, { flex: 1 }, styles.esitoPunto, { paddingVertical: d(14) }]} onPress={() => scegliEsito("punto")}>
+                    <Text style={[styles.tastoEsitoTesto, { fontSize: d(15) }]}>Punto</Text>
+                  </Pressable>
+                )}
                 <Pressable style={[styles.tastoEsito, { flex: 1 }, styles.esitoNeutro, { paddingVertical: d(14) }]} onPress={() => scegliEsito("neutro")}>
                   <Text style={[styles.tastoEsitoTesto, { fontSize: d(15) }]}>Neutro</Text>
                 </Pressable>
