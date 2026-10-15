@@ -3,13 +3,18 @@ import { View, Text, Pressable, StyleSheet, ScrollView, ActivityIndicator } from
 import { useLocalSearchParams, useFocusEffect, router } from "expo-router";
 import { useAuth } from "@/src/context/AuthContext";
 import {
-  analisiFondamentaliPartita, analisiPersoneDettaglioPartita, analisiPersonePartita, andamentoTraPartite, rendimentoServizioRicezionePartita,
-  type AnalisiFondamentale, type AnalisiPersona, type AnalisiPersonaFondamentale, type AndamentoPartita, type RendimentoServizioRicezione,
+  analisiFondamentaliPartita, analisiPersoneDettaglioPartita, analisiPersonePartita, andamentoPersonePartite, andamentoTraPartite,
+  elencaEventiPerAndamento, elencaPartite, elencaSet, elencaTimeout, rendimentoServizioRicezionePartita,
+  type AnalisiFondamentale, type AnalisiPersona, type AnalisiPersonaFondamentale, type AndamentoPartita, type AndamentoPersonaPartita,
+  type EventoAndamento, type MatchTimeout, type RendimentoServizioRicezione,
 } from "@/src/services/matches";
+import { GraficoAndamentoSet } from "@/src/components/GraficoAndamentoSet";
+import { costruisciAndamentoPerSet, seriePiuLunghe } from "@/src/lib/andamentoPunti";
+import { esportaCsv, stampaScheda, type SchedaPartita } from "@/src/lib/esportaPartita";
 import { supabaseClient } from "@/src/lib/supabase";
 import { avvisa } from "@/src/lib/confermaAzione";
 import { brand } from "@/src/config";
-import type { Match } from "@/src/types/database";
+import type { Match, MatchSet } from "@/src/types/database";
 
 /**
  * Analisi ricca di una partita (F4): non solo il punteggio, ma dove
@@ -29,6 +34,12 @@ export default function AnalisiPartita() {
   const [andamento, setAndamento] = useState<AndamentoPartita[]>([]);
   const [servizioRicezione, setServizioRicezione] = useState<RendimentoServizioRicezione | null>(null);
   const [caricamento, setCaricamento] = useState(true);
+  // Andamento punto a punto, time-out, storico con lo stesso avversario, trend dei giocatori.
+  const [setGiocati, setSetGiocati] = useState<MatchSet[]>([]);
+  const [eventiAndamento, setEventiAndamento] = useState<EventoAndamento[]>([]);
+  const [timeouts, setTimeouts] = useState<MatchTimeout[]>([]);
+  const [partiteSquadra, setPartiteSquadra] = useState<Match[]>([]);
+  const [trendPersone, setTrendPersone] = useState<Record<string, AndamentoPersonaPartita[]>>({});
 
   const carica = useCallback(async () => {
     if (!id || !team) return;
@@ -36,13 +47,28 @@ export default function AnalisiPartita() {
     try {
       const { data: m } = await supabaseClient.from("matches").select("*").eq("id", id).single();
       setMatch(m ?? null);
-      const [f, p, det, a, sr] = await Promise.all([
+      const [f, p, det, a, sr, setLista, evAnd, to, partite, trend] = await Promise.all([
         analisiFondamentaliPartita(id).catch(() => []),
         analisiPersonePartita(id).catch(() => []),
         analisiPersoneDettaglioPartita(id).catch(() => [] as AnalisiPersonaFondamentale[]),
         andamentoTraPartite(team.id, 8).catch(() => []),
         rendimentoServizioRicezionePartita(id).catch(() => null),
+        elencaSet(id).catch(() => [] as MatchSet[]),
+        elencaEventiPerAndamento(id).catch(() => [] as EventoAndamento[]),
+        elencaTimeout(id).catch(() => [] as MatchTimeout[]),
+        elencaPartite(team.id).catch(() => [] as Match[]),
+        andamentoPersonePartite(team.id, 5).catch(() => [] as AndamentoPersonaPartita[]),
       ]);
+      setSetGiocati(setLista);
+      setEventiAndamento(evAnd);
+      setTimeouts(to);
+      setPartiteSquadra(partite);
+      const trendPerGiocatore: Record<string, AndamentoPersonaPartita[]> = {};
+      for (const riga of trend) {
+        if (!trendPerGiocatore[riga.athlete_id]) trendPerGiocatore[riga.athlete_id] = [];
+        trendPerGiocatore[riga.athlete_id].push(riga);
+      }
+      setTrendPersone(trendPerGiocatore);
       setFondamentali(f);
       setPersone(p);
       const perGiocatore: Record<string, AnalisiPersonaFondamentale[]> = {};
@@ -88,6 +114,85 @@ export default function AnalisiPartita() {
     return brand.colors.error;
   }
 
+  const andamentoPerSet = costruisciAndamentoPerSet(eventiAndamento);
+
+  /** Time-out di un set come marcatori del grafico. */
+  function marcatoriDelSet(setId: string) {
+    return timeouts.filter((t) => t.set_id === setId).map((t) => ({ dopoPunti: t.punti_noi + t.punti_avversario, squadra: t.squadra }));
+  }
+
+  /** Andamento dell'efficienza di una persona nelle ultime partite, per fondamentale. */
+  function renderTrend(athleteId: string) {
+    const righe = trendPersone[athleteId] ?? [];
+    const partite = Array.from(new Map(righe.map((r) => [r.match_id, r])).values()).sort((a, b) => a.data.localeCompare(b.data));
+    if (partite.length < 2) return null;
+    const fondamentaliPresenti = Array.from(new Set(righe.map((r) => r.fondamentale)));
+    const valore = (matchId: string, fond?: string): number | null => {
+      const sel = righe.filter((r) => r.match_id === matchId && (!fond || r.fondamentale === fond));
+      return efficienzaDi(sel.reduce((x, r) => x + r.punti, 0), sel.reduce((x, r) => x + r.errori, 0), sel.reduce((x, r) => x + r.azioni, 0));
+    };
+    const giorno = (iso: string) => new Date(iso).toLocaleDateString("it-IT", { day: "2-digit", month: "2-digit" });
+    return (
+      <View style={styles.trendBox}>
+        <Text style={styles.trendTitolo}>Ultime {partite.length} partite della squadra (efficienza)</Text>
+        <View style={styles.rigaTabella}>
+          <Text style={[styles.cellaFondamentale, styles.intestazioneTabella]}> </Text>
+          {partite.map((m) => <Text key={m.match_id} style={[styles.cellaTrend, styles.intestazioneTabella]}>{giorno(m.data)}</Text>)}
+        </View>
+        {fondamentaliPresenti.map((fond) => (
+          <View key={fond} style={styles.rigaTabella}>
+            <Text style={styles.cellaFondamentale}>{fond}</Text>
+            {partite.map((m) => { const v = valore(m.match_id, fond); return <Text key={m.match_id} style={[styles.cellaTrend, { color: coloreEfficienza(v) }]}>{formattaEfficienza(v)}</Text>; })}
+          </View>
+        ))}
+        <View style={[styles.rigaTabella, styles.rigaTotale]}>
+          <Text style={[styles.cellaFondamentale, styles.testoTotale]}>Totale</Text>
+          {partite.map((m) => { const v = valore(m.match_id); return <Text key={m.match_id} style={[styles.cellaTrend, styles.testoTotale, { color: coloreEfficienza(v) }]}>{formattaEfficienza(v)}</Text>; })}
+        </View>
+        <Text style={styles.notaTabella}>"—" = nessuna azione in quella partita.</Text>
+      </View>
+    );
+  }
+
+  function costruisciScheda(): SchedaPartita {
+    const numeroSet = (setId: string) => setGiocati.find((x) => x.id === setId)?.numero_set ?? 0;
+    return {
+      titolo: `${team?.nome ?? "Noi"} vs ${match!.avversario}`,
+      dataPartita: new Date(match!.data).toLocaleDateString("it-IT"),
+      setGiocati: setGiocati.map((x) => ({ numero: x.numero_set, noi: x.punti_noi, avv: x.punti_avversario })),
+      fondamentali: fondamentali.map((f) => ({
+        nome: f.fondamentale === "Punto_avversario" ? "Punto avversario" : f.fondamentale,
+        azioni: f.azioni, punti: f.punti, errori: f.errori, efficienza: f.efficienza,
+      })),
+      sideOutBreakPoint: servizioRicezione && (servizioRicezione.punti_in_battuta > 0 || servizioRicezione.punti_in_ricezione > 0)
+        ? { breakPointPct: servizioRicezione.break_point_pct ?? null, sideOutPct: servizioRicezione.side_out_pct ?? null }
+        : null,
+      persone: persone.map((pp) => ({
+        nome: pp.nome_completo, azioni: pp.azioni, punti: pp.punti, errori: pp.errori, saldo: pp.saldo,
+        fondamentali: (dettaglio[pp.athlete_id] ?? []).map((r) => ({ nome: r.fondamentale, azioni: r.azioni, punti: r.punti, neutri: r.neutri, errori: r.errori })),
+      })),
+      timeouts: timeouts.map((t) => ({
+        set: numeroSet(t.set_id),
+        squadra: t.squadra === "noi" ? "Noi" : "Loro",
+        punteggio: `${t.punti_noi}-${t.punti_avversario}`,
+      })),
+      serie: setGiocati.map((x) => { const sr2 = seriePiuLunghe(andamentoPerSet[x.id] ?? []); return { set: x.numero_set, noi: sr2.noi, avversario: sr2.avversario }; }),
+    };
+  }
+
+  async function onEsportaCsv() {
+    if (!match) return;
+    const ok = await esportaCsv(costruisciScheda());
+    if (!ok) avvisa("Esportazione non riuscita", "Non è stato possibile creare il file.");
+  }
+
+  function onStampa() {
+    if (!match) return;
+    if (!stampaScheda(costruisciScheda())) avvisa("Stampa non disponibile", "La stampa/PDF funziona dal browser. Se si è bloccata la finestra, consenti i popup per questo sito e riprova.");
+  }
+
+  const chiaveAvversario = (nome: string) => nome.toLowerCase().replace(/\s+/g, " ").trim();
+
   if (caricamento) return <View style={styles.container}><ActivityIndicator color={brand.colors.brand} style={{ marginTop: 40 }} /></View>;
   if (!match) return <View style={styles.container}><Text style={styles.nota}>Partita non trovata.</Text></View>;
 
@@ -98,6 +203,8 @@ export default function AnalisiPartita() {
       <View style={styles.header}>
         <Pressable onPress={() => router.back()} hitSlop={12}><Text style={styles.indietro}>← Partite</Text></Pressable>
         <Text style={styles.titolo} numberOfLines={1}>vs {match.avversario}</Text>
+        <Pressable onPress={onEsportaCsv} hitSlop={8} style={styles.bottoneEsporta}><Text style={styles.bottoneEsportaTesto}>⬇ CSV</Text></Pressable>
+        <Pressable onPress={onStampa} hitSlop={8} style={styles.bottoneEsporta}><Text style={styles.bottoneEsportaTesto}>🖨 PDF</Text></Pressable>
       </View>
 
       <ScrollView contentContainerStyle={{ padding: 16, gap: 20, paddingBottom: 60 }}>
@@ -145,6 +252,32 @@ export default function AnalisiPartita() {
             <Text style={styles.dettaglioFondamentale}>
               Ricezioni: {servizioRicezione.ricezioni_ottime} perfette, {servizioRicezione.ricezioni_buone} buone, {servizioRicezione.ricezioni_scarse} scarse, {servizioRicezione.ricezioni_errori} errori.
             </Text>
+          </View>
+        )}
+
+        {setGiocati.length > 0 && (
+          <View>
+            <Text style={styles.sezione}>Andamento punto a punto</Text>
+            <Text style={styles.nota}>Differenza punti dopo ogni punto: le serie si vedono come blocchi di barre consecutive nello stesso verso.</Text>
+            {setGiocati.map((x) => {
+              const punti = andamentoPerSet[x.id] ?? [];
+              const serie = seriePiuLunghe(punti);
+              const toSet = timeouts.filter((t) => t.set_id === x.id);
+              return (
+                <View key={x.id} style={styles.bloccoSet}>
+                  <Text style={styles.titoloSet}>Set {x.numero_set} — {x.punti_noi}-{x.punti_avversario}</Text>
+                  <GraficoAndamentoSet punti={punti} timeouts={marcatoriDelSet(x.id)} />
+                  {punti.length > 0 && (
+                    <Text style={styles.dettaglioFondamentale}>Serie più lunga: noi {serie.noi} punti di fila, loro {serie.avversario}.</Text>
+                  )}
+                  {toSet.length > 0 && (
+                    <Text style={styles.dettaglioFondamentale}>
+                      Time-out: {toSet.map((t) => `${t.squadra === "noi" ? "noi" : "loro"} sul ${t.punti_noi}-${t.punti_avversario}`).join(" · ")}
+                    </Text>
+                  )}
+                </View>
+              );
+            })}
           </View>
         )}
 
@@ -223,6 +356,7 @@ export default function AnalisiPartita() {
                         );
                       })()}
                       <Text style={styles.notaTabella}>Pt = punti, Neu = neutri, Err = errori. Efficienza = (punti − errori) / azioni.</Text>
+                      {renderTrend(p.athlete_id)}
                     </View>
                   )}
                 </View>
@@ -230,6 +364,41 @@ export default function AnalisiPartita() {
             })
           )}
         </View>
+
+        {(() => {
+          const precedenti = partiteSquadra
+            .filter((m) => m.id !== match.id && m.stato === "conclusa" && chiaveAvversario(m.avversario) === chiaveAvversario(match.avversario))
+            .sort((a, b) => b.data.localeCompare(a.data));
+          const vinte = precedenti.filter((m) => m.set_vinti_noi > m.set_vinti_avversario).length;
+          return (
+            <View>
+              <Text style={styles.sezione}>Storico contro {match.avversario}</Text>
+              {precedenti.length === 0 ? (
+                <Text style={styles.nota}>Nessun'altra partita conclusa contro questa squadra in archivio.</Text>
+              ) : (
+                <>
+                  <Text style={styles.nota}>
+                    Altre {precedenti.length} {precedenti.length === 1 ? "partita" : "partite"} concluse: {vinte} {vinte === 1 ? "vittoria" : "vittorie"}, {precedenti.length - vinte} {precedenti.length - vinte === 1 ? "sconfitta" : "sconfitte"}. Il nome dell'avversario deve essere scritto uguale.
+                  </Text>
+                  {precedenti.map((m) => {
+                    const vinta = m.set_vinti_noi > m.set_vinti_avversario;
+                    const eff = andamento.find((a) => a.match_id === m.id)?.efficienza ?? null;
+                    return (
+                      <Pressable key={m.id} style={styles.rigaAndamento} onPress={() => router.push(`/analisi-partita/${m.id}`)}>
+                        <Text style={styles.rigaAndamentoTesto} numberOfLines={1}>
+                          {new Date(m.data).toLocaleDateString("it-IT")} · {m.luogo === "casa" ? "casa" : "trasferta"} · set {m.set_vinti_noi}-{m.set_vinti_avversario}
+                        </Text>
+                        <Text style={[styles.valoreEfficienza, { color: vinta ? brand.colors.success : brand.colors.error }]}>
+                          {vinta ? "V" : "S"}{eff !== null ? `  ${formattaEfficienza(eff)}` : ""}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </>
+              )}
+            </View>
+          );
+        })()}
 
         {andamento.length > 1 && (
           <View>
@@ -285,4 +454,11 @@ const styles = StyleSheet.create({
   saldoPersona: { fontSize: 16, fontWeight: "800" },
   rigaAndamento: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: brand.colors.border, gap: 8 },
   rigaAndamentoTesto: { color: brand.colors.onSurfaceSecondary, fontSize: 12, flex: 1 },
+  bottoneEsporta: { borderWidth: 1, borderColor: brand.colors.brandSecondary, borderRadius: 8, paddingVertical: 4, paddingHorizontal: 8 },
+  bottoneEsportaTesto: { color: brand.colors.brandSecondary, fontSize: 12, fontWeight: "700" },
+  bloccoSet: { marginBottom: 14, gap: 4 },
+  titoloSet: { color: brand.colors.onSurface, fontSize: 13, fontWeight: "700" },
+  trendBox: { marginTop: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: brand.colors.border, gap: 4 },
+  trendTitolo: { color: brand.colors.brandSecondary, fontSize: 11, fontWeight: "800", textTransform: "uppercase" },
+  cellaTrend: { width: 42, textAlign: "right", fontSize: 11, fontWeight: "700", color: brand.colors.onSurfaceSecondary },
 });

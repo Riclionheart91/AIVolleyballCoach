@@ -5,6 +5,7 @@ import { useAuth } from "@/src/context/AuthContext";
 import { elencaAtlete } from "@/src/services/athletes";
 import {
   annullaUltimoEvento,
+  annullaUltimoTimeout,
   cambiaGiocatore,
   chiudiMatch,
   elencaConvocati,
@@ -12,14 +13,17 @@ import {
   elencaFormazioneConPosizioni,
   elencaSet,
   elencaStoricoFormazioneSet,
+  elencaTimeout,
   leggiRegolePunteggio,
   nuovoSet,
   registraEvento,
+  registraTimeout,
   faiUscireLibero,
   liberoInCampo,
   rendimentoRotazioniPartita,
   rimpiazzaConLibero,
   type LiberoInCampo,
+  type MatchTimeout,
   type RendimentoRotazionePartita,
 } from "@/src/services/matches";
 import { chiediParerePartitaAI } from "@/src/services/evaluations";
@@ -33,6 +37,7 @@ import { confermaAzione, avvisa } from "@/src/lib/confermaAzione";
 import { Campo9x9, type OccupanteCampo } from "@/src/components/Campo9x9";
 import { useSincronizzazioneLive } from "@/src/hooks/useSincronizzazioneLive";
 import { statoPartitaOspite } from "@/src/services/scoutOspiti";
+import { SOGLIA_SERIE_AVVERSARIA, serieAvversariaInCorso } from "@/src/lib/andamentoPunti";
 
 type Passo = "giocatrice" | "fondamentale" | "esito";
 
@@ -96,6 +101,8 @@ export default function PartitaLive() {
   const [parereAI, setParereAI] = useState<string | null>(null);
   const [chiedendoAI, setChiedendoAI] = useState(false);
   const [popupEventi, setPopupEventi] = useState(false);
+  const [timeouts, setTimeouts] = useState<MatchTimeout[]>([]);
+  const [popupTimeout, setPopupTimeout] = useState(false);
 
   // Adatta la disposizione alla forma dello schermo: in orizzontale il
   // campo sta a sinistra alto quanto lo schermo, in verticale sta in
@@ -137,6 +144,7 @@ export default function PartitaLive() {
         setFormazione(st.formazione.filter((f) => f.in_campo).sort((a, b) => (a.posizione ?? 0) - (b.posizione ?? 0)));
         setStoricoFormazione(st.formazione);
         setLibero(st.libero ?? null);
+        setTimeouts(st.timeouts ?? []);
       } catch (e) {
         setErroreOspite((e as Error).message);
       }
@@ -154,6 +162,7 @@ export default function PartitaLive() {
       setConvocateIds(convocati.map((c) => c.athlete_id));
       setLiberiIds(new Set(convocati.filter((c) => c.is_libero).map((c) => c.athlete_id)));
       setRegolePunteggio(await leggiRegolePunteggio(id));
+      setTimeouts(await elencaTimeout(id));
     }
     if (attivo) {
       const [inCampo, storico] = await Promise.all([elencaFormazioneConPosizioni(attivo.id), elencaStoricoFormazioneSet(attivo.id)]);
@@ -185,6 +194,9 @@ export default function PartitaLive() {
     ],
     carica,
   );
+  // Canale a parte: se la tabella dei time-out non fosse nella trasmissione live,
+  // non deve disturbare l'aggiornamento di punti e formazione.
+  useSincronizzazioneLive([{ nome: "match_timeouts", colonnaFiltro: "match_id", valoreFiltro: match?.id }], carica);
 
   function nomeAtleta(athleteId: string): Athlete | undefined {
     return atlete.find((a) => a.id === athleteId);
@@ -394,6 +406,14 @@ export default function PartitaLive() {
   const selezionata = atletaSelId ? nomeAtleta(atletaSelId) : null;
   const noiAlServizio = setCorrente.squadra_al_servizio === "noi";
   const alServizio = noiAlServizio ? formazione.find((f) => f.posizione === 1) : null;
+  const timeoutSet = timeouts.filter((t) => t.set_id === setCorrente.id);
+  const timeoutNoi = timeoutSet.filter((t) => t.squadra === "noi").length;
+  const timeoutLoro = timeoutSet.filter((t) => t.squadra === "avversario").length;
+  // Serie avversaria in corso: avviso se non abbiamo gia' chiamato time-out durante la serie.
+  const serieAvversaria = serieAvversariaInCorso(eventi, setCorrente.id);
+  const inizioSerieAvv = setCorrente.punti_avversario - serieAvversaria;
+  const timeoutDuranteSerie = timeoutSet.some((t) => t.squadra === "noi" && t.punti_avversario > inizioSerieAvv);
+  const avvisoSerie = serieAvversaria >= SOGLIA_SERIE_AVVERSARIA && !timeoutDuranteSerie;
   const passo: Passo = !atletaSelId ? "giocatrice" : !skillSel ? "fondamentale" : "esito";
 
   function ModaleSituazione() {
@@ -516,10 +536,16 @@ export default function PartitaLive() {
             </View>
           </View>
           <View style={{ alignItems: "flex-end" }}>
-            <Text style={styles.setNumero}>Set {setCorrente.numero_set}</Text>
+            <Text style={styles.setNumero}>Set {setCorrente.numero_set} · TO {timeoutNoi}-{timeoutLoro}</Text>
             <Text style={[styles.punteggio, { fontSize: d(26) }]}>{setCorrente.punti_noi}-{setCorrente.punti_avversario}</Text>
           </View>
         </View>
+
+        {puoScoutare && avvisoSerie && (
+          <Pressable style={styles.bannerSerie} onPress={() => setPopupTimeout(true)}>
+            <Text style={styles.bannerSerieTesto}>⚠ Serie avversaria: {serieAvversaria} punti di fila — valuta un time-out (tocca per chiamarlo)</Text>
+          </Pressable>
+        )}
 
         {erroreVisibile && (
           <Pressable style={styles.bannerErrore} onPress={() => setErroreVisibile(null)}>
@@ -623,6 +649,9 @@ export default function PartitaLive() {
               <Pressable onPress={() => setPopupEventi(true)} style={styles.tastoPiccolo}>
                 <Text style={styles.tastoPiccoloTesto}>🕑 Ultime {Math.min(eventi.length, AZIONI_RECENTI_MOSTRATE)}</Text>
               </Pressable>
+              <Pressable onPress={() => setPopupTimeout(true)} style={styles.tastoPiccolo}>
+                <Text style={styles.tastoPiccoloTesto}>⏱ TO</Text>
+              </Pressable>
               <Pressable onPress={() => setPopupLibero(true)} style={styles.tastoPiccolo}>
                 <Text style={styles.tastoPiccoloTesto}>{libero ? "L ✓" : "Libero"}</Text>
               </Pressable>
@@ -675,6 +704,48 @@ export default function PartitaLive() {
                 </Pressable>
               )}
             />
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={popupTimeout} animationType="slide" transparent onRequestClose={() => setPopupTimeout(false)}>
+        <View style={styles.sfondoPopup}>
+          <View style={styles.cartaPopup}>
+            <View style={styles.intestazionePopup}>
+              <Text style={styles.titoloPopup}>Time-out — set {setCorrente.numero_set}</Text>
+              <Pressable onPress={() => setPopupTimeout(false)} hitSlop={12}><Text style={styles.chiudiPopup}>✕</Text></Pressable>
+            </View>
+            <Text style={styles.nota}>
+              Punteggio {setCorrente.punti_noi}-{setCorrente.punti_avversario}. Chiamati finora: noi {timeoutNoi}, loro {timeoutLoro} (di norma 2 per squadra a set).
+            </Text>
+            <Pressable
+              style={styles.rigaScelta}
+              onPress={async () => {
+                try { await registraTimeout(setCorrente.id, "noi"); setPopupTimeout(false); carica(); }
+                catch (e) { avvisa("Time-out non registrato", (e as Error).message); }
+              }}
+            >
+              <Text style={styles.rigaSceltaTesto}>⏱ Time-out NOSTRO{timeoutNoi >= 2 ? " (già 2 chiamati)" : ""}</Text>
+            </Pressable>
+            <Pressable
+              style={styles.rigaScelta}
+              onPress={async () => {
+                try { await registraTimeout(setCorrente.id, "avversario"); setPopupTimeout(false); carica(); }
+                catch (e) { avvisa("Time-out non registrato", (e as Error).message); }
+              }}
+            >
+              <Text style={styles.rigaSceltaTesto}>⏱ Time-out LORO{timeoutLoro >= 2 ? " (già 2 chiamati)" : ""}</Text>
+            </Pressable>
+            {timeoutSet.length > 0 && (
+              <Pressable
+                onPress={async () => {
+                  try { await annullaUltimoTimeout(setCorrente.id); carica(); }
+                  catch (e) { avvisa("Impossibile annullare", (e as Error).message); }
+                }}
+              >
+                <Text style={styles.chiudiPopup}>↩ Annulla l'ultimo time-out registrato</Text>
+              </Pressable>
+            )}
           </View>
         </View>
       </Modal>
@@ -827,6 +898,8 @@ const styles = StyleSheet.create({
   nota: { color: brand.colors.muted, fontSize: 11 },
   etichettaLog: { color: brand.colors.muted, fontSize: 10, textTransform: "uppercase", marginTop: 4 },
   rigaLog: { color: brand.colors.onSurfaceSecondary, fontSize: 11, paddingVertical: 2 },
+  bannerSerie: { backgroundColor: "rgba(255,215,0,0.15)", borderColor: brand.colors.warning, borderWidth: 1, borderRadius: 8, padding: 8 },
+  bannerSerieTesto: { color: brand.colors.warning, fontSize: 12, fontWeight: "700" },
   vuoto: { color: brand.colors.muted, textAlign: "center", marginTop: 32 },
 
   bannerErrore: { backgroundColor: "#4A1620", borderRadius: 8, padding: 8 },

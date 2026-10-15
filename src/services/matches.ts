@@ -331,3 +331,70 @@ export async function andamentoTraPartite(teamId: string, quante = 10): Promise<
   if (error) throw error;
   return data ?? [];
 }
+
+/** Un evento di scouting ridotto all'essenziale, quanto basta per ricostruire l'andamento dei punti. */
+export interface EventoAndamento {
+  id: string;
+  set_id: string;
+  skill: Skill;
+  esito: Esito | null;
+  creato_il: string;
+}
+
+/** TUTTI gli eventi della partita, dal primo all'ultimo: serve al grafico punto a punto. */
+export async function elencaEventiPerAndamento(matchId: string): Promise<EventoAndamento[]> {
+  const { data, error } = await supabaseClient
+    .from("match_events")
+    .select("id, set_id, skill, esito, creato_il")
+    .eq("match_id", matchId)
+    .order("creato_il", { ascending: true })
+    .limit(5000);
+  if (error) throw error;
+  return (data ?? []) as EventoAndamento[];
+}
+
+/** Time-out chiamato durante un set, col punteggio del momento. */
+export interface MatchTimeout {
+  id: string;
+  match_id: string;
+  set_id: string;
+  squadra: "noi" | "avversario";
+  punti_noi: number;
+  punti_avversario: number;
+  creato_il: string;
+}
+
+export async function elencaTimeout(matchId: string): Promise<MatchTimeout[]> {
+  const { data, error } = await supabaseClient.from("match_timeouts").select("*").eq("match_id", matchId).order("creato_il");
+  if (error) return [];
+  return (data ?? []) as MatchTimeout[];
+}
+
+export async function registraTimeout(setId: string, squadra: "noi" | "avversario"): Promise<void> {
+  const { error } = await supabaseClient.rpc("registra_timeout", { p_set_id: setId, p_squadra: squadra });
+  if (error) throw error;
+}
+
+export async function annullaUltimoTimeout(setId: string): Promise<void> {
+  const { error } = await supabaseClient.rpc("annulla_ultimo_timeout", { p_set_id: setId });
+  if (error) throw error;
+}
+
+/** Una riga = un giocatore, in una partita, per un fondamentale. */
+export interface AndamentoPersonaPartita {
+  athlete_id: string;
+  match_id: string;
+  data: string;
+  avversario: string;
+  fondamentale: string;
+  azioni: number;
+  punti: number;
+  errori: number;
+}
+
+/** Come ha giocato ciascuna persona nelle ultime partite (le atlete vedono solo se stesse: lo applica il database). */
+export async function andamentoPersonePartite(teamId: string, ultime = 5): Promise<AndamentoPersonaPartita[]> {
+  const { data, error } = await supabaseClient.rpc("andamento_persone_partite", { p_team_id: teamId, p_ultime: ultime });
+  if (error) throw error;
+  return (data ?? []) as AndamentoPersonaPartita[];
+}

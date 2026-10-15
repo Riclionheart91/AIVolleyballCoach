@@ -1,6 +1,6 @@
 import { supabaseClient } from "@/src/lib/supabase";
 import type { Athlete, Match, MatchEvent, MatchSet, MatchSetLineup } from "@/src/types/database";
-import type { LiberoInCampo } from "@/src/services/matches";
+import type { LiberoInCampo, MatchTimeout } from "@/src/services/matches";
 
 /**
  * Scout OSPITE: persona esterna alla squadra, invitata per email su una
@@ -33,6 +33,7 @@ export interface StatoPartitaOspite {
   convocati: { athlete_id: string; is_libero: boolean }[];
   formazione: MatchSetLineup[];
   libero: LiberoInCampo | null;
+  timeouts?: MatchTimeout[];
   regole: { puntiPerSet: number; puntiSetDecisivo: number };
 }
 
