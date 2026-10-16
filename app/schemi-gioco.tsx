@@ -4,7 +4,7 @@ import { router, useFocusEffect } from "expo-router";
 import { useAuth } from "@/src/context/AuthContext";
 import { brand } from "@/src/config";
 import { avvisa, confermaAzione } from "@/src/lib/confermaAzione";
-import { FASI_SCHEMA, PUNTI_RUOLO_LINEA, SCHEMA_BASE, VARIANTI_SCHEMA, ZONA_PREDEFINITA, chiaveSchema, faseConZona, indiceSchema, ruoloInPosizione, type Assegnazioni, type FaseSchema, type Punto } from "@/src/lib/schemiGioco";
+import { schemaDiPartenza, FASI_SCHEMA, PUNTI_RUOLO_LINEA, SCHEMA_BASE, VARIANTI_SCHEMA, ZONA_PREDEFINITA, chiaveSchema, faseConZona, indiceSchema, ruoloInPosizione, type Assegnazioni, type FaseSchema, type Punto } from "@/src/lib/schemiGioco";
 import { CampoSchemaEditor } from "@/src/components/CampoPallini";
 import { elencaSchemiGioco, ripristinaSchemaGioco, salvaSchemaGioco } from "@/src/services/schemiGioco";
 
@@ -35,13 +35,13 @@ export default function SchemiGioco() {
   // Ricezione: una rotazione (1-6). Difesa e copertura: un solo schema (per ruolo e linea) per variante.
   const indice = indiceSchema(fase, rotazione, ZONA_PREDEFINITA) ?? rotazione;
   const chiave = chiaveSchema(fase, variante, indice);
-  const corrente: Assegnazioni = bozze[chiave] ?? salvati[chiave] ?? SCHEMA_BASE;
+  const corrente: Assegnazioni = bozze[chiave] ?? salvati[chiave] ?? schemaDiPartenza(fase);
   const numeroBozze = Object.keys(bozze).length;
 
   /** Sposta un pallino (trascinandolo o toccando il punto di arrivo). */
   function sposta(slot: number, punto: Punto) {
     if (!Number.isFinite(punto.x) || !Number.isFinite(punto.y)) return;
-    setBozze((b) => ({ ...b, [chiave]: { ...(b[chiave] ?? salvati[chiave] ?? SCHEMA_BASE), [String(slot)]: punto } }));
+    setBozze((b) => ({ ...b, [chiave]: { ...(b[chiave] ?? salvati[chiave] ?? schemaDiPartenza(fase)), [String(slot)]: punto } }));
   }
 
   async function salva() {
@@ -53,7 +53,7 @@ export default function SchemiGioco() {
         // Rete di sicurezza: un punto non numerico (non dovrebbe succedere) torna alla posizione base invece di bloccare il salvataggio.
         const pulita: Assegnazioni = Object.fromEntries([1, 2, 3, 4, 5, 6].map((n) => {
           const pt = a[String(n)];
-          return [String(n), pt && Number.isFinite(pt.x) && Number.isFinite(pt.y) ? pt : SCHEMA_BASE[String(n)]];
+          return [String(n), pt && Number.isFinite(pt.x) && Number.isFinite(pt.y) ? pt : schemaDiPartenza(f as FaseSchema)[String(n)]];
         }));
         await salvaSchemaGioco(team.id, f as FaseSchema, Number(v), Number(r), pulita);
       }
@@ -81,7 +81,7 @@ export default function SchemiGioco() {
 
   /** Parte dallo schema della variante 1 della stessa rotazione: comodo per creare la variante 2 cambiando poche zone. */
   function copiaDallaVariante1() {
-    const origine = bozze[chiaveSchema(fase, 1, indice)] ?? salvati[chiaveSchema(fase, 1, indice)] ?? SCHEMA_BASE;
+    const origine = bozze[chiaveSchema(fase, 1, indice)] ?? salvati[chiaveSchema(fase, 1, indice)] ?? schemaDiPartenza(fase);
     setBozze((b) => ({ ...b, [chiave]: { ...origine } }));
     setPallinoScelto(null);
   }
@@ -104,12 +104,12 @@ export default function SchemiGioco() {
       <ScrollView style={{ flex: 1 }} scrollEnabled={!trascinando} contentContainerStyle={{ padding: 16, gap: 14 }}>
         <Text style={styles.nota}>
           {modificabile
-            ? "Scegli dove sta ciascuna giocatrice in ricezione, difesa e copertura. Nello scouting le giocatrici sono disegnate come pallini nei punti dello schema, così le tocchi dove stanno davvero. Quello che non imposti resta nelle posizioni di rotazione."
+            ? "Scegli dove sta ciascuna giocatrice in ricezione, difesa e copertura. Nello scouting le giocatrici sono disegnate come pallini nei punti dello schema, così le tocchi dove stanno davvero. Quello che non imposti resta nella disposizione di base."
             : "Gli schemi di gioco della squadra: dove si dispongono le giocatrici in ricezione, difesa e copertura. Sola lettura: li modifica l'allenatore."}
         </Text>
         <Text style={styles.nota}>
           {perZona
-            ? "Ruoli: P/O palleggiatrice e opposto (stesso punto: chi è davanti e chi è dietro), S schiacciatrice, C centrale. Il libero prende il punto della centrale in seconda linea."
+            ? "Ruoli: P/O palleggiatrice e opposto, S schiacciatrice, C centrale. Il libero prende il punto della centrale in seconda linea. Disposizione di base: S in 4 e 6, P/O in 1 e 2, C in 3 e 5."
             : "Ruoli: P palleggiatrice, S1 e S2 schiacciatrici, C1 e C2 centrali, O opposto. Rotazione n = palleggiatrice in posizione n (Rot. 1: P in 1, Rot. 2: P in 2, e così via)."}
         </Text>
 

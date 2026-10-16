@@ -42,6 +42,26 @@ const CENTRO_ZONA: Record<number, Punto> = {
 export const SCHEMA_BASE: Assegnazioni = Object.fromEntries([1, 2, 3, 4, 5, 6].map((s) => [String(s), { ...CENTRO_ZONA[s] }]));
 
 /**
+ * Disposizione di base nelle transizioni (dopo la battuta): ognuna sta nella
+ * sua zona in base al ruolo, qualunque sia la rotazione. Chiavi = punti per
+ * ruolo e linea (vedi PUNTI_RUOLO_LINEA): schiacciatrici in 4 e 6, palleggiatrice
+ * e opposto in 1 e 2, centrali in 3 e 5 (in 5 c'e' il libero quando e' in campo).
+ */
+export const SCHEMA_TRANSIZIONE: Assegnazioni = {
+  "1": { ...CENTRO_ZONA[1] }, // P/O seconda linea
+  "2": { ...CENTRO_ZONA[4] }, // S prima linea
+  "3": { ...CENTRO_ZONA[3] }, // C prima linea
+  "4": { ...CENTRO_ZONA[2] }, // P/O prima linea
+  "5": { ...CENTRO_ZONA[6] }, // S seconda linea
+  "6": { ...CENTRO_ZONA[5] }, // C seconda linea (libero)
+};
+
+/** Schema da cui parte l'editor (e che si usa in partita) quando non ne e' stato salvato uno. */
+export function schemaDiPartenza(fase: FaseSchema): Assegnazioni {
+  return faseConZona(fase) ? SCHEMA_TRANSIZIONE : SCHEMA_BASE;
+}
+
+/**
  * Ruoli nelle sei posizioni, in ordine di posizione a partire dalla
  * palleggiatrice: P, poi S1 (schiacciatrice), C2 (centrale), O (opposto),
  * S2 (schiacciatrice), C1 (centrale). Con la palleggiatrice in posizione 1

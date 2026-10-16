@@ -39,7 +39,7 @@ import { CampoPallini, type Pallino } from "@/src/components/CampoPallini";
 import { useSincronizzazioneLive } from "@/src/hooks/useSincronizzazioneLive";
 import { statoPartitaOspite } from "@/src/services/scoutOspiti";
 import { SelettoreZona } from "@/src/components/ZoneCampo";
-import { FASI_SCHEMA, VARIANTI_SCHEMA, ZONA_PREDEFINITA, chiaveSchema, faseConZona, faseDelloScambio, indiceSchema, puntoDiPosizione, puntoRuoloLinea, rotazioneDaFormazione, type Assegnazioni, type FaseSchema } from "@/src/lib/schemiGioco";
+import { FASI_SCHEMA, VARIANTI_SCHEMA, SCHEMA_TRANSIZIONE, ZONA_PREDEFINITA, chiaveSchema, faseDelloScambio, indiceSchema, puntoDiPosizione, puntoRuoloLinea, rotazioneDaFormazione, type Assegnazioni, type FaseSchema } from "@/src/lib/schemiGioco";
 import { elencaSchemiGioco } from "@/src/services/schemiGioco";
 import { SOGLIA_SERIE_AVVERSARIA, chiHaSegnato, serieAvversariaInCorso } from "@/src/lib/andamentoPunti";
 
@@ -587,14 +587,16 @@ export default function PartitaLive() {
   const faseCambiabile: FaseSchema | null = faseSchema && faseSchema !== "difesa" ? faseSchema : null;
   const varianteDi = (f: FaseSchema) => (f === "difesa" ? 1 : varianti[f]);
   const nomeVariante = faseCambiabile ? VARIANTI_SCHEMA[faseCambiabile][varianteDi(faseCambiabile) - 1] : "";
-  // Difesa e copertura: un solo schema per variante, per ruolo e linea (nessuna scelta da fare durante lo scambio).
-  const zonaSchema = ZONA_PREDEFINITA;
-  const perZona = faseConZona(faseSchema);
-  const indiceFase = faseSchema ? indiceSchema(faseSchema, rotazioneAttuale, zonaSchema) : null;
-  const schemaFase = faseSchema && indiceFase ? schemi[chiaveSchema(faseSchema, varianteDi(faseSchema), indiceFase)] : undefined;
+  // La formazione "di rotazione" vale solo a inizio scambio (mentre si batte, o in ricezione con lo schema di ricezione).
+  // Dopo la prima azione, in ogni transizione, ognuna sta nella zona del suo ruolo (schiacciatrici in 4 e 6, palleggio/opposto
+  // in 1 e 2, centrali in 3 e 5, libero al posto della centrale in seconda linea); se per la fase c'e' uno schema salvato vale quello.
+  const usaRuoli = !inizioScambio && !!rotazioneAttuale;
+  const indiceFase = faseSchema ? indiceSchema(faseSchema, rotazioneAttuale, ZONA_PREDEFINITA) : null;
+  const schemaSalvato = faseSchema && indiceFase ? schemi[chiaveSchema(faseSchema, varianteDi(faseSchema), indiceFase)] : undefined;
+  const schemaFase = usaRuoli ? (schemaSalvato ?? SCHEMA_TRANSIZIONE) : schemaSalvato;
   const nomeFase = faseSchema ? FASI_SCHEMA.find((x) => x.fase === faseSchema)?.etichetta : null;
   const testoFase = faseSchema
-    ? `${nomeFase}${faseCambiabile ? ` · ${nomeVariante}` : ""}${!perZona && rotazioneAttuale ? ` · rot. ${rotazioneAttuale}` : ""}${schemaFase ? "" : " (base)"}${faseCambiabile ? " ⇄" : ""}`
+    ? `${nomeFase}${faseCambiabile ? ` · ${nomeVariante}` : ""}${!usaRuoli && rotazioneAttuale ? ` · rot. ${rotazioneAttuale}` : ""}${schemaFase ? "" : " (base)"}${faseCambiabile ? " ⇄" : ""}`
     : null;
   const etichettaFase = testoFase ? (
     faseCambiabile ? (
@@ -610,7 +612,7 @@ export default function PartitaLive() {
   const pallini: Pallino[] = formazione.filter((f) => (f.posizione ?? 0) > 0).map((f) => {
     const a = nomeAtleta(f.athlete_id);
     // In difesa e copertura il punto dipende dal ruolo e dalla linea; in ricezione dalla posizione di rotazione.
-    const slotSchema = perZona && rotazioneAttuale ? puntoRuoloLinea(f.posizione ?? 0, rotazioneAttuale) : f.posizione ?? 0;
+    const slotSchema = usaRuoli && rotazioneAttuale ? puntoRuoloLinea(f.posizione ?? 0, rotazioneAttuale) : f.posizione ?? 0;
     const pt = puntoDiPosizione(schemaFase, slotSchema);
     return {
       chiave: f.athlete_id,
