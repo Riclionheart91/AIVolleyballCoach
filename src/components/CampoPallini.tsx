@@ -134,9 +134,24 @@ export function CampoSchemaEditor({
       style={styles.campoEditor}
       onLayout={onLayout}
       onPress={(e) => {
-        if (!modificabile || selezionato === null || lato.w === 0) return;
-        const { locationX, locationY } = e.nativeEvent;
-        onSposta(selezionato, { x: limita(locationX / lato.w), y: limita(locationY / lato.h) });
+        if (!modificabile || selezionato === null || lato.w === 0 || lato.h === 0) return;
+        // Da browser (anche su telefono) si calcola il punto dal rettangolo del campo: locationX/Y
+        // puo' mancare e darebbe un valore non numerico che il database rifiuta.
+        const ne = e.nativeEvent as any;
+        const el = e.currentTarget as any;
+        let px: number = ne.locationX;
+        let py: number = ne.locationY;
+        let w = lato.w;
+        let h = lato.h;
+        if (el && typeof el.getBoundingClientRect === "function" && Number.isFinite(ne.clientX) && Number.isFinite(ne.clientY)) {
+          const r = el.getBoundingClientRect();
+          px = ne.clientX - r.left;
+          py = ne.clientY - r.top;
+          w = r.width;
+          h = r.height;
+        }
+        if (!Number.isFinite(px) || !Number.isFinite(py) || !(w > 0) || !(h > 0)) return;
+        onSposta(selezionato, { x: limita(px / w), y: limita(py / h) });
       }}
     >
       <Sfondo />

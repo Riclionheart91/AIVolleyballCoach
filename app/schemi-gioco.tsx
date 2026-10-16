@@ -37,6 +37,7 @@ export default function SchemiGioco() {
 
   /** Sposta un pallino (trascinandolo o toccando il punto di arrivo). */
   function sposta(slot: number, punto: Punto) {
+    if (!Number.isFinite(punto.x) || !Number.isFinite(punto.y)) return;
     setBozze((b) => ({ ...b, [chiave]: { ...(b[chiave] ?? salvati[chiave] ?? SCHEMA_BASE), [String(slot)]: punto } }));
   }
 
@@ -46,13 +47,18 @@ export default function SchemiGioco() {
     try {
       for (const [k, a] of Object.entries(bozze)) {
         const [f, v, r] = k.split(":");
-        await salvaSchemaGioco(team.id, f as FaseSchema, Number(v), Number(r), a);
+        // Rete di sicurezza: un punto non numerico (non dovrebbe succedere) torna alla posizione base invece di bloccare il salvataggio.
+        const pulita: Assegnazioni = Object.fromEntries([1, 2, 3, 4, 5, 6].map((n) => {
+          const pt = a[String(n)];
+          return [String(n), pt && Number.isFinite(pt.x) && Number.isFinite(pt.y) ? pt : SCHEMA_BASE[String(n)]];
+        }));
+        await salvaSchemaGioco(team.id, f as FaseSchema, Number(v), Number(r), pulita);
       }
       const n = Object.keys(bozze).length;
       await carica();
       setMessaggio(n === 1 ? "Schema salvato ✓" : `${n} schemi salvati ✓`);
       setTimeout(() => setMessaggio(null), 4000);
-    } catch (e) { avvisa("Salvataggio non riuscito", `${(e as Error).message}\n\nSe l'errore parla di numeri o di zone, l'aggiornamento del database per gli schemi a pallini non è ancora stato applicato: riprova più tardi.`); }
+    } catch (e) { avvisa("Salvataggio non riuscito", (e as Error).message); }
     finally { setInCorso(false); }
   }
 
