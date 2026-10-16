@@ -26,25 +26,46 @@ export const VARIANTI_SCHEMA: Record<FaseSchema, [string, string]> = {
 
 export type VarianteSchema = 1 | 2;
 
-/** Posizione di rotazione -> zona del campo. */
-export type Assegnazioni = Record<string, number>;
+/** Punto del campo in frazioni (0-1): x da sinistra a destra, y dalla rete (0) al fondo (1). */
+export interface Punto { x: number; y: number }
 
-export const SCHEMA_BASE: Assegnazioni = { "1": 1, "2": 2, "3": 3, "4": 4, "5": 5, "6": 6 };
+/** Posizione di rotazione (1-6) -> punto del campo in cui sta la giocatrice. */
+export type Assegnazioni = Record<string, Punto>;
+
+/** Centro di ciascuna zona del campo: rete in alto, fila avanti 4-3-2, fila dietro 5-6-1. */
+const CENTRO_ZONA: Record<number, Punto> = {
+  4: { x: 0.17, y: 0.27 }, 3: { x: 0.5, y: 0.27 }, 2: { x: 0.83, y: 0.27 },
+  5: { x: 0.17, y: 0.75 }, 6: { x: 0.5, y: 0.75 }, 1: { x: 0.83, y: 0.75 },
+};
+
+/** Senza schema le giocatrici stanno nelle posizioni di rotazione. */
+export const SCHEMA_BASE: Assegnazioni = Object.fromEntries([1, 2, 3, 4, 5, 6].map((s) => [String(s), { ...CENTRO_ZONA[s] }]));
 
 export function chiaveSchema(fase: FaseSchema, variante: number, rotazione: number): string {
   return `${fase}:${variante}:${rotazione}`;
 }
 
-/** Controlla che l'oggetto sia una permutazione completa di 1-6; altrimenti si usa lo schema base. */
-export function assegnazioniValide(a: unknown): a is Assegnazioni {
-  if (!a || typeof a !== "object") return false;
-  const zone = new Set<number>();
+function puntoValido(v: unknown): v is Punto {
+  const p = v as Punto | null;
+  return !!p && typeof p === "object" && Number.isFinite(p.x) && Number.isFinite(p.y) && p.x >= 0 && p.x <= 1 && p.y >= 0 && p.y <= 1;
+}
+
+/**
+ * Legge uno schema salvato. Accetta il formato con i punti del campo e
+ * anche quello vecchio (posizione -> numero di zona), convertito nel
+ * centro della zona. Se non e' leggibile ritorna null (si usa lo schema base).
+ */
+export function normalizzaAssegnazioni(raw: unknown): Assegnazioni | null {
+  if (!raw || typeof raw !== "object") return null;
+  const r = raw as Record<string, unknown>;
+  const risultato: Assegnazioni = {};
   for (let s = 1; s <= 6; s++) {
-    const z = Number((a as Record<string, unknown>)[String(s)]);
-    if (!Number.isInteger(z) || z < 1 || z > 6) return false;
-    zone.add(z);
+    const v = r[String(s)];
+    if (puntoValido(v)) risultato[String(s)] = { x: v.x, y: v.y };
+    else if (Number.isInteger(Number(v)) && Number(v) >= 1 && Number(v) <= 6 && typeof v !== "object") risultato[String(s)] = { ...CENTRO_ZONA[Number(v)] };
+    else return null;
   }
-  return zone.size === 6;
+  return risultato;
 }
 
 /**
@@ -77,8 +98,7 @@ export function faseDelloScambio(
   return null;
 }
 
-export function zonaDiPosizione(schema: Assegnazioni | undefined, posizione: number): number {
-  if (!schema) return posizione;
-  const z = Number(schema[String(posizione)]);
-  return Number.isInteger(z) && z >= 1 && z <= 6 ? z : posizione;
+/** Dove disegnare la giocatrice che in rotazione sta nella posizione indicata. */
+export function puntoDiPosizione(schema: Assegnazioni | undefined, posizione: number): Punto {
+  return schema?.[String(posizione)] ?? SCHEMA_BASE[String(posizione)] ?? { x: 0.5, y: 0.5 };
 }

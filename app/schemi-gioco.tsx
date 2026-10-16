@@ -4,11 +4,9 @@ import { router, useFocusEffect } from "expo-router";
 import { useAuth } from "@/src/context/AuthContext";
 import { brand } from "@/src/config";
 import { avvisa } from "@/src/lib/confermaAzione";
-import { FASI_SCHEMA, SCHEMA_BASE, VARIANTI_SCHEMA, chiaveSchema, type Assegnazioni, type FaseSchema } from "@/src/lib/schemiGioco";
+import { FASI_SCHEMA, SCHEMA_BASE, VARIANTI_SCHEMA, chiaveSchema, type Assegnazioni, type FaseSchema, type Punto } from "@/src/lib/schemiGioco";
+import { CampoSchemaEditor } from "@/src/components/CampoPallini";
 import { elencaSchemiGioco, ripristinaSchemaGioco, salvaSchemaGioco } from "@/src/services/schemiGioco";
-
-// Disposizione del campo: rete in alto, fila avanti 4-3-2, fila dietro 5-6-1.
-const GRIGLIA: number[][] = [[4, 3, 2], [5, 6, 1]];
 
 /** Schermata per definire dove stanno le giocatrici in ricezione, difesa e copertura, rotazione per rotazione. */
 export default function SchemiGioco() {
@@ -18,7 +16,8 @@ export default function SchemiGioco() {
   const [fase, setFase] = useState<FaseSchema>("ricezione");
   const [variante, setVariante] = useState(1);
   const [rotazione, setRotazione] = useState(1);
-  const [zonaScelta, setZonaScelta] = useState<number | null>(null);
+  const [pallinoScelto, setPallinoScelto] = useState<number | null>(null);
+  const [trascinando, setTrascinando] = useState(false);
   const [inCorso, setInCorso] = useState(false);
 
   const carica = useCallback(async () => {
@@ -31,21 +30,11 @@ export default function SchemiGioco() {
 
   const chiave = chiaveSchema(fase, variante, rotazione);
   const corrente: Assegnazioni = bozze[chiave] ?? salvati[chiave] ?? SCHEMA_BASE;
-  const posizioneInZona = (zona: number): number => {
-    for (let p = 1; p <= 6; p++) if (Number(corrente[String(p)]) === zona) return p;
-    return zona;
-  };
   const numeroBozze = Object.keys(bozze).length;
 
-  /** Primo tocco sceglie una zona, il secondo la scambia con la prima. */
-  function tocca(zona: number) {
-    if (zonaScelta === null) { setZonaScelta(zona); return; }
-    if (zonaScelta === zona) { setZonaScelta(null); return; }
-    const pA = posizioneInZona(zonaScelta);
-    const pB = posizioneInZona(zona);
-    const nuovo: Assegnazioni = { ...corrente, [String(pA)]: zona, [String(pB)]: zonaScelta };
-    setBozze((b) => ({ ...b, [chiave]: nuovo }));
-    setZonaScelta(null);
+  /** Sposta un pallino (trascinandolo o toccando il punto di arrivo). */
+  function sposta(slot: number, punto: Punto) {
+    setBozze((b) => ({ ...b, [chiave]: { ...(b[chiave] ?? salvati[chiave] ?? SCHEMA_BASE), [String(slot)]: punto } }));
   }
 
   async function salva() {
@@ -79,7 +68,7 @@ export default function SchemiGioco() {
   function copiaDallaVariante1() {
     const origine = bozze[chiaveSchema(fase, 1, rotazione)] ?? salvati[chiaveSchema(fase, 1, rotazione)] ?? SCHEMA_BASE;
     setBozze((b) => ({ ...b, [chiave]: { ...origine } }));
-    setZonaScelta(null);
+    setPallinoScelto(null);
   }
 
   return (
@@ -89,14 +78,14 @@ export default function SchemiGioco() {
         <Text style={styles.titolo}>Schemi di gioco</Text>
       </View>
 
-      <ScrollView contentContainerStyle={{ padding: 16, gap: 14 }}>
+      <ScrollView scrollEnabled={!trascinando} contentContainerStyle={{ padding: 16, gap: 14 }}>
         <Text style={styles.nota}>
           Per ogni fase e rotazione scegli dove sta ciascuna giocatrice. Nello scouting il campo mostra le giocatrici nelle zone dello schema, così le tocchi dove stanno davvero. La rotazione è la posizione della palleggiatrice (es. "Rotazione 1" = palleggiatrice in posizione 1). Quello che non imposti resta com'è, nelle posizioni di rotazione.
         </Text>
 
         <View style={styles.selettoreRiga}>
           {FASI_SCHEMA.map((f) => (
-            <Pressable key={f.fase} onPress={() => { setFase(f.fase); setZonaScelta(null); }} style={[styles.chip, fase === f.fase && styles.chipAttivo]}>
+            <Pressable key={f.fase} onPress={() => { setFase(f.fase); setPallinoScelto(null); }} style={[styles.chip, fase === f.fase && styles.chipAttivo]}>
               <Text style={[styles.chipTesto, fase === f.fase && styles.chipTestoAttivo]}>{f.etichetta}</Text>
             </Pressable>
           ))}
@@ -105,7 +94,7 @@ export default function SchemiGioco() {
 
         <View style={styles.selettoreRiga}>
           {[1, 2].map((v) => (
-            <Pressable key={v} onPress={() => { setVariante(v); setZonaScelta(null); }} style={[styles.chip, variante === v && styles.chipAttivo]}>
+            <Pressable key={v} onPress={() => { setVariante(v); setPallinoScelto(null); }} style={[styles.chip, variante === v && styles.chipAttivo]}>
               <Text style={[styles.chipTesto, variante === v && styles.chipTestoAttivo]}>{VARIANTI_SCHEMA[fase][v - 1]}</Text>
             </Pressable>
           ))}
@@ -114,34 +103,22 @@ export default function SchemiGioco() {
 
         <View style={styles.selettoreRiga}>
           {[1, 2, 3, 4, 5, 6].map((r) => (
-            <Pressable key={r} onPress={() => { setRotazione(r); setZonaScelta(null); }} style={[styles.chip, rotazione === r && styles.chipAttivo]}>
+            <Pressable key={r} onPress={() => { setRotazione(r); setPallinoScelto(null); }} style={[styles.chip, rotazione === r && styles.chipAttivo]}>
               <Text style={[styles.chipTesto, rotazione === r && styles.chipTestoAttivo]}>Rot. {r}{configurata(fase, variante, r) ? " ✓" : ""}</Text>
             </Pressable>
           ))}
         </View>
 
-        <View style={styles.campo}>
-          <Text style={styles.rete}>RETE</Text>
-          {GRIGLIA.map((riga, i) => (
-            <View key={i} style={styles.rigaCampo}>
-              {riga.map((zona) => {
-                const pos = posizioneInZona(zona);
-                const scelta = zonaScelta === zona;
-                return (
-                  <Pressable key={zona} onPress={() => tocca(zona)} style={[styles.cella, scelta && styles.cellaScelta]}>
-                    <Text style={styles.cellaZona}>zona {zona}</Text>
-                    <Text style={styles.cellaPos}>pos. {pos}</Text>
-                    {pos === rotazione && <Text style={styles.cellaPalleggio}>Palleggio</Text>}
-                  </Pressable>
-                );
-              })}
-            </View>
-          ))}
-        </View>
+        <CampoSchemaEditor
+          posizioni={corrente}
+          slotPalleggio={rotazione}
+          selezionato={pallinoScelto}
+          onSeleziona={setPallinoScelto}
+          onSposta={sposta}
+          onTrascina={setTrascinando}
+        />
         <Text style={styles.nota}>
-          {zonaScelta === null
-            ? "Tocca una zona e poi un'altra per scambiare chi ci sta."
-            : `Zona ${zonaScelta} scelta: tocca la zona con cui scambiarla.`}
+          Trascina i pallini dove stanno in questa fase, oppure tocca un pallino e poi il punto del campo. Il numero è la posizione di rotazione; "P" è la palleggiatrice.
         </Text>
 
         <View style={styles.selettoreRiga}>
@@ -173,14 +150,6 @@ const styles = StyleSheet.create({
   chipAttivo: { backgroundColor: brand.colors.brand },
   chipTesto: { color: brand.colors.onSurfaceSecondary, fontSize: 13 },
   chipTestoAttivo: { color: "#000", fontWeight: "700" },
-  campo: { backgroundColor: "#1a3a2a", borderRadius: 12, padding: 8, gap: 6, borderWidth: 2, borderColor: brand.colors.brand },
-  rete: { color: "#fff", fontSize: 10, fontWeight: "700", letterSpacing: 2, textAlign: "center", borderBottomWidth: 3, borderBottomColor: "#fff", paddingBottom: 2 },
-  rigaCampo: { flexDirection: "row", gap: 6 },
-  cella: { flex: 1, minHeight: 84, borderRadius: 8, backgroundColor: "rgba(255,255,255,0.08)", borderWidth: 1, borderColor: "rgba(255,255,255,0.25)", alignItems: "center", justifyContent: "center", gap: 2 },
-  cellaScelta: { borderColor: brand.colors.brand, borderWidth: 3, backgroundColor: "rgba(255,255,255,0.18)" },
-  cellaZona: { color: "rgba(255,255,255,0.6)", fontSize: 10 },
-  cellaPos: { color: "#fff", fontSize: 18, fontWeight: "800" },
-  cellaPalleggio: { color: brand.colors.brand, fontSize: 11, fontWeight: "700" },
   bottone: { backgroundColor: brand.colors.brand, paddingVertical: 12, paddingHorizontal: 20, borderRadius: 8, alignItems: "center" },
   bottoneSpento: { opacity: 0.4 },
   bottoneTesto: { color: "#000", fontWeight: "700" },

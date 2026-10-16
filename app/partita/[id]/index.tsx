@@ -35,11 +35,11 @@ import { brand, skillsScouting, skillsScoutingEssenziali } from "@/src/config";
 import type { Athlete, Esito, Match, MatchEvent, MatchSet, MatchSetLineup, QualitaRicezione, Skill } from "@/src/types/database";
 import { supabaseClient } from "@/src/lib/supabase";
 import { confermaAzione, avvisa } from "@/src/lib/confermaAzione";
-import { Campo9x9, type OccupanteCampo } from "@/src/components/Campo9x9";
+import { CampoPallini, type Pallino } from "@/src/components/CampoPallini";
 import { useSincronizzazioneLive } from "@/src/hooks/useSincronizzazioneLive";
 import { statoPartitaOspite } from "@/src/services/scoutOspiti";
 import { SelettoreZona } from "@/src/components/ZoneCampo";
-import { FASI_SCHEMA, VARIANTI_SCHEMA, chiaveSchema, faseDelloScambio, rotazioneDaFormazione, zonaDiPosizione, type Assegnazioni, type FaseSchema } from "@/src/lib/schemiGioco";
+import { FASI_SCHEMA, VARIANTI_SCHEMA, chiaveSchema, faseDelloScambio, rotazioneDaFormazione, puntoDiPosizione, type Assegnazioni, type FaseSchema } from "@/src/lib/schemiGioco";
 import { elencaSchemiGioco } from "@/src/services/schemiGioco";
 import { SOGLIA_SERIE_AVVERSARIA, chiHaSegnato, serieAvversariaInCorso } from "@/src/lib/andamentoPunti";
 
@@ -588,7 +588,6 @@ export default function PartitaLive() {
   const varianteFase = faseCambiabile ? varianti[faseCambiabile] : 1;
   const nomeVariante = faseCambiabile ? VARIANTI_SCHEMA[faseCambiabile][varianteFase - 1] : "";
   const schemaFase = faseSchema && rotazioneAttuale ? schemi[chiaveSchema(faseSchema, varianti[faseSchema], rotazioneAttuale)] : undefined;
-  const zonaDi = (posizione: number) => zonaDiPosizione(schemaFase, posizione);
   const testoFase = faseSchema
     ? `${FASI_SCHEMA.find((x) => x.fase === faseSchema)?.etichetta} · ${nomeVariante}${rotazioneAttuale ? ` · rot. ${rotazioneAttuale}` : ""}${schemaFase ? "" : " (base)"} ⇄`
     : faseCambiabile ? `Poi difesa: ${nomeVariante} ⇄` : null;
@@ -598,16 +597,20 @@ export default function PartitaLive() {
     </Pressable>
   ) : null;
 
-  const occupanti: OccupanteCampo[] = formazione.map((f) => {
+  // Un pallino per giocatrice, nel punto dello schema scelto per questa fase.
+  const pallini: Pallino[] = formazione.filter((f) => (f.posizione ?? 0) > 0).map((f) => {
     const a = nomeAtleta(f.athlete_id);
+    const pt = puntoDiPosizione(schemaFase, f.posizione ?? 0);
     return {
-      posizione: zonaDi(f.posizione ?? 0),
-      cognome: a?.cognome ?? "?",
-      numeroMaglia: a?.numero_maglia ?? null,
-      ruolo: a?.ruolo_campo ?? null,
+      chiave: f.athlete_id,
+      x: pt.x,
+      y: pt.y,
+      etichetta: a?.numero_maglia != null ? String(a.numero_maglia) : "–",
+      sotto: a?.cognome ?? "?",
       attivo: atletaEff === f.athlete_id,
+      accento: a?.ruolo_campo === "Libero",
     };
-  }).filter((o) => o.posizione > 0);
+  });
 
   function ModaleSituazione() {
     const segnalazioni: SegnalazioneSituazione[] = analizzaSituazione(eventi, (aid) => etichettaAtleta(aid));
@@ -729,10 +732,10 @@ export default function PartitaLive() {
           </Pressable>
         )}
         <View style={{ width: latoCampo, height: latoCampo }}>
-          <Campo9x9
-            occupanti={occupanti}
-            onTapPosizione={(pos) => {
-              const riga = formazione.find((f) => f.posizione && zonaDi(f.posizione) === pos);
+          <CampoPallini
+            pallini={pallini}
+            onTapPallino={(athleteId) => {
+              const riga = formazione.find((f) => f.athlete_id === athleteId);
               if (!riga) return;
               // Secondo tocco sulla stessa persona: apre il cambio.
               // Evita un pulsante dedicato e ricalca il gesto naturale.

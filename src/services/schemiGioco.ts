@@ -1,5 +1,5 @@
 import { supabaseClient } from "@/src/lib/supabase";
-import { assegnazioniValide, chiaveSchema, type Assegnazioni, type FaseSchema } from "@/src/lib/schemiGioco";
+import { normalizzaAssegnazioni, chiaveSchema, type Assegnazioni, type FaseSchema } from "@/src/lib/schemiGioco";
 
 /** Tutti gli schemi salvati dalla squadra, con chiave "fase:rotazione". Quelli non salvati usano le posizioni di rotazione. */
 export async function elencaSchemiGioco(teamId: string): Promise<Record<string, Assegnazioni>> {
@@ -10,7 +10,8 @@ export async function elencaSchemiGioco(teamId: string): Promise<Record<string, 
   if (error) throw error;
   const risultato: Record<string, Assegnazioni> = {};
   for (const r of (data ?? []) as { fase: FaseSchema; variante: number; rotazione: number; assegnazioni: unknown }[]) {
-    if (assegnazioniValide(r.assegnazioni)) risultato[chiaveSchema(r.fase, r.variante, r.rotazione)] = r.assegnazioni;
+    const a = normalizzaAssegnazioni(r.assegnazioni);
+    if (a) risultato[chiaveSchema(r.fase, r.variante, r.rotazione)] = a;
   }
   return risultato;
 }
