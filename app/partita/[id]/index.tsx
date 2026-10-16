@@ -39,7 +39,7 @@ import { CampoPallini, type Pallino } from "@/src/components/CampoPallini";
 import { useSincronizzazioneLive } from "@/src/hooks/useSincronizzazioneLive";
 import { statoPartitaOspite } from "@/src/services/scoutOspiti";
 import { SelettoreZona } from "@/src/components/ZoneCampo";
-import { FASI_SCHEMA, VARIANTI_SCHEMA, chiaveSchema, faseDelloScambio, rotazioneDaFormazione, puntoDiPosizione, type Assegnazioni, type FaseSchema } from "@/src/lib/schemiGioco";
+import { FASI_SCHEMA, VARIANTI_SCHEMA, ZONA_PREDEFINITA, ZONE_ATTACCO, chiaveSchema, faseConZona, faseDelloScambio, indiceSchema, puntoDiPosizione, puntoRuoloLinea, rotazioneDaFormazione, zonaDaPosizione, type Assegnazioni, type FaseSchema } from "@/src/lib/schemiGioco";
 import { elencaSchemiGioco } from "@/src/services/schemiGioco";
 import { SOGLIA_SERIE_AVVERSARIA, chiHaSegnato, serieAvversariaInCorso } from "@/src/lib/andamentoPunti";
 
@@ -152,6 +152,8 @@ export default function PartitaLive() {
   // Modalita' facoltativa: dopo l'esito di battuta/attacco si indica dove e' caduta la palla (zone 1-6).
   const [zoneAttive, setZoneAttive] = useState<boolean>(() => leggiZoneAttive());
   const [varianti, setVarianti] = useState<Record<FaseSchema, number>>(() => leggiVarianti());
+  // Zona d'attacco scelta a mano per lo scambio in corso (vale finche' non si registra un'altra azione).
+  const [zonaManuale, setZonaManuale] = useState<{ n: number; zona: number } | null>(null);
   const [zonaInAttesa, setZonaInAttesa] = useState<{ skill: Skill; esito: Esito; athleteId: string } | null>(null);
 
   // Adatta la disposizione alla forma dello schermo: in orizzontale il
@@ -587,9 +589,19 @@ export default function PartitaLive() {
   const faseCambiabile: FaseSchema | null = faseSchema ?? (inizioScambio && noiAlServizio ? "difesa" : null);
   const varianteFase = faseCambiabile ? varianti[faseCambiabile] : 1;
   const nomeVariante = faseCambiabile ? VARIANTI_SCHEMA[faseCambiabile][varianteFase - 1] : "";
-  const schemaFase = faseSchema && rotazioneAttuale ? schemi[chiaveSchema(faseSchema, varianti[faseSchema], rotazioneAttuale)] : undefined;
+  // Difesa e copertura: schema per zona d'attacco (dell'avversario in difesa, nostra in copertura) e per ruolo.
+  // Zona: scelta a mano per questo scambio; in copertura altrimenti quella di chi ha attaccato; poi il centro.
+  const nAzioniSet = eventi.filter((e) => e.set_id === setCorrente.id).length;
+  const zonaScelta = zonaManuale && zonaManuale.n === nAzioniSet ? zonaManuale.zona : null;
+  const zonaAttaccante = faseSchema === "copertura" && ultimaAzioneScambio?.athlete_id
+    ? formazione.find((f) => f.athlete_id === ultimaAzioneScambio!.athlete_id)?.posizione ?? null
+    : null;
+  const zonaSchema = zonaScelta ?? (zonaAttaccante ? zonaDaPosizione(zonaAttaccante) : ZONA_PREDEFINITA);
+  const perZona = faseConZona(faseSchema);
+  const indiceFase = faseSchema ? indiceSchema(faseSchema, rotazioneAttuale, zonaSchema) : null;
+  const schemaFase = faseSchema && indiceFase ? schemi[chiaveSchema(faseSchema, varianti[faseSchema], indiceFase)] : undefined;
   const testoFase = faseSchema
-    ? `${FASI_SCHEMA.find((x) => x.fase === faseSchema)?.etichetta} · ${nomeVariante}${rotazioneAttuale ? ` · rot. ${rotazioneAttuale}` : ""}${schemaFase ? "" : " (base)"} ⇄`
+    ? `${FASI_SCHEMA.find((x) => x.fase === faseSchema)?.etichetta} · ${nomeVariante}${perZona ? ` · zona ${zonaSchema}` : rotazioneAttuale ? ` · rot. ${rotazioneAttuale}` : ""}${schemaFase ? "" : " (base)"} ⇄`
     : faseCambiabile ? `Poi difesa: ${nomeVariante} ⇄` : null;
   const etichettaFase = faseCambiabile && testoFase ? (
     <Pressable onPress={() => alternaVariante(faseCambiabile)} style={styles.tastoFase}>
@@ -597,10 +609,24 @@ export default function PartitaLive() {
     </Pressable>
   ) : null;
 
+  // Tasti della zona d'attacco (solo in difesa e in copertura).
+  const selettoreZonaJsx = perZona && !modoOspite ? (
+    <View style={styles.rigaZoneSchema}>
+      <Text style={styles.etichettaZoneSchema}>{faseSchema === "difesa" ? "Att. loro" : "Att. noi"}</Text>
+      {ZONE_ATTACCO.map((z) => (
+        <Pressable key={z} onPress={() => setZonaManuale({ n: nAzioniSet, zona: z })} style={[styles.tastoZonaSchema, zonaSchema === z && styles.tastoZonaSchemaAttivo]}>
+          <Text style={[styles.testoZonaSchema, zonaSchema === z && styles.testoZonaSchemaAttivo]}>{z}</Text>
+        </Pressable>
+      ))}
+    </View>
+  ) : null;
+
   // Un pallino per giocatrice, nel punto dello schema scelto per questa fase.
   const pallini: Pallino[] = formazione.filter((f) => (f.posizione ?? 0) > 0).map((f) => {
     const a = nomeAtleta(f.athlete_id);
-    const pt = puntoDiPosizione(schemaFase, f.posizione ?? 0);
+    // In difesa e copertura il punto dipende dal ruolo e dalla linea; in ricezione dalla posizione di rotazione.
+    const slotSchema = perZona && rotazioneAttuale ? puntoRuoloLinea(f.posizione ?? 0, rotazioneAttuale) : f.posizione ?? 0;
+    const pt = puntoDiPosizione(schemaFase, slotSchema);
     return {
       chiave: f.athlete_id,
       x: pt.x,
@@ -752,6 +778,7 @@ export default function PartitaLive() {
         </View>
         {!orizzontale && <View style={{ flex: 1 }}>{tabelloneJsx}</View>}
         </View>
+        {selettoreZonaJsx}
         {orizzontale && etichettaFase}
         {orizzontale && (
           <Text style={styles.nota} numberOfLines={1}>
@@ -1180,6 +1207,12 @@ const styles = StyleSheet.create({
 
   rigaToggle: { flexDirection: "row", alignItems: "center", gap: 4 },
   nota: { color: brand.colors.muted, fontSize: 11 },
+  rigaZoneSchema: { flexDirection: "row", alignItems: "center", gap: 4, justifyContent: "center", paddingTop: 2 },
+  etichettaZoneSchema: { color: brand.colors.muted, fontSize: 10, fontWeight: "700" },
+  tastoZonaSchema: { minWidth: 30, height: 28, borderRadius: 14, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(255,255,255,0.08)" },
+  tastoZonaSchemaAttivo: { backgroundColor: brand.colors.brand },
+  testoZonaSchema: { color: brand.colors.onSurfaceSecondary, fontSize: 13, fontWeight: "700" },
+  testoZonaSchemaAttivo: { color: "#000" },
   tastoFase: { paddingVertical: 4, paddingHorizontal: 4, borderRadius: 6, backgroundColor: "rgba(255,255,255,0.06)", minHeight: 28, justifyContent: "center" },
   etichettaFase: { color: brand.colors.brandSecondary, fontSize: 11, fontWeight: "700", textAlign: "center" },
   etichettaLog: { color: brand.colors.muted, fontSize: 10, textTransform: "uppercase", marginTop: 4 },

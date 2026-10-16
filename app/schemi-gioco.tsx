@@ -4,7 +4,7 @@ import { router, useFocusEffect } from "expo-router";
 import { useAuth } from "@/src/context/AuthContext";
 import { brand } from "@/src/config";
 import { avvisa, confermaAzione } from "@/src/lib/confermaAzione";
-import { FASI_SCHEMA, SCHEMA_BASE, VARIANTI_SCHEMA, chiaveSchema, ruoloInPosizione, type Assegnazioni, type FaseSchema, type Punto } from "@/src/lib/schemiGioco";
+import { FASI_SCHEMA, PUNTI_RUOLO_LINEA, SCHEMA_BASE, VARIANTI_SCHEMA, ZONA_PREDEFINITA, ZONE_ATTACCO, chiaveSchema, faseConZona, indiceSchema, ruoloInPosizione, type Assegnazioni, type FaseSchema, type Punto } from "@/src/lib/schemiGioco";
 import { CampoSchemaEditor } from "@/src/components/CampoPallini";
 import { elencaSchemiGioco, ripristinaSchemaGioco, salvaSchemaGioco } from "@/src/services/schemiGioco";
 
@@ -18,6 +18,7 @@ export default function SchemiGioco() {
   const [fase, setFase] = useState<FaseSchema>("ricezione");
   const [variante, setVariante] = useState(1);
   const [rotazione, setRotazione] = useState(1);
+  const [zona, setZona] = useState<number>(ZONA_PREDEFINITA);
   const [pallinoScelto, setPallinoScelto] = useState<number | null>(null);
   const [trascinando, setTrascinando] = useState(false);
   const [inCorso, setInCorso] = useState(false);
@@ -31,7 +32,10 @@ export default function SchemiGioco() {
 
   useFocusEffect(useCallback(() => { carica(); }, [carica]));
 
-  const chiave = chiaveSchema(fase, variante, rotazione);
+  const perZona = faseConZona(fase);
+  // Ricezione: una rotazione (1-6). Difesa e copertura: la zona da cui si attacca.
+  const indice = indiceSchema(fase, rotazione, zona) ?? rotazione;
+  const chiave = chiaveSchema(fase, variante, indice);
   const corrente: Assegnazioni = bozze[chiave] ?? salvati[chiave] ?? SCHEMA_BASE;
   const numeroBozze = Object.keys(bozze).length;
 
@@ -66,7 +70,7 @@ export default function SchemiGioco() {
     if (!team) return;
     setInCorso(true);
     try {
-      if (salvati[chiave]) await ripristinaSchemaGioco(team.id, fase, variante, rotazione);
+      if (salvati[chiave]) await ripristinaSchemaGioco(team.id, fase, variante, indice);
       setBozze((b) => { const c = { ...b }; delete c[chiave]; return c; });
       await carica();
     } catch (e) { avvisa("Errore", (e as Error).message); }
@@ -74,11 +78,11 @@ export default function SchemiGioco() {
   }
 
   const infoFase = FASI_SCHEMA.find((f) => f.fase === fase)!;
-  const configurata = (f: FaseSchema, v: number, r: number) => !!(salvati[chiaveSchema(f, v, r)] || bozze[chiaveSchema(f, v, r)]);
+  const configurata = (f: FaseSchema, v: number, n: number) => !!(salvati[chiaveSchema(f, v, n)] || bozze[chiaveSchema(f, v, n)]);
 
   /** Parte dallo schema della variante 1 della stessa rotazione: comodo per creare la variante 2 cambiando poche zone. */
   function copiaDallaVariante1() {
-    const origine = bozze[chiaveSchema(fase, 1, rotazione)] ?? salvati[chiaveSchema(fase, 1, rotazione)] ?? SCHEMA_BASE;
+    const origine = bozze[chiaveSchema(fase, 1, indice)] ?? salvati[chiaveSchema(fase, 1, indice)] ?? SCHEMA_BASE;
     setBozze((b) => ({ ...b, [chiave]: { ...origine } }));
     setPallinoScelto(null);
   }
@@ -101,11 +105,13 @@ export default function SchemiGioco() {
       <ScrollView style={{ flex: 1 }} scrollEnabled={!trascinando} contentContainerStyle={{ padding: 16, gap: 14 }}>
         <Text style={styles.nota}>
           {modificabile
-            ? "Per ogni fase e rotazione scegli dove sta ciascuna giocatrice. Nello scouting le giocatrici sono disegnate come pallini nei punti dello schema, così le tocchi dove stanno davvero. Quello che non imposti resta nelle posizioni di rotazione."
-            : "Gli schemi di gioco della squadra: dove si dispongono le giocatrici in ricezione, difesa e copertura, rotazione per rotazione. Sola lettura: li modifica l'allenatore."}
+            ? "Scegli dove sta ciascuna giocatrice in ricezione, difesa e copertura. Nello scouting le giocatrici sono disegnate come pallini nei punti dello schema, così le tocchi dove stanno davvero. Quello che non imposti resta nelle posizioni di rotazione."
+            : "Gli schemi di gioco della squadra: dove si dispongono le giocatrici in ricezione, difesa e copertura. Sola lettura: li modifica l'allenatore."}
         </Text>
         <Text style={styles.nota}>
-          Ruoli: P palleggiatrice, S1 e S2 schiacciatrici, C1 e C2 centrali, O opposto. Rotazione n = palleggiatrice in posizione n (Rot. 1: P in 1, Rot. 2: P in 2, e così via).
+          {perZona
+            ? "Ruoli: P/O palleggiatrice e opposto (stesso punto: chi è davanti e chi è dietro), S schiacciatrice, C centrale. Il libero prende il punto della centrale in seconda linea. Lo schema vale per tutte le rotazioni."
+            : "Ruoli: P palleggiatrice, S1 e S2 schiacciatrici, C1 e C2 centrali, O opposto. Rotazione n = palleggiatrice in posizione n (Rot. 1: P in 1, Rot. 2: P in 2, e così via)."}
         </Text>
 
         <View style={styles.selettoreRiga}>
@@ -126,26 +132,37 @@ export default function SchemiGioco() {
         </View>
         <Text style={styles.nota}>Durante la partita potrai passare da una variante all'altra con un tocco.</Text>
 
+        {perZona && (
+          <Text style={styles.nota}>
+            {fase === "difesa" ? "Zona da cui attacca l'avversario (in partita la scegli con un tocco):" : "Zona da cui attacchiamo noi (in partita è quella di chi attacca, correggibile con un tocco):"}
+          </Text>
+        )}
         <View style={styles.selettoreRiga}>
-          {[1, 2, 3, 4, 5, 6].map((r) => (
-            <Pressable key={r} onPress={() => { setRotazione(r); setPallinoScelto(null); }} style={[styles.chip, rotazione === r && styles.chipAttivo]}>
-              <Text style={[styles.chipTesto, rotazione === r && styles.chipTestoAttivo]}>Rot. {r}{configurata(fase, variante, r) ? " ✓" : ""}</Text>
-            </Pressable>
-          ))}
+          {(perZona ? [...ZONE_ATTACCO] : [1, 2, 3, 4, 5, 6]).map((n) => {
+            const attivo = (perZona ? zona : rotazione) === n;
+            return (
+              <Pressable key={n} onPress={() => { if (perZona) setZona(n); else setRotazione(n); setPallinoScelto(null); }} style={[styles.chip, attivo && styles.chipAttivo]}>
+                <Text style={[styles.chipTesto, attivo && styles.chipTestoAttivo]}>{perZona ? `Zona ${n}` : `Rot. ${n}`}{configurata(fase, variante, n) ? " ✓" : ""}</Text>
+              </Pressable>
+            );
+          })}
         </View>
 
         <CampoSchemaEditor
           posizioni={corrente}
-          slotPalleggio={rotazione}
+          slotPalleggio={perZona ? 0 : rotazione}
           selezionato={pallinoScelto}
           onSeleziona={setPallinoScelto}
           onSposta={sposta}
           onTrascina={setTrascinando}
           modificabile={modificabile}
-          etichette={Object.fromEntries([1, 2, 3, 4, 5, 6].map((s) => [s, ruoloInPosizione(s, rotazione)]))}
+          etichette={Object.fromEntries([1, 2, 3, 4, 5, 6].map((s) => [s, perZona ? PUNTI_RUOLO_LINEA[s].sigla : ruoloInPosizione(s, rotazione)]))}
+          sottoEtichette={perZona ? Object.fromEntries([1, 2, 3, 4, 5, 6].map((s) => [s, PUNTI_RUOLO_LINEA[s].linea])) : undefined}
         />
         <Text style={styles.nota}>
-          Rotazione {rotazione}: palleggiatrice in posizione {rotazione}. {[1, 2, 3, 4, 5, 6].map((s) => `${ruoloInPosizione(s, rotazione)} in ${s}`).join(" · ")}.
+          {perZona
+            ? `Attacco dalla zona ${zona}.`
+            : `Rotazione ${rotazione}: palleggiatrice in posizione ${rotazione}. ${[1, 2, 3, 4, 5, 6].map((s) => `${ruoloInPosizione(s, rotazione)} in ${s}`).join(" · ")}.`}
           {modificabile ? " Trascina i pallini dove stanno in questa fase, oppure tocca un pallino e poi il punto del campo." : ""}
         </Text>
 

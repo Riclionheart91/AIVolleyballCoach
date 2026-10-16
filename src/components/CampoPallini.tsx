@@ -114,8 +114,10 @@ function PallinoTrascinabile({
  * si tocca un pallino e poi il punto del campo dove metterlo.
  */
 export function CampoSchemaEditor({
-  posizioni, slotPalleggio, selezionato, onSeleziona, onSposta, onTrascina, etichette, modificabile = true,
+  posizioni, slotPalleggio, selezionato, onSeleziona, onSposta, onTrascina, etichette, sottoEtichette, modificabile = true,
 }: {
+  /** Testo sotto ciascun pallino (es. la linea); di default "pos. n". */
+  sottoEtichette?: Record<number, string>;
   /** Testo dentro ciascun pallino (es. il ruolo), per posizione di rotazione. */
   etichette?: Record<number, string>;
   /** Se false i pallini si vedono ma non si spostano. */
@@ -161,7 +163,7 @@ export function CampoSchemaEditor({
           <PallinoTrascinabile
             key={slot}
             lato={lato}
-            p={{ chiave: String(slot), x: pt.x, y: pt.y, etichetta: etichette?.[slot] ?? String(slot), sotto: `pos. ${slot}`, attivo: selezionato === slot, accento: slot === slotPalleggio }}
+            p={{ chiave: String(slot), x: pt.x, y: pt.y, etichetta: etichette?.[slot] ?? String(slot), sotto: sottoEtichette?.[slot] ?? `pos. ${slot}`, attivo: selezionato === slot, accento: slot === slotPalleggio }}
             modificabile={modificabile}
             onSposta={(x, y) => onSposta(slot, { x, y })}
             onTocco={() => onSeleziona(selezionato === slot ? null : slot)}

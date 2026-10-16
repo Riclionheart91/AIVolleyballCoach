@@ -10,8 +10,8 @@ export type FaseSchema = "ricezione" | "difesa" | "copertura";
 
 export const FASI_SCHEMA: { fase: FaseSchema; etichetta: string; descrizione: string }[] = [
   { fase: "ricezione", etichetta: "Ricezione", descrizione: "Serve l'avversario: come ci disponiamo a ricevere." },
-  { fase: "difesa", etichetta: "Difesa", descrizione: "Dopo la nostra battuta: come ci disponiamo in difesa." },
-  { fase: "copertura", etichetta: "Copertura", descrizione: "Dopo il nostro attacco: come ci disponiamo in copertura." },
+  { fase: "difesa", etichetta: "Difesa", descrizione: "Dopo la nostra battuta: come ci disponiamo in difesa, in base alla zona da cui attacca l'avversario." },
+  { fase: "copertura", etichetta: "Copertura", descrizione: "Dopo il nostro attacco: come ci disponiamo in copertura, in base alla zona da cui attacchiamo." },
 ];
 
 /**
@@ -64,6 +64,55 @@ export const ORDINE_ROTAZIONI = [1, 6, 5, 4, 3, 2] as const;
 
 export function letteraRotazione(rotazione: number): string {
   return "ABCDEF"[ORDINE_ROTAZIONI.indexOf(rotazione as 1 | 2 | 3 | 4 | 5 | 6)] ?? String(rotazione);
+}
+
+/**
+ * Difesa e copertura non dipendono dalla rotazione ma dalla ZONA da cui
+ * si attacca (l'avversario in difesa, noi in copertura), e le giocatrici
+ * si dispongono per RUOLO e LINEA: P/O (palleggiatrice e opposto stanno
+ * nello stesso punto), S (schiacciatrice), C (centrale), ognuno in prima e
+ * in seconda linea. In ogni rotazione di ciascun ruolo una e' davanti e
+ * una dietro, quindi i sei punti sono sempre quelli. Il libero prende il
+ * punto del centrale che sostituisce (C in seconda linea).
+ * Nel database lo schema usa le stesse chiavi 1-6 della rotazione 1 (P in 1)
+ * e il numero di zona al posto della rotazione.
+ */
+export function faseConZona(fase: FaseSchema | null): boolean {
+  return fase === "difesa" || fase === "copertura";
+}
+
+export const ZONE_ATTACCO = [1, 2, 3, 4, 6] as const;
+export const ZONA_PREDEFINITA = 3;
+
+/** Sigla e linea dei sei punti degli schemi per ruolo (chiavi = posizioni della rotazione 1). */
+export const PUNTI_RUOLO_LINEA: Record<number, { sigla: string; linea: string }> = {
+  1: { sigla: "P/O", linea: "2ª linea" },
+  2: { sigla: "S", linea: "1ª linea" },
+  3: { sigla: "C", linea: "1ª linea" },
+  4: { sigla: "P/O", linea: "1ª linea" },
+  5: { sigla: "S", linea: "2ª linea" },
+  6: { sigla: "C", linea: "2ª linea (libero)" },
+};
+
+/** Punto dello schema per ruolo che spetta a chi sta nella posizione indicata quando la palleggiatrice e' in "rotazione". */
+export function puntoRuoloLinea(posizione: number, rotazione: number): number {
+  const ruolo = (((posizione - rotazione) % 6) + 6) % 6; // 0 P, 1 S1, 2 C2, 3 O, 4 S2, 5 C1
+  const tipo = ruolo % 3; // 0 P/O, 1 S, 2 C
+  const davanti = posizione >= 2 && posizione <= 4;
+  if (tipo === 0) return davanti ? 4 : 1;
+  if (tipo === 1) return davanti ? 2 : 5;
+  return davanti ? 3 : 6;
+}
+
+/** Numero che identifica lo schema nella fase: la zona per difesa e copertura, la rotazione per la ricezione. */
+export function indiceSchema(fase: FaseSchema, rotazione: number | null, zona: number): number | null {
+  return faseConZona(fase) ? zona : rotazione;
+}
+
+/** Zona d'attacco a partire dalla posizione di rotazione di chi attacca (la 5 conta come 6). */
+export function zonaDaPosizione(posizione: number | null | undefined): number {
+  if (!posizione) return ZONA_PREDEFINITA;
+  return posizione === 5 ? 6 : posizione;
 }
 
 export function chiaveSchema(fase: FaseSchema, variante: number, rotazione: number): string {
