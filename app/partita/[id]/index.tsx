@@ -855,7 +855,7 @@ export default function PartitaLive() {
                   </Pressable>
                 )}
                 <Pressable style={[styles.tastoEsito, { flex: 1 }, styles.esitoNeutro, { paddingVertical: d(14) }]} onPress={() => scegliEsito("neutro")}>
-                  <Text style={[styles.tastoEsitoTesto, { fontSize: d(15) }]}>Neutro</Text>
+                  <Text style={[styles.tastoEsitoTesto, { fontSize: d(15) }]}>{skillEff === "Difesa" ? "Corretta" : "Neutro"}</Text>
                 </Pressable>
                 <Pressable style={[styles.tastoEsito, { flex: 1 }, styles.esitoErrore, { paddingVertical: d(14) }]} onPress={() => scegliEsito("errore")}>
                   <Text style={[styles.tastoEsitoTesto, { fontSize: d(15) }]}>Errore</Text>
