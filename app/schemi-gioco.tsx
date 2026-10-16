@@ -115,13 +115,15 @@ export default function SchemiGioco() {
 
         <View style={styles.selettoreRiga}>
           {FASI_SCHEMA.map((f) => (
-            <Pressable key={f.fase} onPress={() => { setFase(f.fase); setPallinoScelto(null); }} style={[styles.chip, fase === f.fase && styles.chipAttivo]}>
+            <Pressable key={f.fase} onPress={() => { setFase(f.fase); if (f.fase === "difesa") setVariante(1); setPallinoScelto(null); }} style={[styles.chip, fase === f.fase && styles.chipAttivo]}>
               <Text style={[styles.chipTesto, fase === f.fase && styles.chipTestoAttivo]}>{f.etichetta}</Text>
             </Pressable>
           ))}
         </View>
         <Text style={styles.nota}>{infoFase.descrizione}</Text>
 
+        {fase !== "difesa" && (
+          <>
         <View style={styles.selettoreRiga}>
           {[1, 2].map((v) => (
             <Pressable key={v} onPress={() => { setVariante(v); setPallinoScelto(null); }} style={[styles.chip, variante === v && styles.chipAttivo]}>
@@ -130,6 +132,8 @@ export default function SchemiGioco() {
           ))}
         </View>
         <Text style={styles.nota}>Durante la partita potrai passare da una variante all'altra con un tocco.</Text>
+          </>
+        )}
 
         {!perZona && (
           <View style={styles.selettoreRiga}>

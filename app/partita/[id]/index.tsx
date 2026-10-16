@@ -583,22 +583,27 @@ export default function PartitaLive() {
   // squadra; "posizione" resta quella di rotazione, usata dal database.
   const rotazioneAttuale = rotazioneDaFormazione(formazione, (id) => nomeAtleta(id)?.ruolo_campo ?? null);
   const faseSchema = faseDelloScambio(ultimaAzioneScambio ? ultimaAzioneScambio.skill : null, noiAlServizio);
-  // Fase a cui si riferisce il tocco sull'etichetta: quella in corso oppure, mentre battiamo noi, la difesa che segue.
-  const faseCambiabile: FaseSchema | null = faseSchema ?? (inizioScambio && noiAlServizio ? "difesa" : null);
-  const varianteFase = faseCambiabile ? varianti[faseCambiabile] : 1;
-  const nomeVariante = faseCambiabile ? VARIANTI_SCHEMA[faseCambiabile][varianteFase - 1] : "";
+  // Il tocco sull'etichetta alterna le due varianti dello schema (ricezione e copertura); la difesa ha un solo schema.
+  const faseCambiabile: FaseSchema | null = faseSchema && faseSchema !== "difesa" ? faseSchema : null;
+  const varianteDi = (f: FaseSchema) => (f === "difesa" ? 1 : varianti[f]);
+  const nomeVariante = faseCambiabile ? VARIANTI_SCHEMA[faseCambiabile][varianteDi(faseCambiabile) - 1] : "";
   // Difesa e copertura: un solo schema per variante, per ruolo e linea (nessuna scelta da fare durante lo scambio).
   const zonaSchema = ZONA_PREDEFINITA;
   const perZona = faseConZona(faseSchema);
   const indiceFase = faseSchema ? indiceSchema(faseSchema, rotazioneAttuale, zonaSchema) : null;
-  const schemaFase = faseSchema && indiceFase ? schemi[chiaveSchema(faseSchema, varianti[faseSchema], indiceFase)] : undefined;
+  const schemaFase = faseSchema && indiceFase ? schemi[chiaveSchema(faseSchema, varianteDi(faseSchema), indiceFase)] : undefined;
+  const nomeFase = faseSchema ? FASI_SCHEMA.find((x) => x.fase === faseSchema)?.etichetta : null;
   const testoFase = faseSchema
-    ? `${FASI_SCHEMA.find((x) => x.fase === faseSchema)?.etichetta} · ${nomeVariante}${!perZona && rotazioneAttuale ? ` · rot. ${rotazioneAttuale}` : ""}${schemaFase ? "" : " (base)"} ⇄`
-    : faseCambiabile ? `Poi difesa: ${nomeVariante} ⇄` : null;
-  const etichettaFase = faseCambiabile && testoFase ? (
-    <Pressable onPress={() => alternaVariante(faseCambiabile)} style={styles.tastoFase}>
-      <Text style={styles.etichettaFase} numberOfLines={1}>{testoFase}</Text>
-    </Pressable>
+    ? `${nomeFase}${faseCambiabile ? ` · ${nomeVariante}` : ""}${!perZona && rotazioneAttuale ? ` · rot. ${rotazioneAttuale}` : ""}${schemaFase ? "" : " (base)"}${faseCambiabile ? " ⇄" : ""}`
+    : null;
+  const etichettaFase = testoFase ? (
+    faseCambiabile ? (
+      <Pressable onPress={() => alternaVariante(faseCambiabile)} style={styles.tastoFase}>
+        <Text style={styles.etichettaFase} numberOfLines={1}>{testoFase}</Text>
+      </Pressable>
+    ) : (
+      <View style={styles.tastoFase}><Text style={styles.etichettaFase} numberOfLines={1}>{testoFase}</Text></View>
+    )
   ) : null;
 
   // Un pallino per giocatrice, nel punto dello schema scelto per questa fase.
@@ -909,10 +914,9 @@ export default function PartitaLive() {
               <Pressable onPress={alternaZone} style={[styles.tastoPiccolo, zoneAttive && styles.tastoPiccoloAttivo]}>
                 <Text style={[styles.tastoPiccoloTesto, zoneAttive && styles.tastoPiccoloTestoAttivo]}>🎯 Zone {zoneAttive ? "ON" : "off"}</Text>
               </Pressable>
-              <View style={styles.rigaToggleFisso}>
-                <Text style={styles.nota}>Ess.</Text>
-                <Switch value={modalitaEssenziale} onValueChange={setModalitaEssenziale} trackColor={{ true: brand.colors.brand }} />
-              </View>
+              <Pressable onPress={() => setModalitaEssenziale((v) => !v)} style={[styles.tastoPiccolo, modalitaEssenziale && styles.tastoPiccoloAttivo]}>
+                <Text style={[styles.tastoPiccoloTesto, modalitaEssenziale && styles.tastoPiccoloTestoAttivo]}>⚡ Essenziale {modalitaEssenziale ? "ON" : "off"}</Text>
+              </Pressable>
             </View>
 
             {puoScrivere && (
