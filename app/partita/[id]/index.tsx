@@ -817,25 +817,25 @@ export default function PartitaLive() {
               </View>
             )}
 
-            {passo === "esito" && skillEff && skillEff === "Ricezione" && (
-              // Griglia 2x2 invece dei 3 pulsanti impilati: la ricezione
-              // non può mai valere "punto" con le regole standard, quindi
+            {passo === "esito" && skillEff && (skillEff === "Ricezione" || skillEff === "Difesa") && (
+              // Griglia 2x2 invece dei 3 pulsanti impilati: ricezione e difesa
+              // non possono mai valere "punto" con le regole standard, quindi
               // il bucket "neutro" si apre in una scala di qualità
               // (standard di scouting pro: quante opzioni d'attacco resi
               // disponibili). 4 pulsanti in griglia sono più bassi dei 3
               // impilati di prima: resta tutto in una sola schermata.
               <>
                 <View style={styles.griglia}>
-                  <Pressable style={[styles.tastoEsitoGriglia, styles.esitoOttima, { paddingVertical: d(12) }]} onPress={() => registra(skillEff, "neutro", atletaSelId, "ottima")}>
+                  <Pressable style={[styles.tastoEsitoGriglia, styles.esitoOttima, { paddingVertical: d(12) }]} onPress={() => registra(skillEff, "neutro", atletaEff, "ottima")}>
                     <Text style={[styles.tastoEsitoTesto, { fontSize: d(13) }]}>Perfetta</Text>
                   </Pressable>
-                  <Pressable style={[styles.tastoEsitoGriglia, styles.esitoBuona, { paddingVertical: d(12) }]} onPress={() => registra(skillEff, "neutro", atletaSelId, "buona")}>
+                  <Pressable style={[styles.tastoEsitoGriglia, styles.esitoBuona, { paddingVertical: d(12) }]} onPress={() => registra(skillEff, "neutro", atletaEff, "buona")}>
                     <Text style={[styles.tastoEsitoTesto, { fontSize: d(13) }]}>Buona</Text>
                   </Pressable>
-                  <Pressable style={[styles.tastoEsitoGriglia, styles.esitoScarsaRic, { paddingVertical: d(12) }]} onPress={() => registra(skillEff, "neutro", atletaSelId, "scarsa")}>
+                  <Pressable style={[styles.tastoEsitoGriglia, styles.esitoScarsaRic, { paddingVertical: d(12) }]} onPress={() => registra(skillEff, "neutro", atletaEff, "scarsa")}>
                     <Text style={[styles.tastoEsitoTesto, { fontSize: d(13) }]}>Scarsa</Text>
                   </Pressable>
-                  <Pressable style={[styles.tastoEsitoGriglia, styles.esitoErrore, { paddingVertical: d(12) }]} onPress={() => registra(skillEff, "errore", atletaSelId)}>
+                  <Pressable style={[styles.tastoEsitoGriglia, styles.esitoErrore, { paddingVertical: d(12) }]} onPress={() => registra(skillEff, "errore", atletaEff)}>
                     <Text style={[styles.tastoEsitoTesto, { fontSize: d(13) }]}>Errore</Text>
                   </Pressable>
                 </View>
@@ -845,7 +845,7 @@ export default function PartitaLive() {
               </>
             )}
 
-            {passo === "esito" && skillEff && skillEff !== "Ricezione" && (
+            {passo === "esito" && skillEff && skillEff !== "Ricezione" && skillEff !== "Difesa" && (
               <>
                 <View style={{ flexDirection: "row", gap: 6 }}>
                 {/* Una difesa non puo' essere "punto": il punto lo fa l'attacco che segue. */}
@@ -855,7 +855,7 @@ export default function PartitaLive() {
                   </Pressable>
                 )}
                 <Pressable style={[styles.tastoEsito, { flex: 1 }, styles.esitoNeutro, { paddingVertical: d(14) }]} onPress={() => scegliEsito("neutro")}>
-                  <Text style={[styles.tastoEsitoTesto, { fontSize: d(15) }]}>{skillEff === "Difesa" ? "Corretta" : "Neutro"}</Text>
+                  <Text style={[styles.tastoEsitoTesto, { fontSize: d(15) }]}>Neutro</Text>
                 </Pressable>
                 <Pressable style={[styles.tastoEsito, { flex: 1 }, styles.esitoErrore, { paddingVertical: d(14) }]} onPress={() => scegliEsito("errore")}>
                   <Text style={[styles.tastoEsitoTesto, { fontSize: d(15) }]}>Errore</Text>
