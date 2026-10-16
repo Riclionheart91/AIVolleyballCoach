@@ -3,8 +3,8 @@ import { View, Text, Pressable, StyleSheet, ScrollView } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { useAuth } from "@/src/context/AuthContext";
 import { brand } from "@/src/config";
-import { avvisa } from "@/src/lib/confermaAzione";
-import { FASI_SCHEMA, ORDINE_ROTAZIONI, SCHEMA_BASE, VARIANTI_SCHEMA, chiaveSchema, letteraRotazione, ruoloInPosizione, type Assegnazioni, type FaseSchema, type Punto } from "@/src/lib/schemiGioco";
+import { avvisa, confermaAzione } from "@/src/lib/confermaAzione";
+import { FASI_SCHEMA, SCHEMA_BASE, VARIANTI_SCHEMA, chiaveSchema, ruoloInPosizione, type Assegnazioni, type FaseSchema, type Punto } from "@/src/lib/schemiGioco";
 import { CampoSchemaEditor } from "@/src/components/CampoPallini";
 import { elencaSchemiGioco, ripristinaSchemaGioco, salvaSchemaGioco } from "@/src/services/schemiGioco";
 
@@ -21,6 +21,7 @@ export default function SchemiGioco() {
   const [pallinoScelto, setPallinoScelto] = useState<number | null>(null);
   const [trascinando, setTrascinando] = useState(false);
   const [inCorso, setInCorso] = useState(false);
+  const [messaggio, setMessaggio] = useState<string | null>(null);
 
   const carica = useCallback(async () => {
     if (!team) return;
@@ -47,7 +48,10 @@ export default function SchemiGioco() {
         const [f, v, r] = k.split(":");
         await salvaSchemaGioco(team.id, f as FaseSchema, Number(v), Number(r), a);
       }
+      const n = Object.keys(bozze).length;
       await carica();
+      setMessaggio(n === 1 ? "Schema salvato ✓" : `${n} schemi salvati ✓`);
+      setTimeout(() => setMessaggio(null), 4000);
     } catch (e) { avvisa("Salvataggio non riuscito", `${(e as Error).message}\n\nSe l'errore parla di numeri o di zone, l'aggiornamento del database per gli schemi a pallini non è ancora stato applicato: riprova più tardi.`); }
     finally { setInCorso(false); }
   }
@@ -76,18 +80,26 @@ export default function SchemiGioco() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Pressable onPress={() => router.back()} hitSlop={12}><Text style={styles.indietro}>← Indietro</Text></Pressable>
+        <Pressable
+          onPress={() => {
+            if (numeroBozze === 0) { router.back(); return; }
+            confermaAzione("Uscire senza salvare?", `Hai ${numeroBozze} modifiche non salvate.`, "Esci senza salvare", () => router.back(), true);
+          }}
+          hitSlop={12}
+        >
+          <Text style={styles.indietro}>← Indietro</Text>
+        </Pressable>
         <Text style={styles.titolo}>Schemi di gioco</Text>
       </View>
 
-      <ScrollView scrollEnabled={!trascinando} contentContainerStyle={{ padding: 16, gap: 14 }}>
+      <ScrollView style={{ flex: 1 }} scrollEnabled={!trascinando} contentContainerStyle={{ padding: 16, gap: 14 }}>
         <Text style={styles.nota}>
           {modificabile
             ? "Per ogni fase e rotazione scegli dove sta ciascuna giocatrice. Nello scouting le giocatrici sono disegnate come pallini nei punti dello schema, così le tocchi dove stanno davvero. Quello che non imposti resta nelle posizioni di rotazione."
             : "Gli schemi di gioco della squadra: dove si dispongono le giocatrici in ricezione, difesa e copertura, rotazione per rotazione. Sola lettura: li modifica l'allenatore."}
         </Text>
         <Text style={styles.nota}>
-          Ruoli: P palleggiatrice, S1 e S2 schiacciatrici, C1 e C2 centrali, O opposto. Rotazione A = palleggiatrice in posizione 1; poi B (in 6), C (in 5), D (in 4), E (in 3), F (in 2).
+          Ruoli: P palleggiatrice, S1 e S2 schiacciatrici, C1 e C2 centrali, O opposto. Rotazione n = palleggiatrice in posizione n (Rot. 1: P in 1, Rot. 2: P in 2, e così via).
         </Text>
 
         <View style={styles.selettoreRiga}>
@@ -109,9 +121,9 @@ export default function SchemiGioco() {
         <Text style={styles.nota}>Durante la partita potrai passare da una variante all'altra con un tocco.</Text>
 
         <View style={styles.selettoreRiga}>
-          {ORDINE_ROTAZIONI.map((r) => (
+          {[1, 2, 3, 4, 5, 6].map((r) => (
             <Pressable key={r} onPress={() => { setRotazione(r); setPallinoScelto(null); }} style={[styles.chip, rotazione === r && styles.chipAttivo]}>
-              <Text style={[styles.chipTesto, rotazione === r && styles.chipTestoAttivo]}>Rot. {letteraRotazione(r)}{configurata(fase, variante, r) ? " ✓" : ""}</Text>
+              <Text style={[styles.chipTesto, rotazione === r && styles.chipTestoAttivo]}>Rot. {r}{configurata(fase, variante, r) ? " ✓" : ""}</Text>
             </Pressable>
           ))}
         </View>
@@ -127,24 +139,30 @@ export default function SchemiGioco() {
           etichette={Object.fromEntries([1, 2, 3, 4, 5, 6].map((s) => [s, ruoloInPosizione(s, rotazione)]))}
         />
         <Text style={styles.nota}>
-          Rotazione {letteraRotazione(rotazione)}: palleggiatrice in posizione {rotazione}. {[1, 2, 3, 4, 5, 6].map((s) => `${ruoloInPosizione(s, rotazione)} in ${s}`).join(" · ")}.
+          Rotazione {rotazione}: palleggiatrice in posizione {rotazione}. {[1, 2, 3, 4, 5, 6].map((s) => `${ruoloInPosizione(s, rotazione)} in ${s}`).join(" · ")}.
           {modificabile ? " Trascina i pallini dove stanno in questa fase, oppure tocca un pallino e poi il punto del campo." : ""}
         </Text>
 
-        {modificabile && <View style={styles.selettoreRiga}>
-          <Pressable disabled={numeroBozze === 0 || inCorso} onPress={salva} style={[styles.bottone, (numeroBozze === 0 || inCorso) && styles.bottoneSpento]}>
-            <Text style={styles.bottoneTesto}>{numeroBozze > 0 ? `Salva (${numeroBozze})` : "Salva"}</Text>
-          </Pressable>
-          {variante === 2 && (
-            <Pressable disabled={inCorso} onPress={copiaDallaVariante1} style={styles.bottoneSecondario}>
-              <Text style={styles.bottoneSecondarioTesto}>Parti dalla variante 1</Text>
-            </Pressable>
-          )}
-          <Pressable disabled={inCorso} onPress={ripristina} style={styles.bottoneSecondario}>
-            <Text style={styles.bottoneSecondarioTesto}>Torna alle posizioni di rotazione</Text>
-          </Pressable>
-        </View>}
       </ScrollView>
+
+      {modificabile && (
+        <View style={styles.barraFissa}>
+          {messaggio && <Text style={styles.messaggioOk}>{messaggio}</Text>}
+          <View style={styles.selettoreRiga}>
+            <Pressable disabled={numeroBozze === 0 || inCorso} onPress={salva} style={[styles.bottone, (numeroBozze === 0 || inCorso) && styles.bottoneSpento]}>
+              <Text style={styles.bottoneTesto}>{inCorso ? "Salvo…" : numeroBozze > 0 ? `Salva (${numeroBozze})` : "Salva"}</Text>
+            </Pressable>
+            {variante === 2 && (
+              <Pressable disabled={inCorso} onPress={copiaDallaVariante1} style={styles.bottoneSecondario}>
+                <Text style={styles.bottoneSecondarioTesto}>Parti dalla variante 1</Text>
+              </Pressable>
+            )}
+            <Pressable disabled={inCorso} onPress={ripristina} style={styles.bottoneSecondario}>
+              <Text style={styles.bottoneSecondarioTesto}>Torna alle posizioni di rotazione</Text>
+            </Pressable>
+          </View>
+        </View>
+      )}
     </View>
   );
 }
@@ -160,6 +178,8 @@ const styles = StyleSheet.create({
   chipAttivo: { backgroundColor: brand.colors.brand },
   chipTesto: { color: brand.colors.onSurfaceSecondary, fontSize: 13 },
   chipTestoAttivo: { color: "#000", fontWeight: "700" },
+  barraFissa: { padding: 12, gap: 6, borderTopWidth: 1, borderTopColor: brand.colors.border, backgroundColor: brand.colors.surface },
+  messaggioOk: { color: brand.colors.success, fontSize: 13, fontWeight: "700" },
   bottone: { backgroundColor: brand.colors.brand, paddingVertical: 12, paddingHorizontal: 20, borderRadius: 8, alignItems: "center" },
   bottoneSpento: { opacity: 0.4 },
   bottoneTesto: { color: "#000", fontWeight: "700" },
