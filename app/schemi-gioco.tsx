@@ -4,7 +4,7 @@ import { router, useFocusEffect } from "expo-router";
 import { useAuth } from "@/src/context/AuthContext";
 import { brand } from "@/src/config";
 import { avvisa } from "@/src/lib/confermaAzione";
-import { FASI_SCHEMA, SCHEMA_BASE, chiaveSchema, type Assegnazioni, type FaseSchema } from "@/src/lib/schemiGioco";
+import { FASI_SCHEMA, SCHEMA_BASE, VARIANTI_SCHEMA, chiaveSchema, type Assegnazioni, type FaseSchema } from "@/src/lib/schemiGioco";
 import { elencaSchemiGioco, ripristinaSchemaGioco, salvaSchemaGioco } from "@/src/services/schemiGioco";
 
 // Disposizione del campo: rete in alto, fila avanti 4-3-2, fila dietro 5-6-1.
@@ -16,6 +16,7 @@ export default function SchemiGioco() {
   const [salvati, setSalvati] = useState<Record<string, Assegnazioni>>({});
   const [bozze, setBozze] = useState<Record<string, Assegnazioni>>({});
   const [fase, setFase] = useState<FaseSchema>("ricezione");
+  const [variante, setVariante] = useState(1);
   const [rotazione, setRotazione] = useState(1);
   const [zonaScelta, setZonaScelta] = useState<number | null>(null);
   const [inCorso, setInCorso] = useState(false);
@@ -28,7 +29,7 @@ export default function SchemiGioco() {
 
   useFocusEffect(useCallback(() => { carica(); }, [carica]));
 
-  const chiave = chiaveSchema(fase, rotazione);
+  const chiave = chiaveSchema(fase, variante, rotazione);
   const corrente: Assegnazioni = bozze[chiave] ?? salvati[chiave] ?? SCHEMA_BASE;
   const posizioneInZona = (zona: number): number => {
     for (let p = 1; p <= 6; p++) if (Number(corrente[String(p)]) === zona) return p;
@@ -52,8 +53,8 @@ export default function SchemiGioco() {
     setInCorso(true);
     try {
       for (const [k, a] of Object.entries(bozze)) {
-        const [f, r] = k.split(":");
-        await salvaSchemaGioco(team.id, f as FaseSchema, Number(r), a);
+        const [f, v, r] = k.split(":");
+        await salvaSchemaGioco(team.id, f as FaseSchema, Number(v), Number(r), a);
       }
       await carica();
     } catch (e) { avvisa("Salvataggio non riuscito", (e as Error).message); }
@@ -64,7 +65,7 @@ export default function SchemiGioco() {
     if (!team) return;
     setInCorso(true);
     try {
-      if (salvati[chiave]) await ripristinaSchemaGioco(team.id, fase, rotazione);
+      if (salvati[chiave]) await ripristinaSchemaGioco(team.id, fase, variante, rotazione);
       setBozze((b) => { const c = { ...b }; delete c[chiave]; return c; });
       await carica();
     } catch (e) { avvisa("Errore", (e as Error).message); }
@@ -72,7 +73,14 @@ export default function SchemiGioco() {
   }
 
   const infoFase = FASI_SCHEMA.find((f) => f.fase === fase)!;
-  const configurata = (f: FaseSchema, r: number) => !!(salvati[chiaveSchema(f, r)] || bozze[chiaveSchema(f, r)]);
+  const configurata = (f: FaseSchema, v: number, r: number) => !!(salvati[chiaveSchema(f, v, r)] || bozze[chiaveSchema(f, v, r)]);
+
+  /** Parte dallo schema della variante 1 della stessa rotazione: comodo per creare la variante 2 cambiando poche zone. */
+  function copiaDallaVariante1() {
+    const origine = bozze[chiaveSchema(fase, 1, rotazione)] ?? salvati[chiaveSchema(fase, 1, rotazione)] ?? SCHEMA_BASE;
+    setBozze((b) => ({ ...b, [chiave]: { ...origine } }));
+    setZonaScelta(null);
+  }
 
   return (
     <View style={styles.container}>
@@ -96,9 +104,18 @@ export default function SchemiGioco() {
         <Text style={styles.nota}>{infoFase.descrizione}</Text>
 
         <View style={styles.selettoreRiga}>
+          {[1, 2].map((v) => (
+            <Pressable key={v} onPress={() => { setVariante(v); setZonaScelta(null); }} style={[styles.chip, variante === v && styles.chipAttivo]}>
+              <Text style={[styles.chipTesto, variante === v && styles.chipTestoAttivo]}>{VARIANTI_SCHEMA[fase][v - 1]}</Text>
+            </Pressable>
+          ))}
+        </View>
+        <Text style={styles.nota}>Durante la partita potrai passare da una variante all'altra con un tocco.</Text>
+
+        <View style={styles.selettoreRiga}>
           {[1, 2, 3, 4, 5, 6].map((r) => (
             <Pressable key={r} onPress={() => { setRotazione(r); setZonaScelta(null); }} style={[styles.chip, rotazione === r && styles.chipAttivo]}>
-              <Text style={[styles.chipTesto, rotazione === r && styles.chipTestoAttivo]}>Rot. {r}{configurata(fase, r) ? " ✓" : ""}</Text>
+              <Text style={[styles.chipTesto, rotazione === r && styles.chipTestoAttivo]}>Rot. {r}{configurata(fase, variante, r) ? " ✓" : ""}</Text>
             </Pressable>
           ))}
         </View>
@@ -131,6 +148,11 @@ export default function SchemiGioco() {
           <Pressable disabled={numeroBozze === 0 || inCorso} onPress={salva} style={[styles.bottone, (numeroBozze === 0 || inCorso) && styles.bottoneSpento]}>
             <Text style={styles.bottoneTesto}>{numeroBozze > 0 ? `Salva (${numeroBozze})` : "Salva"}</Text>
           </Pressable>
+          {variante === 2 && (
+            <Pressable disabled={inCorso} onPress={copiaDallaVariante1} style={styles.bottoneSecondario}>
+              <Text style={styles.bottoneSecondarioTesto}>Parti dalla variante 1</Text>
+            </Pressable>
+          )}
           <Pressable disabled={inCorso} onPress={ripristina} style={styles.bottoneSecondario}>
             <Text style={styles.bottoneSecondarioTesto}>Torna alle posizioni di rotazione</Text>
           </Pressable>

@@ -39,7 +39,7 @@ import { Campo9x9, type OccupanteCampo } from "@/src/components/Campo9x9";
 import { useSincronizzazioneLive } from "@/src/hooks/useSincronizzazioneLive";
 import { statoPartitaOspite } from "@/src/services/scoutOspiti";
 import { SelettoreZona } from "@/src/components/ZoneCampo";
-import { FASI_SCHEMA, chiaveSchema, faseDelloScambio, rotazioneDaFormazione, zonaDiPosizione, type Assegnazioni } from "@/src/lib/schemiGioco";
+import { FASI_SCHEMA, VARIANTI_SCHEMA, chiaveSchema, faseDelloScambio, rotazioneDaFormazione, zonaDiPosizione, type Assegnazioni, type FaseSchema } from "@/src/lib/schemiGioco";
 import { elencaSchemiGioco } from "@/src/services/schemiGioco";
 import { SOGLIA_SERIE_AVVERSARIA, chiHaSegnato, serieAvversariaInCorso } from "@/src/lib/andamentoPunti";
 
@@ -53,6 +53,29 @@ function leggiZoneAttive(): boolean {
     return !!ls && ls.getItem(CHIAVE_ZONE_ATTIVE) === "1";
   } catch { return false; }
 }
+const CHIAVE_VARIANTI_SCHEMA = "scout_varianti_schema";
+const VARIANTI_INIZIALI: Record<FaseSchema, number> = { ricezione: 1, difesa: 1, copertura: 1 };
+
+/** Variante di schema scelta per ciascuna fase (es. difesa: muro diagonale o lungo linea), ricordata fra una partita e l'altra. */
+function leggiVarianti(): Record<FaseSchema, number> {
+  try {
+    const ls = (globalThis as any).localStorage;
+    const g = ls ? JSON.parse(ls.getItem(CHIAVE_VARIANTI_SCHEMA) ?? "null") : null;
+    if (g && typeof g === "object") {
+      const ok = (v: unknown) => (v === 2 ? 2 : 1);
+      return { ricezione: ok(g.ricezione), difesa: ok(g.difesa), copertura: ok(g.copertura) };
+    }
+  } catch { /* si riparte dalla variante 1 */ }
+  return { ...VARIANTI_INIZIALI };
+}
+
+function salvaVarianti(v: Record<FaseSchema, number>) {
+  try {
+    const ls = (globalThis as any).localStorage;
+    if (ls) ls.setItem(CHIAVE_VARIANTI_SCHEMA, JSON.stringify(v));
+  } catch { /* la scelta non si salva, nessun danno */ }
+}
+
 function salvaZoneAttive(valore: boolean) {
   try {
     const ls = (globalThis as any).localStorage;
@@ -128,6 +151,7 @@ export default function PartitaLive() {
   const [popupTimeout, setPopupTimeout] = useState(false);
   // Modalita' facoltativa: dopo l'esito di battuta/attacco si indica dove e' caduta la palla (zone 1-6).
   const [zoneAttive, setZoneAttive] = useState<boolean>(() => leggiZoneAttive());
+  const [varianti, setVarianti] = useState<Record<FaseSchema, number>>(() => leggiVarianti());
   const [zonaInAttesa, setZonaInAttesa] = useState<{ skill: Skill; esito: Esito; athleteId: string } | null>(null);
 
   // Adatta la disposizione alla forma dello schermo: in orizzontale il
@@ -288,6 +312,15 @@ export default function PartitaLive() {
         punti_avversario: avv ? Math.max(0, prev.punti_avversario + segno) : prev.punti_avversario,
         punti_noi: nostro ? Math.max(0, prev.punti_noi + segno) : prev.punti_noi,
       };
+    });
+  }
+
+  /** Un tocco passa all'altra variante dello schema (es. da muro diagonale a muro lungo linea). */
+  function alternaVariante(fase: FaseSchema) {
+    setVarianti((prev) => {
+      const nuovo = { ...prev, [fase]: prev[fase] === 1 ? 2 : 1 };
+      salvaVarianti(nuovo);
+      return nuovo;
     });
   }
 
@@ -550,11 +583,20 @@ export default function PartitaLive() {
   // squadra; "posizione" resta quella di rotazione, usata dal database.
   const rotazioneAttuale = rotazioneDaFormazione(formazione, (id) => nomeAtleta(id)?.ruolo_campo ?? null);
   const faseSchema = faseDelloScambio(ultimaAzioneScambio ? ultimaAzioneScambio.skill : null, noiAlServizio);
-  const schemaFase = faseSchema && rotazioneAttuale ? schemi[chiaveSchema(faseSchema, rotazioneAttuale)] : undefined;
+  // Fase a cui si riferisce il tocco sull'etichetta: quella in corso oppure, mentre battiamo noi, la difesa che segue.
+  const faseCambiabile: FaseSchema | null = faseSchema ?? (inizioScambio && noiAlServizio ? "difesa" : null);
+  const varianteFase = faseCambiabile ? varianti[faseCambiabile] : 1;
+  const nomeVariante = faseCambiabile ? VARIANTI_SCHEMA[faseCambiabile][varianteFase - 1] : "";
+  const schemaFase = faseSchema && rotazioneAttuale ? schemi[chiaveSchema(faseSchema, varianti[faseSchema], rotazioneAttuale)] : undefined;
   const zonaDi = (posizione: number) => zonaDiPosizione(schemaFase, posizione);
-  const etichettaFase = faseSchema
-    ? `${FASI_SCHEMA.find((x) => x.fase === faseSchema)?.etichetta}${rotazioneAttuale ? ` · rot. ${rotazioneAttuale}` : ""}${schemaFase ? "" : " (base)"}`
-    : null;
+  const testoFase = faseSchema
+    ? `${FASI_SCHEMA.find((x) => x.fase === faseSchema)?.etichetta} · ${nomeVariante}${rotazioneAttuale ? ` · rot. ${rotazioneAttuale}` : ""}${schemaFase ? "" : " (base)"} ⇄`
+    : faseCambiabile ? `Poi difesa: ${nomeVariante} ⇄` : null;
+  const etichettaFase = faseCambiabile && testoFase ? (
+    <Pressable onPress={() => alternaVariante(faseCambiabile)} style={styles.tastoFase}>
+      <Text style={styles.etichettaFase} numberOfLines={1}>{testoFase}</Text>
+    </Pressable>
+  ) : null;
 
   const occupanti: OccupanteCampo[] = formazione.map((f) => {
     const a = nomeAtleta(f.athlete_id);
@@ -667,7 +709,7 @@ export default function PartitaLive() {
       <View style={{ alignItems: orizzontale ? "flex-end" : "center" }}>
         <Text style={styles.setNumero}>Set {setCorrente.numero_set} · TO {timeoutNoi}-{timeoutLoro}</Text>
         <Text style={[styles.punteggio, { fontSize: orizzontale ? d(26) : 24 }]}>{setCorrente.punti_noi}-{setCorrente.punti_avversario}</Text>
-        {!orizzontale && etichettaFase && <Text style={styles.etichettaFase} numberOfLines={1}>{etichettaFase}</Text>}
+        {!orizzontale && etichettaFase}
         {!orizzontale && (
           <Text style={styles.nota} numberOfLines={1}>
             🏐 {setCorrente.squadra_al_servizio === "noi" ? (alServizio ? etichettaAtleta(alServizio.athlete_id) : "noi") : "loro"}
@@ -707,7 +749,7 @@ export default function PartitaLive() {
         </View>
         {!orizzontale && <View style={{ flex: 1 }}>{tabelloneJsx}</View>}
         </View>
-        {orizzontale && etichettaFase && <Text style={styles.etichettaFase} numberOfLines={1}>{etichettaFase}</Text>}
+        {orizzontale && etichettaFase}
         {orizzontale && (
           <Text style={styles.nota} numberOfLines={1}>
             servizio: {setCorrente.squadra_al_servizio === "noi" ? (alServizio ? etichettaAtleta(alServizio.athlete_id) : "noi") : "loro"}
@@ -1135,6 +1177,7 @@ const styles = StyleSheet.create({
 
   rigaToggle: { flexDirection: "row", alignItems: "center", gap: 4 },
   nota: { color: brand.colors.muted, fontSize: 11 },
+  tastoFase: { paddingVertical: 4, paddingHorizontal: 4, borderRadius: 6, backgroundColor: "rgba(255,255,255,0.06)", minHeight: 28, justifyContent: "center" },
   etichettaFase: { color: brand.colors.brandSecondary, fontSize: 11, fontWeight: "700", textAlign: "center" },
   etichettaLog: { color: brand.colors.muted, fontSize: 10, textTransform: "uppercase", marginTop: 4 },
   rigaLog: { color: brand.colors.onSurfaceSecondary, fontSize: 11, paddingVertical: 2 },

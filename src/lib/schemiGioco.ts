@@ -14,13 +14,25 @@ export const FASI_SCHEMA: { fase: FaseSchema; etichetta: string; descrizione: st
   { fase: "copertura", etichetta: "Copertura", descrizione: "Dopo il nostro attacco: come ci disponiamo in copertura." },
 ];
 
+/**
+ * Per ogni fase si possono tenere due schemi fra cui passare durante la
+ * partita (es. in difesa: muro diagonale oppure muro lungo linea).
+ */
+export const VARIANTI_SCHEMA: Record<FaseSchema, [string, string]> = {
+  ricezione: ["Standard", "Alternativa"],
+  difesa: ["Muro diagonale", "Muro lungo linea"],
+  copertura: ["Standard", "Alternativa"],
+};
+
+export type VarianteSchema = 1 | 2;
+
 /** Posizione di rotazione -> zona del campo. */
 export type Assegnazioni = Record<string, number>;
 
 export const SCHEMA_BASE: Assegnazioni = { "1": 1, "2": 2, "3": 3, "4": 4, "5": 5, "6": 6 };
 
-export function chiaveSchema(fase: FaseSchema, rotazione: number): string {
-  return `${fase}:${rotazione}`;
+export function chiaveSchema(fase: FaseSchema, variante: number, rotazione: number): string {
+  return `${fase}:${variante}:${rotazione}`;
 }
 
 /** Controlla che l'oggetto sia una permutazione completa di 1-6; altrimenti si usa lo schema base. */
