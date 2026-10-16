@@ -57,8 +57,9 @@ export function CampoPallini({ pallini, onTapPallino }: { pallini: Pallino[]; on
 const limita = (v: number) => Math.min(0.94, Math.max(0.06, v));
 
 function PallinoTrascinabile({
-  p, lato, onSposta, onTocco, onTrascina,
+  p, lato, onSposta, onTocco, onTrascina, modificabile = true,
 }: {
+  modificabile?: boolean;
   p: Pallino;
   lato: { w: number; h: number };
   onSposta: (x: number, y: number) => void;
@@ -97,12 +98,13 @@ function PallinoTrascinabile({
   const d = Math.max(30, Math.min(lato.w, lato.h) * 0.19);
   return (
     <View
-      {...pan.panHandlers}
-      style={[{ position: "absolute", left: p.x * lato.w - d / 2, top: p.y * lato.h - d / 2, width: d, height: d }, { touchAction: "none" } as any]}
+      {...(modificabile ? pan.panHandlers : {})}
+      style={[{ position: "absolute", left: p.x * lato.w - d / 2, top: p.y * lato.h - d / 2, width: d, height: d }, modificabile ? ({ touchAction: "none" } as any) : null]}
     >
       <View style={[styles.pallino, { width: d, height: d, borderRadius: d / 2 }, p.accento && styles.pallinoAccento, p.attivo && styles.pallinoAttivo]}>
         <Text style={[styles.pallinoTesto, { fontSize: Math.max(11, d * 0.42) }, p.accento && !p.attivo && styles.pallinoTestoAccento]}>{p.etichetta}</Text>
       </View>
+      {p.sotto ? <Text pointerEvents="none" style={[styles.sottoEditor, { top: d + 1, left: -d / 2, width: d * 2, fontSize: Math.max(9, d * 0.28) }]} numberOfLines={1}>{p.sotto}</Text> : null}
     </View>
   );
 }
@@ -112,8 +114,12 @@ function PallinoTrascinabile({
  * si tocca un pallino e poi il punto del campo dove metterlo.
  */
 export function CampoSchemaEditor({
-  posizioni, slotPalleggio, selezionato, onSeleziona, onSposta, onTrascina,
+  posizioni, slotPalleggio, selezionato, onSeleziona, onSposta, onTrascina, etichette, modificabile = true,
 }: {
+  /** Testo dentro ciascun pallino (es. il ruolo), per posizione di rotazione. */
+  etichette?: Record<number, string>;
+  /** Se false i pallini si vedono ma non si spostano. */
+  modificabile?: boolean;
   posizioni: Assegnazioni;
   slotPalleggio: number;
   selezionato: number | null;
@@ -128,7 +134,7 @@ export function CampoSchemaEditor({
       style={styles.campoEditor}
       onLayout={onLayout}
       onPress={(e) => {
-        if (selezionato === null || lato.w === 0) return;
+        if (!modificabile || selezionato === null || lato.w === 0) return;
         const { locationX, locationY } = e.nativeEvent;
         onSposta(selezionato, { x: limita(locationX / lato.w), y: limita(locationY / lato.h) });
       }}
@@ -140,7 +146,8 @@ export function CampoSchemaEditor({
           <PallinoTrascinabile
             key={slot}
             lato={lato}
-            p={{ chiave: String(slot), x: pt.x, y: pt.y, etichetta: slot === slotPalleggio ? `${slot}·P` : String(slot), attivo: selezionato === slot, accento: slot === slotPalleggio }}
+            p={{ chiave: String(slot), x: pt.x, y: pt.y, etichetta: etichette?.[slot] ?? String(slot), sotto: `pos. ${slot}`, attivo: selezionato === slot, accento: slot === slotPalleggio }}
+            modificabile={modificabile}
             onSposta={(x, y) => onSposta(slot, { x, y })}
             onTocco={() => onSeleziona(selezionato === slot ? null : slot)}
             onTrascina={onTrascina}
@@ -163,4 +170,5 @@ const styles = StyleSheet.create({
   pallinoTesto: { color: "#111", fontWeight: "800" },
   pallinoTestoAccento: { color: "#000" },
   sotto: { color: "#fff", fontWeight: "600", marginTop: 1, textAlign: "center" },
+  sottoEditor: { position: "absolute", color: "rgba(255,255,255,0.8)", fontWeight: "600", textAlign: "center" },
 });

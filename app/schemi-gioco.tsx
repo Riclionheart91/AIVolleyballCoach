@@ -4,13 +4,15 @@ import { router, useFocusEffect } from "expo-router";
 import { useAuth } from "@/src/context/AuthContext";
 import { brand } from "@/src/config";
 import { avvisa } from "@/src/lib/confermaAzione";
-import { FASI_SCHEMA, SCHEMA_BASE, VARIANTI_SCHEMA, chiaveSchema, type Assegnazioni, type FaseSchema, type Punto } from "@/src/lib/schemiGioco";
+import { FASI_SCHEMA, ORDINE_ROTAZIONI, SCHEMA_BASE, VARIANTI_SCHEMA, chiaveSchema, letteraRotazione, ruoloInPosizione, type Assegnazioni, type FaseSchema, type Punto } from "@/src/lib/schemiGioco";
 import { CampoSchemaEditor } from "@/src/components/CampoPallini";
 import { elencaSchemiGioco, ripristinaSchemaGioco, salvaSchemaGioco } from "@/src/services/schemiGioco";
 
 /** Schermata per definire dove stanno le giocatrici in ricezione, difesa e copertura, rotazione per rotazione. */
 export default function SchemiGioco() {
-  const { team } = useAuth();
+  const { team, puoScrivere, isSuperuser } = useAuth();
+  // Gli schemi li vedono tutti (staff, atlete, presidenti); li modifica solo chi allena.
+  const modificabile = puoScrivere || isSuperuser;
   const [salvati, setSalvati] = useState<Record<string, Assegnazioni>>({});
   const [bozze, setBozze] = useState<Record<string, Assegnazioni>>({});
   const [fase, setFase] = useState<FaseSchema>("ricezione");
@@ -80,7 +82,12 @@ export default function SchemiGioco() {
 
       <ScrollView scrollEnabled={!trascinando} contentContainerStyle={{ padding: 16, gap: 14 }}>
         <Text style={styles.nota}>
-          Per ogni fase e rotazione scegli dove sta ciascuna giocatrice. Nello scouting il campo mostra le giocatrici nelle zone dello schema, così le tocchi dove stanno davvero. La rotazione è la posizione della palleggiatrice (es. "Rotazione 1" = palleggiatrice in posizione 1). Quello che non imposti resta com'è, nelle posizioni di rotazione.
+          {modificabile
+            ? "Per ogni fase e rotazione scegli dove sta ciascuna giocatrice. Nello scouting le giocatrici sono disegnate come pallini nei punti dello schema, così le tocchi dove stanno davvero. Quello che non imposti resta nelle posizioni di rotazione."
+            : "Gli schemi di gioco della squadra: dove si dispongono le giocatrici in ricezione, difesa e copertura, rotazione per rotazione. Sola lettura: li modifica l'allenatore."}
+        </Text>
+        <Text style={styles.nota}>
+          Ruoli: P palleggiatrice, S1 e S2 schiacciatrici, C1 e C2 centrali, O opposto. Rotazione A = palleggiatrice in posizione 1; poi B (in 6), C (in 5), D (in 4), E (in 3), F (in 2).
         </Text>
 
         <View style={styles.selettoreRiga}>
@@ -102,9 +109,9 @@ export default function SchemiGioco() {
         <Text style={styles.nota}>Durante la partita potrai passare da una variante all'altra con un tocco.</Text>
 
         <View style={styles.selettoreRiga}>
-          {[1, 2, 3, 4, 5, 6].map((r) => (
+          {ORDINE_ROTAZIONI.map((r) => (
             <Pressable key={r} onPress={() => { setRotazione(r); setPallinoScelto(null); }} style={[styles.chip, rotazione === r && styles.chipAttivo]}>
-              <Text style={[styles.chipTesto, rotazione === r && styles.chipTestoAttivo]}>Rot. {r}{configurata(fase, variante, r) ? " ✓" : ""}</Text>
+              <Text style={[styles.chipTesto, rotazione === r && styles.chipTestoAttivo]}>Rot. {letteraRotazione(r)}{configurata(fase, variante, r) ? " ✓" : ""}</Text>
             </Pressable>
           ))}
         </View>
@@ -116,12 +123,15 @@ export default function SchemiGioco() {
           onSeleziona={setPallinoScelto}
           onSposta={sposta}
           onTrascina={setTrascinando}
+          modificabile={modificabile}
+          etichette={Object.fromEntries([1, 2, 3, 4, 5, 6].map((s) => [s, ruoloInPosizione(s, rotazione)]))}
         />
         <Text style={styles.nota}>
-          Trascina i pallini dove stanno in questa fase, oppure tocca un pallino e poi il punto del campo. Il numero è la posizione di rotazione; "P" è la palleggiatrice.
+          Rotazione {letteraRotazione(rotazione)}: palleggiatrice in posizione {rotazione}. {[1, 2, 3, 4, 5, 6].map((s) => `${ruoloInPosizione(s, rotazione)} in ${s}`).join(" · ")}.
+          {modificabile ? " Trascina i pallini dove stanno in questa fase, oppure tocca un pallino e poi il punto del campo." : ""}
         </Text>
 
-        <View style={styles.selettoreRiga}>
+        {modificabile && <View style={styles.selettoreRiga}>
           <Pressable disabled={numeroBozze === 0 || inCorso} onPress={salva} style={[styles.bottone, (numeroBozze === 0 || inCorso) && styles.bottoneSpento]}>
             <Text style={styles.bottoneTesto}>{numeroBozze > 0 ? `Salva (${numeroBozze})` : "Salva"}</Text>
           </Pressable>
@@ -133,7 +143,7 @@ export default function SchemiGioco() {
           <Pressable disabled={inCorso} onPress={ripristina} style={styles.bottoneSecondario}>
             <Text style={styles.bottoneSecondarioTesto}>Torna alle posizioni di rotazione</Text>
           </Pressable>
-        </View>
+        </View>}
       </ScrollView>
     </View>
   );

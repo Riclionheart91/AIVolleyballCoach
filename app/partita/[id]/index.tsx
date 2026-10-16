@@ -39,7 +39,7 @@ import { CampoPallini, type Pallino } from "@/src/components/CampoPallini";
 import { useSincronizzazioneLive } from "@/src/hooks/useSincronizzazioneLive";
 import { statoPartitaOspite } from "@/src/services/scoutOspiti";
 import { SelettoreZona } from "@/src/components/ZoneCampo";
-import { FASI_SCHEMA, VARIANTI_SCHEMA, chiaveSchema, faseDelloScambio, rotazioneDaFormazione, puntoDiPosizione, type Assegnazioni, type FaseSchema } from "@/src/lib/schemiGioco";
+import { FASI_SCHEMA, VARIANTI_SCHEMA, chiaveSchema, faseDelloScambio, rotazioneDaFormazione, puntoDiPosizione, letteraRotazione, type Assegnazioni, type FaseSchema } from "@/src/lib/schemiGioco";
 import { elencaSchemiGioco } from "@/src/services/schemiGioco";
 import { SOGLIA_SERIE_AVVERSARIA, chiHaSegnato, serieAvversariaInCorso } from "@/src/lib/andamentoPunti";
 
@@ -589,7 +589,7 @@ export default function PartitaLive() {
   const nomeVariante = faseCambiabile ? VARIANTI_SCHEMA[faseCambiabile][varianteFase - 1] : "";
   const schemaFase = faseSchema && rotazioneAttuale ? schemi[chiaveSchema(faseSchema, varianti[faseSchema], rotazioneAttuale)] : undefined;
   const testoFase = faseSchema
-    ? `${FASI_SCHEMA.find((x) => x.fase === faseSchema)?.etichetta} · ${nomeVariante}${rotazioneAttuale ? ` · rot. ${rotazioneAttuale}` : ""}${schemaFase ? "" : " (base)"} ⇄`
+    ? `${FASI_SCHEMA.find((x) => x.fase === faseSchema)?.etichetta} · ${nomeVariante}${rotazioneAttuale ? ` · rot. ${letteraRotazione(rotazioneAttuale)}` : ""}${schemaFase ? "" : " (base)"} ⇄`
     : faseCambiabile ? `Poi difesa: ${nomeVariante} ⇄` : null;
   const etichettaFase = faseCambiabile && testoFase ? (
     <Pressable onPress={() => alternaVariante(faseCambiabile)} style={styles.tastoFase}>

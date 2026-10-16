@@ -41,6 +41,31 @@ const CENTRO_ZONA: Record<number, Punto> = {
 /** Senza schema le giocatrici stanno nelle posizioni di rotazione. */
 export const SCHEMA_BASE: Assegnazioni = Object.fromEntries([1, 2, 3, 4, 5, 6].map((s) => [String(s), { ...CENTRO_ZONA[s] }]));
 
+/**
+ * Ruoli nelle sei posizioni, in ordine di posizione a partire dalla
+ * palleggiatrice: P, poi S1 (schiacciatrice), C2 (centrale), O (opposto),
+ * S2 (schiacciatrice), C1 (centrale). Con la palleggiatrice in posizione 1
+ * (rotazione A): 1=P, 2=S1, 3=C2, 4=O, 5=S2, 6=C1. Quando si ruota
+ * tutte si spostano insieme, quindi in ogni rotazione l'ordine resta lo stesso.
+ */
+export const RUOLI_SCHEMA = ["P", "S1", "C2", "O", "S2", "C1"] as const;
+
+export const NOMI_RUOLI_SCHEMA: Record<string, string> = {
+  P: "Palleggiatrice", S1: "Schiacciatrice 1", C2: "Centrale 2", O: "Opposto", S2: "Schiacciatrice 2", C1: "Centrale 1",
+};
+
+/** Ruolo che sta nella posizione di rotazione indicata, quando la palleggiatrice e' nella posizione "rotazione". */
+export function ruoloInPosizione(posizione: number, rotazione: number): string {
+  return RUOLI_SCHEMA[(((posizione - rotazione) % 6) + 6) % 6];
+}
+
+/** Rotazioni nell'ordine in cui si susseguono: A = palleggiatrice in 1, B = in 6, C = in 5, D = in 4, E = in 3, F = in 2. */
+export const ORDINE_ROTAZIONI = [1, 6, 5, 4, 3, 2] as const;
+
+export function letteraRotazione(rotazione: number): string {
+  return "ABCDEF"[ORDINE_ROTAZIONI.indexOf(rotazione as 1 | 2 | 3 | 4 | 5 | 6)] ?? String(rotazione);
+}
+
 export function chiaveSchema(fase: FaseSchema, variante: number, rotazione: number): string {
   return `${fase}:${variante}:${rotazione}`;
 }
