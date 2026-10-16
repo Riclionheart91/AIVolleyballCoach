@@ -39,7 +39,7 @@ import { CampoPallini, type Pallino } from "@/src/components/CampoPallini";
 import { useSincronizzazioneLive } from "@/src/hooks/useSincronizzazioneLive";
 import { statoPartitaOspite } from "@/src/services/scoutOspiti";
 import { SelettoreZona } from "@/src/components/ZoneCampo";
-import { FASI_SCHEMA, VARIANTI_SCHEMA, ZONA_PREDEFINITA, ZONE_ATTACCO, chiaveSchema, faseConZona, faseDelloScambio, indiceSchema, puntoDiPosizione, puntoRuoloLinea, rotazioneDaFormazione, zonaDaPosizione, type Assegnazioni, type FaseSchema } from "@/src/lib/schemiGioco";
+import { FASI_SCHEMA, VARIANTI_SCHEMA, ZONA_PREDEFINITA, chiaveSchema, faseConZona, faseDelloScambio, indiceSchema, puntoDiPosizione, puntoRuoloLinea, rotazioneDaFormazione, type Assegnazioni, type FaseSchema } from "@/src/lib/schemiGioco";
 import { elencaSchemiGioco } from "@/src/services/schemiGioco";
 import { SOGLIA_SERIE_AVVERSARIA, chiHaSegnato, serieAvversariaInCorso } from "@/src/lib/andamentoPunti";
 
@@ -152,8 +152,6 @@ export default function PartitaLive() {
   // Modalita' facoltativa: dopo l'esito di battuta/attacco si indica dove e' caduta la palla (zone 1-6).
   const [zoneAttive, setZoneAttive] = useState<boolean>(() => leggiZoneAttive());
   const [varianti, setVarianti] = useState<Record<FaseSchema, number>>(() => leggiVarianti());
-  // Zona d'attacco scelta a mano per lo scambio in corso (vale finche' non si registra un'altra azione).
-  const [zonaManuale, setZonaManuale] = useState<{ n: number; zona: number } | null>(null);
   const [zonaInAttesa, setZonaInAttesa] = useState<{ skill: Skill; esito: Esito; athleteId: string } | null>(null);
 
   // Adatta la disposizione alla forma dello schermo: in orizzontale il
@@ -589,36 +587,18 @@ export default function PartitaLive() {
   const faseCambiabile: FaseSchema | null = faseSchema ?? (inizioScambio && noiAlServizio ? "difesa" : null);
   const varianteFase = faseCambiabile ? varianti[faseCambiabile] : 1;
   const nomeVariante = faseCambiabile ? VARIANTI_SCHEMA[faseCambiabile][varianteFase - 1] : "";
-  // Difesa e copertura: schema per zona d'attacco (dell'avversario in difesa, nostra in copertura) e per ruolo.
-  // Zona: scelta a mano per questo scambio; in copertura altrimenti quella di chi ha attaccato; poi il centro.
-  const nAzioniSet = eventi.filter((e) => e.set_id === setCorrente.id).length;
-  const zonaScelta = zonaManuale && zonaManuale.n === nAzioniSet ? zonaManuale.zona : null;
-  const zonaAttaccante = faseSchema === "copertura" && ultimaAzioneScambio?.athlete_id
-    ? formazione.find((f) => f.athlete_id === ultimaAzioneScambio!.athlete_id)?.posizione ?? null
-    : null;
-  const zonaSchema = zonaScelta ?? (zonaAttaccante ? zonaDaPosizione(zonaAttaccante) : ZONA_PREDEFINITA);
+  // Difesa e copertura: un solo schema per variante, per ruolo e linea (nessuna scelta da fare durante lo scambio).
+  const zonaSchema = ZONA_PREDEFINITA;
   const perZona = faseConZona(faseSchema);
   const indiceFase = faseSchema ? indiceSchema(faseSchema, rotazioneAttuale, zonaSchema) : null;
   const schemaFase = faseSchema && indiceFase ? schemi[chiaveSchema(faseSchema, varianti[faseSchema], indiceFase)] : undefined;
   const testoFase = faseSchema
-    ? `${FASI_SCHEMA.find((x) => x.fase === faseSchema)?.etichetta} · ${nomeVariante}${perZona ? ` · zona ${zonaSchema}` : rotazioneAttuale ? ` · rot. ${rotazioneAttuale}` : ""}${schemaFase ? "" : " (base)"} ⇄`
+    ? `${FASI_SCHEMA.find((x) => x.fase === faseSchema)?.etichetta} · ${nomeVariante}${!perZona && rotazioneAttuale ? ` · rot. ${rotazioneAttuale}` : ""}${schemaFase ? "" : " (base)"} ⇄`
     : faseCambiabile ? `Poi difesa: ${nomeVariante} ⇄` : null;
   const etichettaFase = faseCambiabile && testoFase ? (
     <Pressable onPress={() => alternaVariante(faseCambiabile)} style={styles.tastoFase}>
       <Text style={styles.etichettaFase} numberOfLines={1}>{testoFase}</Text>
     </Pressable>
-  ) : null;
-
-  // Tasti della zona d'attacco (solo in difesa e in copertura).
-  const selettoreZonaJsx = perZona && !modoOspite ? (
-    <View style={styles.rigaZoneSchema}>
-      <Text style={styles.etichettaZoneSchema}>{faseSchema === "difesa" ? "Att. loro" : "Att. noi"}</Text>
-      {ZONE_ATTACCO.map((z) => (
-        <Pressable key={z} onPress={() => setZonaManuale({ n: nAzioniSet, zona: z })} style={[styles.tastoZonaSchema, zonaSchema === z && styles.tastoZonaSchemaAttivo]}>
-          <Text style={[styles.testoZonaSchema, zonaSchema === z && styles.testoZonaSchemaAttivo]}>{z}</Text>
-        </Pressable>
-      ))}
-    </View>
   ) : null;
 
   // Un pallino per giocatrice, nel punto dello schema scelto per questa fase.
@@ -778,7 +758,6 @@ export default function PartitaLive() {
         </View>
         {!orizzontale && <View style={{ flex: 1 }}>{tabelloneJsx}</View>}
         </View>
-        {selettoreZonaJsx}
         {orizzontale && etichettaFase}
         {orizzontale && (
           <Text style={styles.nota} numberOfLines={1}>
