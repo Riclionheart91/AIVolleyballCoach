@@ -39,6 +39,8 @@ import { Campo9x9, type OccupanteCampo } from "@/src/components/Campo9x9";
 import { useSincronizzazioneLive } from "@/src/hooks/useSincronizzazioneLive";
 import { statoPartitaOspite } from "@/src/services/scoutOspiti";
 import { SelettoreZona } from "@/src/components/ZoneCampo";
+import { FASI_SCHEMA, chiaveSchema, faseDelloScambio, rotazioneDaFormazione, zonaDiPosizione, type Assegnazioni } from "@/src/lib/schemiGioco";
+import { elencaSchemiGioco } from "@/src/services/schemiGioco";
 import { SOGLIA_SERIE_AVVERSARIA, chiHaSegnato, serieAvversariaInCorso } from "@/src/lib/andamentoPunti";
 
 type Passo = "giocatrice" | "fondamentale" | "esito" | "zona";
@@ -203,6 +205,15 @@ export default function PartitaLive() {
   }, [id, modoOspite]);
 
   useFocusEffect(useCallback(() => { carica(); }, [carica]));
+
+  // Schemi di gioco della squadra (ricezione, difesa, copertura): se non
+  // ci sono o non si riesce a leggerli si resta sulle posizioni di rotazione.
+  const [schemi, setSchemi] = useState<Record<string, Assegnazioni>>({});
+  const teamIdPartita = match?.team_id;
+  useEffect(() => {
+    if (modoOspite || !teamIdPartita) return;
+    elencaSchemiGioco(teamIdPartita).then(setSchemi).catch(() => setSchemi({}));
+  }, [modoOspite, teamIdPartita]);
 
   // L'ospite non puo' leggere le tabelle direttamente, quindi niente
   // trasmissione in tempo reale: si rilegge a intervalli brevi.
@@ -533,11 +544,22 @@ export default function PartitaLive() {
   const passo: Passo = !atletaEff ? "giocatrice" : !skillEff ? "fondamentale" : zonaInAttesa ? "zona" : "esito";
   const nomeEff = atletaEff ? etichettaAtleta(atletaEff) : "";
 
-  // Dopo atletaEff: usa la giocatrice scelta (anche quella proposta in automatico).
+  // --- Schema di gioco della fase ------------------------------------
+  // Le giocatrici sono disegnate nella ZONA in cui stanno davvero in
+  // questa fase (ricezione, difesa, copertura) secondo lo schema della
+  // squadra; "posizione" resta quella di rotazione, usata dal database.
+  const rotazioneAttuale = rotazioneDaFormazione(formazione, (id) => nomeAtleta(id)?.ruolo_campo ?? null);
+  const faseSchema = faseDelloScambio(ultimaAzioneScambio ? ultimaAzioneScambio.skill : null, noiAlServizio);
+  const schemaFase = faseSchema && rotazioneAttuale ? schemi[chiaveSchema(faseSchema, rotazioneAttuale)] : undefined;
+  const zonaDi = (posizione: number) => zonaDiPosizione(schemaFase, posizione);
+  const etichettaFase = faseSchema
+    ? `${FASI_SCHEMA.find((x) => x.fase === faseSchema)?.etichetta}${rotazioneAttuale ? ` · rot. ${rotazioneAttuale}` : ""}${schemaFase ? "" : " (base)"}`
+    : null;
+
   const occupanti: OccupanteCampo[] = formazione.map((f) => {
     const a = nomeAtleta(f.athlete_id);
     return {
-      posizione: f.posizione ?? 0,
+      posizione: zonaDi(f.posizione ?? 0),
       cognome: a?.cognome ?? "?",
       numeroMaglia: a?.numero_maglia ?? null,
       ruolo: a?.ruolo_campo ?? null,
@@ -645,6 +667,7 @@ export default function PartitaLive() {
       <View style={{ alignItems: orizzontale ? "flex-end" : "center" }}>
         <Text style={styles.setNumero}>Set {setCorrente.numero_set} · TO {timeoutNoi}-{timeoutLoro}</Text>
         <Text style={[styles.punteggio, { fontSize: orizzontale ? d(26) : 24 }]}>{setCorrente.punti_noi}-{setCorrente.punti_avversario}</Text>
+        {!orizzontale && etichettaFase && <Text style={styles.etichettaFase} numberOfLines={1}>{etichettaFase}</Text>}
         {!orizzontale && (
           <Text style={styles.nota} numberOfLines={1}>
             🏐 {setCorrente.squadra_al_servizio === "noi" ? (alServizio ? etichettaAtleta(alServizio.athlete_id) : "noi") : "loro"}
@@ -667,7 +690,7 @@ export default function PartitaLive() {
           <Campo9x9
             occupanti={occupanti}
             onTapPosizione={(pos) => {
-              const riga = formazione.find((f) => f.posizione === pos);
+              const riga = formazione.find((f) => f.posizione && zonaDi(f.posizione) === pos);
               if (!riga) return;
               // Secondo tocco sulla stessa persona: apre il cambio.
               // Evita un pulsante dedicato e ricalca il gesto naturale.
@@ -684,6 +707,7 @@ export default function PartitaLive() {
         </View>
         {!orizzontale && <View style={{ flex: 1 }}>{tabelloneJsx}</View>}
         </View>
+        {orizzontale && etichettaFase && <Text style={styles.etichettaFase} numberOfLines={1}>{etichettaFase}</Text>}
         {orizzontale && (
           <Text style={styles.nota} numberOfLines={1}>
             servizio: {setCorrente.squadra_al_servizio === "noi" ? (alServizio ? etichettaAtleta(alServizio.athlete_id) : "noi") : "loro"}
@@ -1111,6 +1135,7 @@ const styles = StyleSheet.create({
 
   rigaToggle: { flexDirection: "row", alignItems: "center", gap: 4 },
   nota: { color: brand.colors.muted, fontSize: 11 },
+  etichettaFase: { color: brand.colors.brandSecondary, fontSize: 11, fontWeight: "700", textAlign: "center" },
   etichettaLog: { color: brand.colors.muted, fontSize: 10, textTransform: "uppercase", marginTop: 4 },
   rigaLog: { color: brand.colors.onSurfaceSecondary, fontSize: 11, paddingVertical: 2 },
   bannerSerie: { backgroundColor: "rgba(255,215,0,0.15)", borderColor: brand.colors.warning, borderWidth: 1, borderRadius: 8, padding: 8 },

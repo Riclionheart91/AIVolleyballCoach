@@ -23,6 +23,7 @@ export default function RootLayout() {
         <Stack.Screen name="notifiche" options={{ headerShown: false, presentation: "modal" }} />
         <Stack.Screen name="pianificazione-annuale" options={{ headerShown: false }} />
         <Stack.Screen name="campionati" options={{ headerShown: false }} />
+        <Stack.Screen name="schemi-gioco" options={{ headerShown: false }} />
         <Stack.Screen name="gestione-squadra" options={{ headerShown: false }} />
         <Stack.Screen name="gestione-societa" options={{ headerShown: false }} />
         <Stack.Screen name="rubrica-staff" options={{ headerShown: false }} />
