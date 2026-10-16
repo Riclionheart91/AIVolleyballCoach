@@ -46,7 +46,7 @@ export default function SchemiGioco() {
         await salvaSchemaGioco(team.id, f as FaseSchema, Number(v), Number(r), a);
       }
       await carica();
-    } catch (e) { avvisa("Salvataggio non riuscito", (e as Error).message); }
+    } catch (e) { avvisa("Salvataggio non riuscito", `${(e as Error).message}\n\nSe l'errore parla di numeri o di zone, l'aggiornamento del database per gli schemi a pallini non è ancora stato applicato: riprova più tardi.`); }
     finally { setInCorso(false); }
   }
 
