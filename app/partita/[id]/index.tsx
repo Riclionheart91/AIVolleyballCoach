@@ -145,6 +145,7 @@ export default function PartitaLive() {
   const [turni, setTurni] = useState<RendimentoTurnoServizio[]>([]);
   const [servizioRicezione, setServizioRicezione] = useState<RendimentoServizioRicezione | null>(null);
   const [parereAI, setParereAI] = useState<string | null>(null);
+  const [dettagliSituazione, setDettagliSituazione] = useState(false);
   const [chiedendoAI, setChiedendoAI] = useState(false);
   const [popupEventi, setPopupEventi] = useState(false);
   const [timeouts, setTimeouts] = useState<MatchTimeout[]>([]);
@@ -392,6 +393,7 @@ export default function PartitaLive() {
 
   async function apriSituazione() {
     setPopupSituazione(true);
+    setDettagliSituazione(false);
     setParereAI(null);
     if (match) {
       try { setRotazioni(await rendimentoRotazioniPartita(match.id)); } catch { setRotazioni([]); }
@@ -627,6 +629,9 @@ export default function PartitaLive() {
 
   function ModaleSituazione() {
     const segnalazioni: SegnalazioneSituazione[] = analizzaSituazione(eventi, (aid) => etichettaAtleta(aid));
+    const saldoAzioni = segnalazioni.find((x) => x.saldo !== undefined)?.saldo ?? null;
+    const avvisiSituazione = segnalazioni.filter((x) => x.saldo === undefined);
+    const rotazionePeggiore = rotazioni.length > 0 ? [...rotazioni].sort((x, y) => x.saldo - y.saldo)[0] : null;
     return (
       <Modal visible={popupSituazione} animationType="slide" transparent onRequestClose={() => setPopupSituazione(false)}>
         <View style={styles.sfondoPopup}>
@@ -636,12 +641,43 @@ export default function PartitaLive() {
               <Pressable onPress={() => setPopupSituazione(false)} hitSlop={12}><Text style={styles.chiudiPopup}>✕</Text></Pressable>
             </View>
             <ScrollView contentContainerStyle={{ gap: 10 }}>
-              {segnalazioni.map((s, i) => (
-                <Text key={i} style={[styles.segnalazione, s.gravita === "attenzione" && styles.segnalazioneAttenzione]}>
-                  {s.gravita === "attenzione" ? "⚠ " : "• "}{s.testo}
-                </Text>
-              ))}
+              {/* Lettura rapida: tre numeri, gli avvisi e la rotazione piu' debole. Il resto sta sotto "Dettagli". */}
+              <View style={styles.rigaNumeriSituazione}>
+                <View style={styles.numeroSituazione}>
+                  <Text style={[styles.numeroSituazioneValore, saldoAzioni != null && saldoAzioni < 0 && styles.saldoNegativo]}>
+                    {saldoAzioni != null ? `${saldoAzioni >= 0 ? "+" : ""}${saldoAzioni}` : "–"}
+                  </Text>
+                  <Text style={styles.numeroSituazioneEtichetta}>Saldo</Text>
+                </View>
+                <View style={styles.numeroSituazione}>
+                  <Text style={styles.numeroSituazioneValore}>{servizioRicezione?.side_out_pct != null ? `${servizioRicezione.side_out_pct}%` : "–"}</Text>
+                  <Text style={styles.numeroSituazioneEtichetta}>Side-out</Text>
+                </View>
+                <View style={styles.numeroSituazione}>
+                  <Text style={styles.numeroSituazioneValore}>{servizioRicezione?.break_point_pct != null ? `${servizioRicezione.break_point_pct}%` : "–"}</Text>
+                  <Text style={styles.numeroSituazioneEtichetta}>Break-point</Text>
+                </View>
+              </View>
 
+              {avvisiSituazione.length === 0 ? (
+                <Text style={styles.segnalazione}>✓ Nessun allarme</Text>
+              ) : (
+                avvisiSituazione.map((s, i) => (
+                  <Text key={i} style={[styles.segnalazione, s.gravita === "attenzione" && styles.segnalazioneAttenzione]}>
+                    {s.gravita === "attenzione" ? "⚠ " : "• "}{s.testo}
+                  </Text>
+                ))
+              )}
+              {rotazionePeggiore && rotazionePeggiore.saldo < 0 && (
+                <Text style={styles.segnalazione}>↻ Più debole: al servizio {rotazionePeggiore.rotazione_di} ({rotazionePeggiore.saldo})</Text>
+              )}
+
+              <Pressable onPress={() => setDettagliSituazione((v) => !v)} style={styles.tastoDettagli}>
+                <Text style={styles.tastoDettagliTesto}>{dettagliSituazione ? "Nascondi dettagli ▴" : "Dettagli ▾"}</Text>
+              </Pressable>
+
+              {dettagliSituazione && (
+              <>
               <Text style={styles.titoloSezionePopup}>Rendimento per rotazione</Text>
               {rotazioni.length === 0 ? (
                 <Text style={styles.nota}>Nessun dato per rotazione ancora.</Text>
@@ -701,7 +737,9 @@ export default function PartitaLive() {
                   {chiedendoAI ? <ActivityIndicator color={brand.colors.brandSecondary} /> : <Text style={styles.bottoneAITesto}>✨ Chiedi un parere</Text>}
                 </Pressable>
               )}
-              <Text style={styles.nota}>Le letture qui sopra sono calcolate in locale e non consumano nulla. Il parere discorsivo parte solo se lo chiedi.</Text>
+              <Text style={styles.nota}>Le letture sono calcolate in locale e non consumano nulla. Il parere discorsivo parte solo se lo chiedi.</Text>
+              </>
+              )}
             </ScrollView>
           </View>
         </View>
@@ -1223,6 +1261,12 @@ const styles = StyleSheet.create({
   rigaRotazione: { flexDirection: "row", justifyContent: "space-between", paddingVertical: 4, borderBottomWidth: 1, borderBottomColor: brand.colors.border },
   rigaRotazioneNome: { color: brand.colors.onSurfaceSecondary, fontSize: 12 },
   rigaRotazioneSaldo: { color: brand.colors.success, fontSize: 12, fontWeight: "700" },
+  rigaNumeriSituazione: { flexDirection: "row", gap: 8 },
+  numeroSituazione: { flex: 1, alignItems: "center", paddingVertical: 8, borderRadius: 10, backgroundColor: "rgba(255,255,255,0.06)" },
+  numeroSituazioneValore: { color: brand.colors.onSurface, fontSize: 22, fontWeight: "800" },
+  numeroSituazioneEtichetta: { color: brand.colors.muted, fontSize: 11, fontWeight: "600" },
+  tastoDettagli: { alignItems: "center", paddingVertical: 8, borderRadius: 8, borderWidth: 1, borderColor: brand.colors.border },
+  tastoDettagliTesto: { color: brand.colors.onSurfaceSecondary, fontSize: 12, fontWeight: "700" },
   saldoNegativo: { color: brand.colors.error },
   parere: { color: brand.colors.onSurface, fontSize: 13, lineHeight: 20 },
   bottoneAI: { borderWidth: 1, borderColor: brand.colors.brandSecondary, borderRadius: 8, paddingVertical: 12, alignItems: "center" },

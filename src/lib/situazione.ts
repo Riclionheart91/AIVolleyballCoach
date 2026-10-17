@@ -3,6 +3,8 @@ import type { MatchEvent } from "@/src/types/database";
 export interface SegnalazioneSituazione {
   testo: string;
   gravita: "info" | "attenzione";
+  /** Il saldo complessivo si mostra a parte, come numero grande. */
+  saldo?: number;
 }
 
 /**
@@ -17,7 +19,7 @@ export function analizzaSituazione(
 ): SegnalazioneSituazione[] {
   const segnalazioni: SegnalazioneSituazione[] = [];
   if (eventi.length < 4) {
-    return [{ testo: "Ancora pochi dati: servono qualche scambio in più per una lettura sensata.", gravita: "info" }];
+    return [{ testo: "Pochi dati ancora.", gravita: "info" }];
   }
 
   const errori = eventi.filter((e) => e.esito === "errore" || e.skill === "Punto_avversario");
@@ -34,7 +36,7 @@ export function analizzaSituazione(
     const quota = Math.round((skillPeggiore[1] / errori.length) * 100);
     if (quota >= 40) {
       segnalazioni.push({
-        testo: `${quota}% degli errori arriva da ${skillPeggiore[0].toLowerCase()} (${skillPeggiore[1]} su ${errori.length}).`,
+        testo: `Errori: ${quota}% da ${skillPeggiore[0].toLowerCase()} (${skillPeggiore[1]}/${errori.length})`,
         gravita: "attenzione",
       });
     }
@@ -43,15 +45,16 @@ export function analizzaSituazione(
   // Saldo complessivo
   const saldo = punti.length - errori.length;
   segnalazioni.push({
-    testo: `Saldo azioni: ${saldo >= 0 ? "+" : ""}${saldo} (${punti.length} punti, ${errori.length} errori).`,
+    testo: `Saldo ${saldo >= 0 ? "+" : ""}${saldo} (${punti.length} pt, ${errori.length} err)`,
     gravita: saldo < -3 ? "attenzione" : "info",
+    saldo,
   });
 
   // Andamento recente: gli ultimi scambi pesano più della media generale
   const recenti = eventi.slice(0, 6);
   const erroriRecenti = recenti.filter((e) => e.esito === "errore" || e.skill === "Punto_avversario").length;
   if (recenti.length >= 5 && erroriRecenti >= 4) {
-    segnalazioni.push({ testo: `${erroriRecenti} errori negli ultimi ${recenti.length} scambi: momento negativo, valuta un time-out.`, gravita: "attenzione" });
+    segnalazioni.push({ testo: `${erroriRecenti} errori su ${recenti.length} azioni: time-out?`, gravita: "attenzione" });
   }
 
   // Chi sta faticando
@@ -63,11 +66,11 @@ export function analizzaSituazione(
   }
   const inDifficolta = Object.entries(saldoPerAtleta).filter(([, s]) => s <= -3).sort((a, b) => a[1] - b[1])[0];
   if (inDifficolta) {
-    segnalazioni.push({ testo: `${nomePerAtleta(inDifficolta[0])} è a ${inDifficolta[1]} di saldo: valuta un cambio o un time-out.`, gravita: "attenzione" });
+    segnalazioni.push({ testo: `${nomePerAtleta(inDifficolta[0])} ${inDifficolta[1]}: cambio o time-out?`, gravita: "attenzione" });
   }
   const inSerata = Object.entries(saldoPerAtleta).filter(([, s]) => s >= 3).sort((a, b) => b[1] - a[1])[0];
   if (inSerata) {
-    segnalazioni.push({ testo: `${nomePerAtleta(inSerata[0])} è in serata (+${inSerata[1]}): cercala di più.`, gravita: "info" });
+    segnalazioni.push({ testo: `${nomePerAtleta(inSerata[0])} +${inSerata[1]}: cercala`, gravita: "info" });
   }
 
   return segnalazioni;
