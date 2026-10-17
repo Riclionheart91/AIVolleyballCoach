@@ -10,6 +10,8 @@ import {
   chiudiMatch,
   elencaConvocati,
   elencaEventiPartita,
+  elencaEventiPerRotazione,
+  type EventoPerRotazione,
   elencaFormazioneConPosizioni,
   elencaSet,
   elencaStoricoFormazioneSet,
@@ -30,7 +32,7 @@ import {
 import { chiediParerePartitaAI } from "@/src/services/evaluations";
 import { rendimentoTurniServizio, type RendimentoTurnoServizio } from "@/src/services/matches";
 import { rendimentoServizioRicezionePartita, type RendimentoServizioRicezione } from "@/src/services/matches";
-import { analizzaSituazione, riassuntoPerAI, type SegnalazioneSituazione } from "@/src/lib/situazione";
+import { analizzaSituazione, riassuntoPerAI, rotazionePiuDebole, type SegnalazioneSituazione } from "@/src/lib/situazione";
 import { brand, skillsScouting, skillsScoutingEssenziali } from "@/src/config";
 import type { Athlete, Esito, Match, MatchEvent, MatchSet, MatchSetLineup, QualitaRicezione, Skill } from "@/src/types/database";
 import { supabaseClient } from "@/src/lib/supabase";
@@ -146,6 +148,7 @@ export default function PartitaLive() {
   const [servizioRicezione, setServizioRicezione] = useState<RendimentoServizioRicezione | null>(null);
   const [parereAI, setParereAI] = useState<string | null>(null);
   const [dettagliSituazione, setDettagliSituazione] = useState(false);
+  const [eventiRotazione, setEventiRotazione] = useState<EventoPerRotazione[]>([]);
   const [chiedendoAI, setChiedendoAI] = useState(false);
   const [popupEventi, setPopupEventi] = useState(false);
   const [timeouts, setTimeouts] = useState<MatchTimeout[]>([]);
@@ -396,6 +399,7 @@ export default function PartitaLive() {
     setDettagliSituazione(false);
     setParereAI(null);
     if (match) {
+      try { setEventiRotazione(await elencaEventiPerRotazione(match.id)); } catch { setEventiRotazione([]); }
       try { setRotazioni(await rendimentoRotazioniPartita(match.id)); } catch { setRotazioni([]); }
       try { setTurni(await rendimentoTurniServizio(match.id)); } catch { setTurni([]); }
       try { setServizioRicezione(await rendimentoServizioRicezionePartita(match.id)); } catch { setServizioRicezione(null); }
@@ -631,7 +635,7 @@ export default function PartitaLive() {
     const segnalazioni: SegnalazioneSituazione[] = analizzaSituazione(eventi, (aid) => etichettaAtleta(aid));
     const saldoAzioni = segnalazioni.find((x) => x.saldo !== undefined)?.saldo ?? null;
     const avvisiSituazione = segnalazioni.filter((x) => x.saldo === undefined);
-    const rotazionePeggiore = rotazioni.length > 0 ? [...rotazioni].sort((x, y) => x.saldo - y.saldo)[0] : null;
+    const rotazioneDebole = rotazionePiuDebole(eventiRotazione, (aid) => nomeAtleta(aid)?.cognome ?? "—");
     return (
       <Modal visible={popupSituazione} animationType="slide" transparent onRequestClose={() => setPopupSituazione(false)}>
         <View style={styles.sfondoPopup}>
@@ -668,8 +672,10 @@ export default function PartitaLive() {
                   </Text>
                 ))
               )}
-              {rotazionePeggiore && rotazionePeggiore.saldo < 0 && (
-                <Text style={styles.segnalazione}>↻ Più debole: al servizio {rotazionePeggiore.rotazione_di} ({rotazionePeggiore.saldo})</Text>
+              {rotazioneDebole && (
+                <Text style={styles.segnalazione}>
+                  ↻ Rotazione più debole: servizio {rotazioneDebole.alServizio} ({rotazioneDebole.saldo}){rotazioneDebole.motivo ? ` — ${rotazioneDebole.motivo}` : ""}
+                </Text>
               )}
 
               <Pressable onPress={() => setDettagliSituazione((v) => !v)} style={styles.tastoDettagli}>

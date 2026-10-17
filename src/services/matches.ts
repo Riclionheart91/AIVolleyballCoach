@@ -90,6 +90,25 @@ export async function chiudiMatch(matchId: string): Promise<void> {
   if (error) throw error;
 }
 
+/** Evento con la rotazione (chi era al servizio) in cui e' avvenuto: serve a dire dove siamo deboli in ogni rotazione. */
+export interface EventoPerRotazione {
+  skill: Skill;
+  esito: Esito | null;
+  athlete_id: string | null;
+  rotazione_al_servizio: string | null;
+}
+
+/** TUTTI gli eventi della partita con la rotazione, per l'analisi della rotazione piu' debole. */
+export async function elencaEventiPerRotazione(matchId: string): Promise<EventoPerRotazione[]> {
+  const { data, error } = await supabaseClient
+    .from("match_events")
+    .select("skill, esito, athlete_id, rotazione_al_servizio")
+    .eq("match_id", matchId)
+    .limit(5000);
+  if (error) throw error;
+  return (data ?? []) as EventoPerRotazione[];
+}
+
 export async function elencaEventiPartita(matchId: string, limite = 20): Promise<MatchEvent[]> {
   const { data, error } = await supabaseClient.from("match_events").select("*").eq("match_id", matchId).order("creato_il", { ascending: false }).limit(limite);
   if (error) throw error;

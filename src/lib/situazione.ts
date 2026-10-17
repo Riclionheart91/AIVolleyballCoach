@@ -104,3 +104,57 @@ export function riassuntoPerAI(eventi: MatchEvent[], nomePerAtleta: (id: string)
     `Per giocatrice: ${Object.entries(perAtleta).map(([k, v]) => `${k} ${v.punti}+/${v.errori}-`).join(", ")}.`
   );
 }
+
+export interface RotazioneDebole {
+  /** Chi e' al servizio in quella rotazione. */
+  alServizio: string;
+  saldo: number;
+  /** In cosa siamo deboli: es. "ricezione 3 err · attacco 2 err · Rossi 2 err". */
+  motivo: string;
+}
+
+/**
+ * Rotazione (identificata da chi serve) col saldo peggiore, e in cosa pesa:
+ * i fondamentali con piu' errori che punti e la giocatrice con piu' errori.
+ * Serve almeno qualche azione nella rotazione e un saldo negativo.
+ */
+export function rotazionePiuDebole(
+  eventi: { skill: string; esito: string | null; athlete_id: string | null; rotazione_al_servizio: string | null }[],
+  nomePerAtleta: (id: string) => string,
+): RotazioneDebole | null {
+  const perRotazione = new Map<string, typeof eventi>();
+  for (const e of eventi) {
+    if (!e.rotazione_al_servizio) continue;
+    const l = perRotazione.get(e.rotazione_al_servizio) ?? [];
+    l.push(e);
+    perRotazione.set(e.rotazione_al_servizio, l);
+  }
+  let peggiore: { id: string; saldo: number; lista: typeof eventi } | null = null;
+  for (const [id, lista] of perRotazione) {
+    if (lista.length < 4) continue;
+    const punti = lista.filter((e) => e.esito === "punto" || e.skill === "Punto_nostro").length;
+    const errori = lista.filter((e) => e.esito === "errore" || e.skill === "Punto_avversario").length;
+    const saldo = punti - errori;
+    if (!peggiore || saldo < peggiore.saldo) peggiore = { id, saldo, lista };
+  }
+  if (!peggiore || peggiore.saldo >= 0) return null;
+
+  const perSkill: Record<string, number> = {};
+  const perAtleta: Record<string, number> = {};
+  for (const e of peggiore.lista) {
+    const errore = e.esito === "errore" || e.skill === "Punto_avversario";
+    const punto = e.esito === "punto" || e.skill === "Punto_nostro";
+    if (!errore && !punto) continue;
+    const nome = e.skill === "Punto_avversario" ? "punti diretti avversari" : e.skill === "Punto_nostro" ? null : e.skill.toLowerCase();
+    if (nome) perSkill[nome] = (perSkill[nome] ?? 0) + (errore ? 1 : -1);
+    if (errore && e.athlete_id) perAtleta[e.athlete_id] = (perAtleta[e.athlete_id] ?? 0) + 1;
+  }
+  const parti = Object.entries(perSkill)
+    .filter(([, v]) => v > 0)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 2)
+    .map(([k, v]) => `${k} ${v} err`);
+  const peggioreAtleta = Object.entries(perAtleta).sort((a, b) => b[1] - a[1])[0];
+  if (peggioreAtleta && peggioreAtleta[1] >= 2) parti.push(`${nomePerAtleta(peggioreAtleta[0])} ${peggioreAtleta[1]} err`);
+  return { alServizio: nomePerAtleta(peggiore.id), saldo: peggiore.saldo, motivo: parti.join(" · ") };
+}
