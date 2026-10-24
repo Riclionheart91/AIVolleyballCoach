@@ -509,7 +509,7 @@ export default function Partite() {
             )}
             {puoEliminare && item.stato !== "conclusa" && (
               <Pressable onPress={() => apriOspiti(item)} hitSlop={8} style={styles.bottoneOspite}>
-                <Text style={styles.bottoneOspiteTesto}>👁 Scout con QR</Text>
+                <Text style={styles.bottoneOspiteTesto}>📋 Scout con QR</Text>
               </Pressable>
             )}
             {puoEliminare && (

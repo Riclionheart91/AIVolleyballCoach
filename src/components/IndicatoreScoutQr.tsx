@@ -25,7 +25,7 @@ export function IndicatoreScoutQr({ matchId, ogniMs = 8000 }: { matchId: string;
   return inCampo ? (
     <Text style={[styles.testo, styles.attivo]} numberOfLines={1}>🟢 {inCampo.nome} sta registrando{collegati.length > 1 ? ` · +${collegati.length - 1} collegat${collegati.length - 1 === 1 ? "o" : "i"}` : ""}</Text>
   ) : (
-    <Text style={styles.testo} numberOfLines={1}>👁 {collegati.map((s) => s.nome).join(", ")} collegat{collegati.length === 1 ? "o" : "i"} · nessuno sta registrando</Text>
+    <Text style={styles.testo} numberOfLines={1}>📋 {collegati.map((s) => s.nome).join(", ")} collegat{collegati.length === 1 ? "o" : "i"} · nessuno sta registrando</Text>
   );
 }
 
