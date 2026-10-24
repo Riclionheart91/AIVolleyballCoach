@@ -378,6 +378,8 @@ export interface EventoAndamento {
   set_id: string;
   skill: Skill;
   esito: Esito | null;
+  athlete_id: string | null;
+  qualita: string | null;
   creato_il: string;
 }
 
@@ -385,7 +387,7 @@ export interface EventoAndamento {
 export async function elencaEventiPerAndamento(matchId: string): Promise<EventoAndamento[]> {
   const { data, error } = await supabaseClient
     .from("match_events")
-    .select("id, set_id, skill, esito, creato_il")
+    .select("id, set_id, skill, esito, athlete_id, qualita, creato_il")
     .eq("match_id", matchId)
     .order("creato_il", { ascending: true })
     .limit(5000);

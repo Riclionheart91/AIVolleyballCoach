@@ -11,6 +11,8 @@ import {
 import { GrigliaZone, type ValoreZona } from "@/src/components/ZoneCampo";
 import { GraficoAndamentoSet } from "@/src/components/GraficoAndamentoSet";
 import { costruisciAndamentoPerSet, seriePiuLunghe } from "@/src/lib/andamentoPunti";
+import { calcolaVoti, coloreVoto, MIN_AZIONI_VOTO } from "@/src/lib/votiPartita";
+import { costruisciRivivi } from "@/src/lib/rivivi";
 import { esportaCsv, stampaScheda, type SchedaPartita } from "@/src/lib/esportaPartita";
 import { supabaseClient } from "@/src/lib/supabase";
 import { avvisa } from "@/src/lib/confermaAzione";
@@ -43,6 +45,9 @@ export default function AnalisiPartita() {
   const [zone, setZone] = useState<AnalisiZona[]>([]);
   // Per l'attacco si puo' guardare dove e' caduta la palla oppure da dove e' partito l'attacco.
   const [zonaAttaccoVista, setZonaAttaccoVista] = useState<"arrivo" | "partenza">("arrivo");
+  const [filtroRivivi, setFiltroRivivi] = useState<"tutti" | "noi" | "loro">("tutti");
+  const [setRivivi, setSetRivivi] = useState<Set<string>>(new Set());
+  const [mostraCalcoloVoto, setMostraCalcoloVoto] = useState(false);
   const [trendPersone, setTrendPersone] = useState<Record<string, AndamentoPersonaPartita[]>>({});
 
   const carica = useCallback(async () => {
@@ -225,6 +230,28 @@ export default function AnalisiPartita() {
 
   const massimoAzioni = Math.max(1, ...fondamentali.map((f) => f.azioni));
 
+  // Voti, "rivivi la partita" e scheda generale: tutto calcolato dagli eventi.
+  const nomiAtlete = new Map(persone.map((p) => [p.athlete_id, p.nome_completo]));
+  const nomeAtleta = (aid: string) => nomiAtlete.get(aid) ?? "—";
+  const voti = calcolaVoti(eventiAndamento);
+  const rivivi = costruisciRivivi(eventiAndamento, nomeAtleta);
+  const migliore = Object.values(voti).filter((v) => v.voto !== null).sort((a, b) => (b.voto ?? 0) - (a.voto ?? 0))[0] ?? null;
+  const conta = (f: (e: EventoAndamento) => boolean) => eventiAndamento.filter(f).length;
+  const aceBattuta = conta((e) => e.skill === "Servizio" && e.esito === "punto");
+  const erroriBattuta = conta((e) => e.skill === "Servizio" && e.esito === "errore");
+  const puntiMuro = conta((e) => e.skill === "Muro" && e.esito === "punto");
+  const erroriNostri = conta((e) => e.esito === "errore");
+  const puntiDirettiLoro = conta((e) => e.skill === "Punto_avversario");
+  const ricezioniTot = conta((e) => e.skill === "Ricezione");
+  const ricezioniPositive = conta((e) => e.skill === "Ricezione" && (e.qualita === "ottima" || e.qualita === "buona"));
+  const efficienzaAttacco = fondamentali.find((f) => f.fondamentale === "Attacco")?.efficienza ?? null;
+  const setVintiNoi = setGiocati.filter((x) => x.punti_noi > x.punti_avversario).length;
+  const setVintiLoro = setGiocati.filter((x) => x.punti_avversario > x.punti_noi).length;
+  const percentuale = (n: number, d: number) => (d > 0 ? `${Math.round((n / d) * 100)}%` : "—");
+  function alternaSetRivivi(setId: string) {
+    setSetRivivi((prev) => { const n = new Set(prev); if (n.has(setId)) n.delete(setId); else n.add(setId); return n; });
+  }
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
@@ -235,6 +262,63 @@ export default function AnalisiPartita() {
       </View>
 
       <ScrollView contentContainerStyle={{ padding: 16, gap: 20, paddingBottom: 60 }}>
+        {setGiocati.length > 0 && (
+          <View>
+            <Text style={styles.sezione}>Risultato e parziali</Text>
+            <Text style={[styles.risultatoGrande, { color: setVintiNoi > setVintiLoro ? brand.colors.success : setVintiNoi < setVintiLoro ? brand.colors.error : brand.colors.onSurface }]}>
+              {setVintiNoi} - {setVintiLoro}
+            </Text>
+            <View style={styles.rigaParziali}>
+              {setGiocati.map((x) => {
+                const vinto = x.punti_noi > x.punti_avversario;
+                const perso = x.punti_noi < x.punti_avversario;
+                return (
+                  <View key={x.id} style={styles.cardParziale}>
+                    <Text style={styles.parzialeSet}>Set {x.numero_set}</Text>
+                    <Text style={[styles.parzialePunteggio, { color: vinto ? brand.colors.success : perso ? brand.colors.error : brand.colors.onSurface }]}>{x.punti_noi}-{x.punti_avversario}</Text>
+                    {!x.concluso && <Text style={styles.parzialeSet}>in corso</Text>}
+                  </View>
+                );
+              })}
+            </View>
+          </View>
+        )}
+
+        {eventiAndamento.length > 0 && (
+          <View>
+            <Text style={styles.sezione}>Scheda della partita</Text>
+            <View style={styles.rigaAndamento}>
+              <Text style={styles.rigaAndamentoTesto}>Side-out (punti vinti quando riceviamo)</Text>
+              <Text style={styles.valoreScheda}>{servizioRicezione?.side_out_pct != null ? `${servizioRicezione.side_out_pct}%` : "—"}</Text>
+            </View>
+            <View style={styles.rigaAndamento}>
+              <Text style={styles.rigaAndamentoTesto}>Break-point (punti vinti quando battiamo)</Text>
+              <Text style={styles.valoreScheda}>{servizioRicezione?.break_point_pct != null ? `${servizioRicezione.break_point_pct}%` : "—"}</Text>
+            </View>
+            <View style={styles.rigaAndamento}>
+              <Text style={styles.rigaAndamentoTesto}>Ricezione positiva ({ricezioniPositive}/{ricezioniTot})</Text>
+              <Text style={styles.valoreScheda}>{percentuale(ricezioniPositive, ricezioniTot)}</Text>
+            </View>
+            <View style={styles.rigaAndamento}>
+              <Text style={styles.rigaAndamentoTesto}>Efficienza in attacco</Text>
+              <Text style={[styles.valoreScheda, { color: coloreEfficienza(efficienzaAttacco) }]}>{formattaEfficienza(efficienzaAttacco)}</Text>
+            </View>
+            <View style={styles.rigaAndamento}>
+              <Text style={styles.rigaAndamentoTesto}>Ace / errori in battuta</Text>
+              <Text style={styles.valoreScheda}>{aceBattuta} / {erroriBattuta}</Text>
+            </View>
+            <View style={styles.rigaAndamento}>
+              <Text style={styles.rigaAndamentoTesto}>Punti a muro</Text>
+              <Text style={styles.valoreScheda}>{puntiMuro}</Text>
+            </View>
+            <View style={styles.rigaAndamento}>
+              <Text style={styles.rigaAndamentoTesto}>Errori nostri / punti diretti avversari</Text>
+              <Text style={styles.valoreScheda}>{erroriNostri} / {puntiDirettiLoro}</Text>
+            </View>
+            <Text style={styles.dettaglioFondamentale}>"Errori nostri" sono quelli attribuiti a una giocatrice; "punti diretti avversari" sono i punti loro registrati senza un nostro errore specifico.</Text>
+          </View>
+        )}
+
         <View>
           <Text style={styles.sezione}>Efficienza per fondamentale</Text>
           <Text style={styles.nota}>Punti meno errori sulle azioni totali: dice quanto un fondamentale rende, non solo quante volte è stato usato.</Text>
@@ -342,9 +426,64 @@ export default function AnalisiPartita() {
           </View>
         )}
 
+        {setGiocati.length > 0 && eventiAndamento.length > 0 && (
+          <View>
+            <Text style={styles.sezione}>Rivivi la partita</Text>
+            <Text style={styles.nota}>Punto per punto: punteggio, chi ha segnato e come. Con 🔥 le serie da 3 punti di fila e con ⏱ i time-out.</Text>
+            <View style={{ flexDirection: "row", gap: 8, marginBottom: 8 }}>
+              {([["tutti", "Tutti i punti"], ["noi", "Nostri"], ["loro", "Loro"]] as const).map(([k, et]) => (
+                <Pressable key={k} onPress={() => setFiltroRivivi(k)} style={[styles.chipZona, filtroRivivi === k && styles.chipZonaAttivo]}>
+                  <Text style={[styles.chipZonaTesto, filtroRivivi === k && styles.chipZonaTestoAttivo]}>{et}</Text>
+                </Pressable>
+              ))}
+            </View>
+            {setGiocati.map((x) => {
+              const punti = rivivi[x.id] ?? [];
+              const aperto = setRivivi.has(x.id);
+              const to = timeouts.filter((t) => t.set_id === x.id);
+              return (
+                <View key={x.id} style={styles.bloccoSet}>
+                  <Pressable onPress={() => alternaSetRivivi(x.id)}>
+                    <Text style={styles.titoloSet}>{aperto ? "▾" : "▸"} Set {x.numero_set} — {x.punti_noi}-{x.punti_avversario} ({punti.length} punti)</Text>
+                  </Pressable>
+                  {aperto && punti.map((pt) => {
+                    if (filtroRivivi === "noi" && pt.chi !== "noi") return null;
+                    if (filtroRivivi === "loro" && pt.chi !== "avversario") return null;
+                    const toDopo = to.filter((t) => t.punti_noi + t.punti_avversario === pt.numero);
+                    return (
+                      <View key={pt.numero}>
+                        <View style={styles.rigaRivivi}>
+                          <Text style={[styles.punteggioRivivi, { color: pt.chi === "noi" ? brand.colors.success : brand.colors.error }]}>{pt.noi}-{pt.avv}</Text>
+                          <Text style={styles.testoRivivi} numberOfLines={2}>
+                            {pt.chi === "noi" ? "Noi · " : "Loro · "}{pt.testo}{pt.serie >= 3 ? `  🔥 ${pt.serie} di fila` : ""}
+                          </Text>
+                        </View>
+                        {toDopo.map((t) => (
+                          <Text key={t.id} style={styles.timeoutRivivi}>⏱ Time-out {t.squadra === "noi" ? "nostro" : "loro"} sul {t.punti_noi}-{t.punti_avversario}</Text>
+                        ))}
+                      </View>
+                    );
+                  })}
+                </View>
+              );
+            })}
+          </View>
+        )}
+
         <View>
           <Text style={styles.sezione}>Contributo individuale</Text>
-          <Text style={styles.nota}>Ordinate dal saldo migliore. Con "punto di forza" e "punto debole" nella partita.{Object.keys(dettaglio).length > 0 ? " Tocca una riga per vedere i numeri fondamentale per fondamentale." : ""}</Text>
+          <Text style={styles.nota}>Ordinate dal saldo migliore. Il voto è da 0 a 10 (n.c. sotto le {MIN_AZIONI_VOTO} azioni).{Object.keys(dettaglio).length > 0 ? " Tocca una giocatrice per vedere voto e numeri fondamentale per fondamentale." : ""}</Text>
+          {migliore && (
+            <Text style={styles.migliore}>⭐ Migliore in campo: {nomeAtleta(migliore.athlete_id)} ({migliore.voto?.toFixed(1)})</Text>
+          )}
+          <Pressable onPress={() => setMostraCalcoloVoto((v) => !v)}>
+            <Text style={styles.linkCalcolo}>{mostraCalcoloVoto ? "▾" : "▸"} Come si calcola il voto</Text>
+          </Pressable>
+          {mostraCalcoloVoto && (
+            <Text style={styles.nota}>
+              Ogni fondamentale ha un indice tra −1 e +1: (punti − errori) / azioni; per ricezione e difesa (perfette + ½ buone − errori) / azioni. Il voto del fondamentale è 6 + 4 × indice (6 = in equilibrio, 10 = tutto punti, 0 = tutto errori), smorzato verso il 6 quando le azioni sono poche. Il voto generale è la media dei fondamentali, dando più peso a quelli con più azioni.
+            </Text>
+          )}
           {persone.length === 0 ? (
             <Text style={styles.vuoto}>Nessun dato individuale disponibile.</Text>
           ) : (
@@ -364,9 +503,12 @@ export default function AnalisiPartita() {
                         {p.fondamentale_peggiore && p.fondamentale_peggiore !== p.fondamentale_migliore ? ` · da curare: ${p.fondamentale_peggiore}` : ""}
                       </Text>
                     </View>
-                    <Text style={[styles.saldoPersona, { color: p.saldo >= 0 ? brand.colors.success : brand.colors.error }]}>
-                      {p.saldo >= 0 ? "+" : ""}{p.saldo}
-                    </Text>
+                    <View style={{ alignItems: "flex-end" }}>
+                      <Text style={[styles.votoPersona, { color: brand.colors[coloreVoto(voti[p.athlete_id]?.voto ?? null)] }]}>
+                        {voti[p.athlete_id]?.voto != null ? voti[p.athlete_id].voto!.toFixed(1) : "n.c."}
+                      </Text>
+                      <Text style={[styles.dettaglioPersona, { color: p.saldo >= 0 ? brand.colors.success : brand.colors.error }]}>saldo {p.saldo >= 0 ? "+" : ""}{p.saldo}</Text>
+                    </View>
                   </Pressable>
 
                   {aperta && (
@@ -378,6 +520,7 @@ export default function AnalisiPartita() {
                         <Text style={[styles.cellaNumero, styles.intestazioneTabella]}>Neu</Text>
                         <Text style={[styles.cellaNumero, styles.intestazioneTabella]}>Err</Text>
                         <Text style={[styles.cellaEfficienza, styles.intestazioneTabella]}>Eff.</Text>
+                        <Text style={[styles.cellaVoto, styles.intestazioneTabella]}>Voto</Text>
                       </View>
                       {righe.map((r) => {
                         const eff = efficienzaDi(r.punti, r.errori, r.azioni);
@@ -390,12 +533,20 @@ export default function AnalisiPartita() {
                               <Text style={styles.cellaNumero}>{r.neutri}</Text>
                               <Text style={styles.cellaNumero}>{r.errori}</Text>
                               <Text style={[styles.cellaEfficienza, { color: coloreEfficienza(eff) }]}>{formattaEfficienza(eff)}</Text>
+                              {(() => {
+                                const vf = voti[p.athlete_id]?.fondamentali.find((x) => x.fondamentale === r.fondamentale);
+                                return <Text style={[styles.cellaVoto, { color: brand.colors[coloreVoto(vf?.voto ?? null)] }]}>{vf ? vf.voto.toFixed(1) : "—"}</Text>;
+                              })()}
                             </View>
-                            {r.fondamentale === "Ricezione" && (
-                              <Text style={styles.dettaglioRicezione}>
-                                Qualità: {r.ricezioni_ottime} perfette · {r.ricezioni_buone} buone · {r.ricezioni_scarse} scarse · {r.errori} errori
-                              </Text>
-                            )}
+                            {(r.fondamentale === "Ricezione" || r.fondamentale === "Difesa") && (() => {
+                              const vf = voti[p.athlete_id]?.fondamentali.find((x) => x.fondamentale === r.fondamentale);
+                              if (!vf || vf.perfette + vf.buone + vf.scarse === 0) return null;
+                              return (
+                                <Text style={styles.dettaglioRicezione}>
+                                  Qualità: {vf.perfette} perfette · {vf.buone} buone · {vf.scarse} scarse · {vf.errori} errori
+                                </Text>
+                              );
+                            })()}
                           </View>
                         );
                       })}
@@ -413,6 +564,7 @@ export default function AnalisiPartita() {
                             <Text style={[styles.cellaNumero, styles.testoTotale]}>{totNeu}</Text>
                             <Text style={[styles.cellaNumero, styles.testoTotale]}>{totErr}</Text>
                             <Text style={[styles.cellaEfficienza, styles.testoTotale, { color: coloreEfficienza(eff) }]}>{formattaEfficienza(eff)}</Text>
+                            <Text style={[styles.cellaVoto, styles.testoTotale, { color: brand.colors[coloreVoto(voti[p.athlete_id]?.voto ?? null)] }]}>{voti[p.athlete_id]?.voto != null ? voti[p.athlete_id].voto!.toFixed(1) : "n.c."}</Text>
                           </View>
                         );
                       })()}
@@ -504,11 +656,25 @@ const styles = StyleSheet.create({
   intestazioneTabella: { color: brand.colors.muted, fontSize: 10, fontWeight: "700", textTransform: "uppercase" },
   cellaFondamentale: { flex: 1, color: brand.colors.onSurface, fontSize: 12, fontWeight: "600" },
   cellaNumero: { width: 32, textAlign: "right", color: brand.colors.onSurfaceSecondary, fontSize: 12 },
+  cellaVoto: { width: 40, textAlign: "right", fontSize: 12, fontWeight: "800", color: brand.colors.onSurfaceSecondary },
   cellaEfficienza: { width: 48, textAlign: "right", fontSize: 12, fontWeight: "800", color: brand.colors.onSurfaceSecondary },
   dettaglioRicezione: { color: brand.colors.muted, fontSize: 11, paddingBottom: 2 },
   rigaTotale: { borderTopWidth: 1, borderTopColor: brand.colors.border, paddingTop: 4, marginTop: 2 },
   testoTotale: { fontWeight: "800", color: brand.colors.onSurface },
   notaTabella: { color: brand.colors.muted, fontSize: 10, marginTop: 4 },
+  risultatoGrande: { fontSize: 34, fontWeight: "800", textAlign: "center", marginVertical: 4 },
+  rigaParziali: { flexDirection: "row", flexWrap: "wrap", gap: 8, justifyContent: "center" },
+  cardParziale: { backgroundColor: brand.colors.surfaceSecondary, borderRadius: 10, paddingVertical: 8, paddingHorizontal: 14, alignItems: "center", minWidth: 76 },
+  parzialeSet: { color: brand.colors.muted, fontSize: 11, fontWeight: "700" },
+  parzialePunteggio: { fontSize: 20, fontWeight: "800" },
+  valoreScheda: { color: brand.colors.onSurface, fontSize: 14, fontWeight: "800" },
+  rigaRivivi: { flexDirection: "row", gap: 10, alignItems: "center", paddingVertical: 3 },
+  punteggioRivivi: { width: 52, fontSize: 13, fontWeight: "800", textAlign: "right" },
+  testoRivivi: { flex: 1, color: brand.colors.onSurfaceSecondary, fontSize: 12 },
+  timeoutRivivi: { color: brand.colors.warning, fontSize: 11, fontWeight: "700", paddingLeft: 62, paddingVertical: 2 },
+  migliore: { color: brand.colors.onSurface, fontSize: 14, fontWeight: "700", marginBottom: 6 },
+  linkCalcolo: { color: brand.colors.brandSecondary, fontSize: 12, fontWeight: "700", marginBottom: 6 },
+  votoPersona: { fontSize: 18, fontWeight: "800" },
   posizionePersona: { color: brand.colors.muted, fontSize: 13, fontWeight: "700", width: 20 },
   nomePersona: { color: brand.colors.onSurface, fontSize: 14, fontWeight: "600" },
   dettaglioPersona: { color: brand.colors.muted, fontSize: 11, marginTop: 2 },
