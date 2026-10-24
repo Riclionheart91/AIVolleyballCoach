@@ -22,6 +22,9 @@ import {
   registraEvento,
   registraTimeout,
   faiUscireLibero,
+  impostaRegolaLibero,
+  leggiRegolaLibero,
+  type RegolaLibero,
   liberoInCampo,
   rendimentoRotazioniPartita,
   rimpiazzaConLibero,
@@ -125,6 +128,12 @@ export default function PartitaLive() {
   const [liberiIds, setLiberiIds] = useState<Set<string>>(new Set());
   const [libero, setLibero] = useState<LiberoInCampo | null>(null);
   const [popupLibero, setPopupLibero] = useState(false);
+  // Libero scelto per la partita e i due centrali su cui entra (si imposta una volta a inizio partita).
+  const [regolaLibero, setRegolaLibero] = useState<RegolaLibero | null>(null);
+  const [popupRegolaLibero, setPopupRegolaLibero] = useState(false);
+  const [bozzaRegola, setBozzaRegola] = useState<{ libero: string | null; centrali: string[] }>({ libero: null, centrali: [] });
+  // Centrali per cui si e' scelto "lascia senza Libero": non si richiede finche' non tornano in prima linea.
+  const [rientroRifiutato, setRientroRifiutato] = useState<string[]>([]);
   // Secondo tocco sul Libero in campo: si sceglie solo tra far rientrare la titolare o far entrare l'altro Libero.
   const [popupCambioLibero, setPopupCambioLibero] = useState(false);
   // Chi esce, già scelto, in attesa di sapere quale Libero entra (solo se i Liberi sono più d'uno).
@@ -204,6 +213,7 @@ export default function PartitaLive() {
         setStoricoFormazione(st.formazione);
         setLibero(st.libero ?? null);
         setTimeouts(st.timeouts ?? []);
+        try { setRegolaLibero(await leggiRegolaLibero(id)); } catch { /* resta quella di prima */ }
       } catch (e) {
         setErroreOspite((e as Error).message);
       }
@@ -222,6 +232,7 @@ export default function PartitaLive() {
       setLiberiIds(new Set(convocati.filter((c) => c.is_libero).map((c) => c.athlete_id)));
       setRegolePunteggio(await leggiRegolePunteggio(id));
       setTimeouts(await elencaTimeout(id));
+      try { setRegolaLibero(await leggiRegolaLibero(id)); } catch { /* resta quella di prima */ }
     }
     if (attivo) {
       const [inCampo, storico] = await Promise.all([elencaFormazioneConPosizioni(attivo.id), elencaStoricoFormazioneSet(attivo.id)]);
@@ -242,6 +253,17 @@ export default function PartitaLive() {
     if (modoOspite || !teamIdPartita) return;
     elencaSchemiGioco(teamIdPartita).then(setSchemi).catch(() => setSchemi({}));
   }, [modoOspite, teamIdPartita]);
+
+  // "Lascia senza Libero" vale finche' il centrale resta in seconda linea: in prima linea (o fuori campo) si azzera.
+  useEffect(() => {
+    setRientroRifiutato((prev) => {
+      const restano = prev.filter((aid) => {
+        const f = formazione.find((x) => x.athlete_id === aid);
+        return !!f && !(f.posizione !== null && f.posizione >= 2 && f.posizione <= 4);
+      });
+      return restano.length === prev.length ? prev : restano;
+    });
+  }, [formazione]);
 
   // L'ospite non puo' leggere le tabelle direttamente, quindi niente
   // trasmissione in tempo reale: si rilegge a intervalli brevi.
@@ -479,6 +501,8 @@ export default function PartitaLive() {
     try {
       await faiUscireLibero(setCorrente.id);
       await rimpiazzaConLibero(setCorrente.id, nuovoLiberoId, titolareId);
+      // Il nuovo Libero resta quello della partita, sugli stessi centrali.
+      if (match && regolaLibero) { try { await impostaRegolaLibero(match.id, nuovoLiberoId, regolaLibero.titolare_1, regolaLibero.titolare_2); } catch { /* la regola si puo' reimpostare */ } }
       setPopupCambioLibero(false);
       setAtletaSelId(null);
       carica();
@@ -630,6 +654,45 @@ export default function PartitaLive() {
       accento: a?.ruolo_campo === "Libero",
     };
   });
+
+  // --- Libero: regola della partita, avviso di uscita e di rientro ----------
+  const centraliLibero = regolaLibero ? [regolaLibero.titolare_1, regolaLibero.titolare_2].filter((x): x is string => !!x) : [];
+  const liberoDellaPartita = regolaLibero?.libero_id ?? null;
+  // Fra un rally e l'altro: un centrale associato e' in seconda linea (in 1 solo se non battiamo noi) e il Libero non c'e'.
+  const centralePerLibero = !libero && liberoDellaPartita && inizioScambio
+    ? formazione.find((f) => centraliLibero.includes(f.athlete_id) && !rientroRifiutato.includes(f.athlete_id)
+        && (f.posizione === 5 || f.posizione === 6 || (f.posizione === 1 && !noiAlServizio)))
+    : undefined;
+  // Libero in 5 mentre riceviamo: al prossimo cambio palla va in prima linea e deve uscire.
+  const liberoInUscita = !!libero && libero.posizione === 5 && !noiAlServizio;
+
+  async function faiEntrareLiberoRegola(titolareId: string) {
+    if (!setCorrente || !liberoDellaPartita) return;
+    try {
+      await rimpiazzaConLibero(setCorrente.id, liberoDellaPartita, titolareId);
+      carica();
+    } catch (e) { carica(); avvisa("Libero", (e as Error).message); }
+  }
+
+  function apriRegolaLibero() {
+    // Parte da quanto gia' impostato; altrimenti dal Libero unico e dai centrali che stanno in campo.
+    const centraliInCampo = formazione.filter((f) => nomeAtleta(f.athlete_id)?.ruolo_campo === "Centrale").map((f) => f.athlete_id);
+    setBozzaRegola({
+      libero: liberoDellaPartita ?? (liberiDisponibili.length === 1 ? liberiDisponibili[0].id : null),
+      centrali: centraliLibero.length > 0 ? centraliLibero : centraliInCampo.slice(0, 2),
+    });
+    setPopupRegolaLibero(true);
+  }
+
+  async function salvaRegolaLibero() {
+    if (!match) return;
+    try {
+      await impostaRegolaLibero(match.id, bozzaRegola.libero, bozzaRegola.centrali[0] ?? null, bozzaRegola.centrali[1] ?? null);
+      setPopupRegolaLibero(false);
+      setRientroRifiutato([]);
+      carica();
+    } catch (e) { avvisa("Libero non impostato", (e as Error).message); }
+  }
 
   function ModaleSituazione() {
     const segnalazioni: SegnalazioneSituazione[] = analizzaSituazione(eventi, (aid) => etichettaAtleta(aid));
@@ -784,9 +847,27 @@ export default function PartitaLive() {
       <View style={[styles.colonnaCampo, orizzontale ? { width: latoCampo + LARGHEZZA_TASTO_LIBERO + 6 } : { width: "100%", alignItems: "center" }]}>
         <View style={{ flexDirection: "row", gap: 6, alignItems: "stretch", width: orizzontale ? undefined : "100%" }}>
         {puoScoutare && (
-          <Pressable onPress={() => setPopupLibero(true)} style={[styles.tastoLibero, { width: LARGHEZZA_TASTO_LIBERO }, libero && styles.tastoPiccoloAttivo]}>
-            <Text style={[styles.tastoPiccoloTesto, libero && styles.tastoPiccoloTestoAttivo]}>{libero ? "L ✓" : "Libero"}</Text>
-          </Pressable>
+          <View style={{ width: LARGHEZZA_TASTO_LIBERO, gap: 6 }}>
+            <Pressable
+              onPress={() => {
+                // Con un Libero in campo il tasto cambia direttamente con l'altro Libero (se c'e'): sono al massimo due.
+                if (libero) {
+                  const altro = liberiDisponibili.find((l) => l.id !== libero.libero_id);
+                  if (altro) {
+                    confermaAzione("Cambio Libero", `Entra #${altro.numero_maglia ?? "-"} ${altro.cognome} al posto di ${etichettaAtleta(libero.libero_id)}?`, "Cambia", () => cambiaLiberoInCampo(altro.id));
+                    return;
+                  }
+                }
+                setPopupLibero(true);
+              }}
+              style={[styles.tastoLibero, { flex: 1 }, libero && styles.tastoPiccoloAttivo]}
+            >
+              <Text style={[styles.tastoPiccoloTesto, libero && styles.tastoPiccoloTestoAttivo]}>{libero ? "L ✓" : "Libero"}</Text>
+            </Pressable>
+            <Pressable onPress={apriRegolaLibero} style={[styles.tastoLibero, { height: 44 }, regolaLibero?.libero_id && styles.tastoPiccoloAttivo]}>
+              <Text style={[styles.tastoPiccoloTesto, regolaLibero?.libero_id && styles.tastoPiccoloTestoAttivo]}>⚙ Centr.</Text>
+            </Pressable>
+          </View>
         )}
         <View style={{ width: latoCampo, height: latoCampo }}>
           <CampoPallini
@@ -824,6 +905,30 @@ export default function PartitaLive() {
           <Pressable style={styles.bannerSerie} onPress={() => setPopupTimeout(true)}>
             <Text style={styles.bannerSerieTesto}>⚠ Serie avversaria: {serieAvversaria} punti di fila — valuta un time-out (tocca per chiamarlo)</Text>
           </Pressable>
+        )}
+
+        {puoScoutare && centralePerLibero && (
+          <View style={styles.bannerLibero}>
+            <Text style={styles.bannerLiberoTesto}>
+              Libero: entra per {etichettaAtleta(centralePerLibero.athlete_id)} (posizione {centralePerLibero.posizione})?
+            </Text>
+            <View style={{ flexDirection: "row", gap: 8 }}>
+              <Pressable style={styles.bannerLiberoSi} onPress={() => faiEntrareLiberoRegola(centralePerLibero.athlete_id)}>
+                <Text style={styles.bannerLiberoSiTesto}>Entra il Libero</Text>
+              </Pressable>
+              <Pressable style={styles.bannerLiberoNo} onPress={() => setRientroRifiutato((p) => [...p, centralePerLibero.athlete_id])}>
+                <Text style={styles.bannerLiberoNoTesto}>Lascia {nomeAtleta(centralePerLibero.athlete_id)?.cognome ?? "in campo"}</Text>
+              </Pressable>
+            </View>
+          </View>
+        )}
+
+        {puoScoutare && liberoInUscita && libero && (
+          <View style={styles.bannerLiberoUscita}>
+            <Text style={styles.bannerLiberoUscitaTesto}>
+              ⚠ Il Libero sta per uscire: al cambio palla va in prima linea e rientra {etichettaAtleta(libero.titolare_id)}.
+            </Text>
+          </View>
         )}
 
         {erroreVisibile && (
@@ -1086,6 +1191,56 @@ export default function PartitaLive() {
       </Modal>
 
 
+      <Modal visible={popupRegolaLibero} animationType="fade" transparent onRequestClose={() => setPopupRegolaLibero(false)}>
+        <View style={styles.sfondoPopup}>
+          <View style={styles.cartaPopup}>
+            <View style={styles.intestazionePopup}>
+              <Text style={styles.titoloPopup}>Libero e centrali</Text>
+              <Pressable onPress={() => setPopupRegolaLibero(false)} hitSlop={12}><Text style={styles.chiudiPopup}>✕</Text></Pressable>
+            </View>
+            <ScrollView contentContainerStyle={{ gap: 8 }}>
+              <Text style={styles.nota}>Si imposta una volta sola: il Libero entra sempre per i due centrali scelti e se un centrale viene sostituito vale per chi entra.</Text>
+              {liberiDisponibili.length > 1 && (
+                <>
+                  <Text style={styles.titoloSezionePopup}>Libero</Text>
+                  {liberiDisponibili.map((l) => (
+                    <Pressable key={l.id} style={[styles.rigaScelta, bozzaRegola.libero === l.id && styles.rigaSceltaAttiva]} onPress={() => setBozzaRegola((b) => ({ ...b, libero: l.id }))}>
+                      <Text style={styles.rigaSceltaTesto}>{bozzaRegola.libero === l.id ? "✓ " : ""}#{l.numero_maglia ?? "-"} {l.nome} {l.cognome}</Text>
+                    </Pressable>
+                  ))}
+                </>
+              )}
+              <Text style={styles.titoloSezionePopup}>Centrali (due)</Text>
+              {atlete
+                .filter((a) => convocateIds.includes(a.id) && !liberiIds.has(a.id))
+                .sort((a, b) => Number(b.ruolo_campo === "Centrale") - Number(a.ruolo_campo === "Centrale"))
+                .map((a) => {
+                  const scelto = bozzaRegola.centrali.includes(a.id);
+                  return (
+                    <Pressable
+                      key={a.id}
+                      style={[styles.rigaScelta, scelto && styles.rigaSceltaAttiva]}
+                      onPress={() => setBozzaRegola((b) => ({
+                        ...b,
+                        centrali: scelto ? b.centrali.filter((x) => x !== a.id) : b.centrali.length >= 2 ? [b.centrali[1], a.id] : [...b.centrali, a.id],
+                      }))}
+                    >
+                      <Text style={styles.rigaSceltaTesto}>{scelto ? "✓ " : ""}#{a.numero_maglia ?? "-"} {a.nome} {a.cognome}{a.ruolo_campo === "Centrale" ? " · centrale" : ""}</Text>
+                    </Pressable>
+                  );
+                })}
+            </ScrollView>
+            <Pressable
+              disabled={!bozzaRegola.libero || bozzaRegola.centrali.length !== 2}
+              style={[styles.bottoneSecondario, (!bozzaRegola.libero || bozzaRegola.centrali.length !== 2) && { opacity: 0.4 }]}
+              onPress={salvaRegolaLibero}
+            >
+              <Text style={styles.bottoneSecondarioTesto}>Salva</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
+
       <Modal visible={popupCambioLibero} animationType="fade" transparent onRequestClose={() => setPopupCambioLibero(false)}>
         <View style={styles.sfondoPopup}>
           <View style={styles.cartaPopup}>
@@ -1246,6 +1401,15 @@ const styles = StyleSheet.create({
   etichettaFase: { color: brand.colors.brandSecondary, fontSize: 11, fontWeight: "700", textAlign: "center" },
   etichettaLog: { color: brand.colors.muted, fontSize: 10, textTransform: "uppercase", marginTop: 4 },
   rigaLog: { color: brand.colors.onSurfaceSecondary, fontSize: 11, paddingVertical: 2 },
+  bannerLibero: { backgroundColor: "rgba(0,200,120,0.14)", borderColor: brand.colors.success, borderWidth: 1, borderRadius: 8, padding: 8, gap: 6 },
+  bannerLiberoTesto: { color: brand.colors.onSurface, fontSize: 13, fontWeight: "700" },
+  bannerLiberoSi: { flex: 1, backgroundColor: brand.colors.brand, borderRadius: 8, paddingVertical: 10, alignItems: "center" },
+  bannerLiberoSiTesto: { color: "#000", fontWeight: "800", fontSize: 13 },
+  bannerLiberoNo: { flex: 1, borderColor: brand.colors.border, borderWidth: 1, borderRadius: 8, paddingVertical: 10, alignItems: "center" },
+  bannerLiberoNoTesto: { color: brand.colors.onSurface, fontWeight: "600", fontSize: 13 },
+  bannerLiberoUscita: { backgroundColor: "rgba(255,215,0,0.15)", borderColor: brand.colors.warning, borderWidth: 1, borderRadius: 8, padding: 8 },
+  bannerLiberoUscitaTesto: { color: brand.colors.warning, fontSize: 12, fontWeight: "700" },
+  rigaSceltaAttiva: { borderColor: brand.colors.brand, borderWidth: 2 },
   bannerSerie: { backgroundColor: "rgba(255,215,0,0.15)", borderColor: brand.colors.warning, borderWidth: 1, borderRadius: 8, padding: 8 },
   bannerSerieTesto: { color: brand.colors.warning, fontSize: 12, fontWeight: "700" },
   vuoto: { color: brand.colors.muted, textAlign: "center", marginTop: 32 },

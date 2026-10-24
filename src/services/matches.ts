@@ -55,6 +55,21 @@ export async function avviaMatchConfermato(matchId: string): Promise<void> {
   if (error) throw error;
 }
 
+/** Libero scelto per la partita e i due centrali su cui entra. */
+export interface RegolaLibero { libero_id: string | null; titolare_1: string | null; titolare_2: string | null }
+
+export async function leggiRegolaLibero(matchId: string): Promise<RegolaLibero | null> {
+  const { data, error } = await supabaseClient.rpc("leggi_regola_libero", { p_match_id: matchId });
+  if (error) throw error;
+  const r = (data ?? [])[0] as RegolaLibero | undefined;
+  return r ?? null;
+}
+
+export async function impostaRegolaLibero(matchId: string, liberoId: string | null, titolare1: string | null, titolare2: string | null): Promise<void> {
+  const { error } = await supabaseClient.rpc("imposta_regola_libero", { p_match_id: matchId, p_libero_id: liberoId, p_titolare_1: titolare1, p_titolare_2: titolare2 });
+  if (error) throw error;
+}
+
 export async function cambiaGiocatore(setId: string, atletaUscente: string, atletaEntrante: string): Promise<void> {
   const { error } = await supabaseClient.rpc("cambia_giocatore", { p_set_id: setId, p_atleta_uscente: atletaUscente, p_atleta_entrante: atletaEntrante });
   if (error) throw error;
