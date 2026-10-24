@@ -8,7 +8,6 @@ import { PannelloSporteasy } from "@/src/components/PannelloSporteasy";
 import { brand } from "@/src/config";
 import type { Campionato, Match, MatchSet } from "@/src/types/database";
 import { avvisa, confermaAzione } from "@/src/lib/confermaAzione";
-import { elencaScoutOspiti, invitaScoutOspite, rimuoviScoutOspite, type ScoutOspite } from "@/src/services/scoutOspiti";
 import { cambiaCodiceScout, elencaScoutAnonimi, escludiScoutAnonimo, linkScout, ottieniCodiceScout, rilasciaTurnoScout, type ScoutAnonimo } from "@/src/services/scoutQr";
 import { CodiceQr } from "@/src/components/CodiceQr";
 import { IndicatoreScoutQr } from "@/src/components/IndicatoreScoutQr";
@@ -145,11 +144,8 @@ export default function Partite() {
     );
   }
 
-  // Scout ospite: persona esterna invitata su UNA partita (vede solo quella, solo finche' e' in corso).
+  // Scout esterno: persona che registra UNA partita col QR/link (vede solo quella, solo finche' e' in corso).
   const [ospitiPartita, setOspitiPartita] = useState<Match | null>(null);
-  const [ospitiElenco, setOspitiElenco] = useState<ScoutOspite[]>([]);
-  const [emailOspite, setEmailOspite] = useState("");
-  const [invioOspite, setInvioOspite] = useState(false);
 
   // Scout senza account: QR della partita e persone agganciate.
   const [codiceQr, setCodiceQr] = useState<string | null>(null);
@@ -212,34 +208,11 @@ export default function Partite() {
     return () => clearInterval(t);
   }, [ospitiPartita?.id]);
 
-  async function apriOspiti(m: Match) {
+  function apriOspiti(m: Match) {
     setOspitiPartita(m);
     setMostraQr(false);
     setCodiceQr(null);
     setAnonimi([]);
-    setEmailOspite("");
-    setOspitiElenco([]);
-    try { setOspitiElenco(await elencaScoutOspiti(m.id)); }
-    catch (e) { avvisa("Impossibile leggere gli inviti", (e as Error).message); }
-  }
-
-  async function onInvitaOspite() {
-    if (!ospitiPartita || !emailOspite.trim()) return;
-    setInvioOspite(true);
-    try {
-      await invitaScoutOspite(ospitiPartita.id, emailOspite.trim());
-      setEmailOspite("");
-      setOspitiElenco(await elencaScoutOspiti(ospitiPartita.id));
-    } catch (e) { avvisa("Invito non riuscito", (e as Error).message); }
-    finally { setInvioOspite(false); }
-  }
-
-  async function onRimuoviOspite(o: ScoutOspite) {
-    if (!ospitiPartita) return;
-    try {
-      await rimuoviScoutOspite(o.id);
-      setOspitiElenco(await elencaScoutOspiti(ospitiPartita.id));
-    } catch (e) { avvisa("Impossibile rimuovere", (e as Error).message); }
   }
 
   function chiediEliminazione(m: Match) {
@@ -366,9 +339,7 @@ export default function Partite() {
         <View style={styles.sfondoPopup}>
           <View style={[styles.cartaPopup, { maxHeight: "92%" }]}>
           <ScrollView contentContainerStyle={{ gap: 10 }}>
-            <Text style={styles.titoloPopup}>Scout ospite — vs {ospitiPartita?.avversario}</Text>
-
-            <Text style={styles.sottotitoloPopup}>Con il QR (senza account)</Text>
+            <Text style={styles.titoloPopup}>Scout con QR — vs {ospitiPartita?.avversario}</Text>
             <Text style={styles.nota}>
               Chi apre il QR scrive il suo nome ed entra subito, senza account. Vede solo questa partita, finché è in corso. Può registrare, fare cambi e gestire il Libero, aprire il set successivo (a set finito) e inserire la formazione. La partita la chiude solo lo staff. Registra una persona alla volta: le altre guardano e possono subentrare.
             </Text>
@@ -407,35 +378,6 @@ export default function Partite() {
               </View>
             )}
 
-            <Text style={styles.sottotitoloPopup}>Con un account Google</Text>
-            <Text style={styles.nota}>
-              Invita una persona con la sua email: accede con Google e vede soltanto questa partita, solo mentre è in corso. L'accesso termina da solo a partita conclusa.
-            </Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Email dello scout (account Google)"
-              placeholderTextColor={brand.colors.muted}
-              autoCapitalize="none"
-              autoCorrect={false}
-              keyboardType="email-address"
-              value={emailOspite}
-              onChangeText={setEmailOspite}
-            />
-            <Pressable style={styles.bottone} onPress={onInvitaOspite} disabled={invioOspite}>
-              <Text style={styles.bottoneTesto}>{invioOspite ? "Un attimo…" : "Invita"}</Text>
-            </Pressable>
-            <ScrollView style={{ maxHeight: 220 }}>
-              {ospitiElenco.length === 0 ? (
-                <Text style={styles.nota}>Nessuno scout ospite invitato.</Text>
-              ) : ospitiElenco.map((o) => (
-                <View key={o.id} style={styles.rigaRotazione}>
-                  <Text style={styles.rigaRotazioneNome} numberOfLines={1}>{o.email}</Text>
-                  <Pressable onPress={() => onRimuoviOspite(o)} hitSlop={8}>
-                    <Text style={styles.erroreTesto}>Rimuovi</Text>
-                  </Pressable>
-                </View>
-              ))}
-            </ScrollView>
             <Pressable onPress={() => setOspitiPartita(null)}><Text style={styles.chiudiPopup}>Chiudi</Text></Pressable>
           </ScrollView>
           </View>
@@ -567,7 +509,7 @@ export default function Partite() {
             )}
             {puoEliminare && item.stato !== "conclusa" && (
               <Pressable onPress={() => apriOspiti(item)} hitSlop={8} style={styles.bottoneOspite}>
-                <Text style={styles.bottoneOspiteTesto}>👁 Scout ospite</Text>
+                <Text style={styles.bottoneOspiteTesto}>👁 Scout con QR</Text>
               </Pressable>
             )}
             {puoEliminare && (
