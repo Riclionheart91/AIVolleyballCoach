@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { View, Text, Pressable, StyleSheet, Modal, ScrollView, TextInput, Linking, Platform } from "react-native";
 import { brand } from "@/src/config";
+import { useAuth } from "@/src/context/AuthContext";
 import type { Athlete } from "@/src/types/database";
 
 export interface ModelloMessaggio { etichetta: string; testo: string }
@@ -32,10 +33,18 @@ export function MessaggioWhatsApp({ visibile, titolo, atleta, nota, modelli, onC
   /** Senza atleta si sceglie la chat in WhatsApp: questa e' la spiegazione sotto il pulsante. */
   nota?: string; modelli: ModelloMessaggio[]; onChiudi: () => void;
 }) {
+  const { session } = useAuth();
   const [testo, setTesto] = useState("");
 
+  // Il messaggio e' firmato con il nome di chi lo sta mandando (nome dell'account Google, altrimenti l'inizio dell'email).
+  const meta = (session?.user.user_metadata ?? {}) as { full_name?: string; name?: string };
+  const firmatario = (meta.full_name || meta.name || session?.user.email?.split("@")[0] || "").trim();
+  const conFirma = (t: string) => (firmatario ? `${t.replace(/\s+$/, "")}\n— ${firmatario}` : t);
+  // Il commento della partita lascia uno spazio fra il risultato e la firma, da riempire.
+  const nuovoTesto = (t: string) => (t.endsWith("\n\n") ? `${t}\n${firmatario ? `— ${firmatario}` : ""}` : conFirma(t));
+
   useEffect(() => {
-    if (visibile) setTesto(modelli[0]?.testo ?? "");
+    if (visibile) setTesto(nuovoTesto(modelli[0]?.testo ?? ""));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visibile]);
 
@@ -51,8 +60,8 @@ export function MessaggioWhatsApp({ visibile, titolo, atleta, nota, modelli, onC
             {modelli.length > 1 && (
               <View style={styles.riga}>
                 {modelli.map((m) => (
-                  <Pressable key={m.etichetta} style={[styles.chip, testo === m.testo && styles.chipAttivo]} onPress={() => setTesto(m.testo)}>
-                    <Text style={[styles.chipTesto, testo === m.testo && styles.chipTestoAttivo]}>{m.etichetta}</Text>
+                  <Pressable key={m.etichetta} style={[styles.chip, testo === nuovoTesto(m.testo) && styles.chipAttivo]} onPress={() => setTesto(nuovoTesto(m.testo))}>
+                    <Text style={[styles.chipTesto, testo === nuovoTesto(m.testo) && styles.chipTestoAttivo]}>{m.etichetta}</Text>
                   </Pressable>
                 ))}
               </View>

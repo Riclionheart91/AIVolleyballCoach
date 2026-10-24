@@ -19,8 +19,8 @@ export function inviaLinkScout(squadra: string, avversario: string, link: string
 export function promemoriaCertificato(squadra: string, scadenzaIso: string): string {
   const scaduto = new Date(scadenzaIso) < new Date();
   return scaduto
-    ? `Ciao {nome}, il tuo certificato medico agonistico è scaduto il ${data(scadenzaIso)}. Senza certificato valido non puoi allenarti né giocare: appena puoi fissa la visita e portami il nuovo certificato. Grazie! — ${squadra}`
-    : `Ciao {nome}, ti ricordo che il tuo certificato medico agonistico scade il ${data(scadenzaIso)}. Fissa per tempo la visita e portami il nuovo certificato. Grazie! — ${squadra}`;
+    ? `Ciao {nome}, il tuo certificato medico agonistico è scaduto il ${data(scadenzaIso)}. Senza certificato valido non puoi allenarti né giocare: appena puoi fissa la visita e portami il nuovo certificato. Grazie!`
+    : `Ciao {nome}, ti ricordo che il tuo certificato medico agonistico scade il ${data(scadenzaIso)}. Fissa per tempo la visita e portami il nuovo certificato. Grazie!`;
 }
 
 /** Testo di partenza per il gruppo: risultato e set, poi lo spazio per il commento dell'allenatore. */
