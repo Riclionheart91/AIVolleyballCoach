@@ -249,6 +249,71 @@ export default function AnalisiPartita() {
   const attacchiConZona = attaccoPerZona.reduce((s2, z) => s2 + z.azioni, 0);
   const attacchiTotali = fondamentali.find((f) => f.fondamentale === "Attacco")?.azioni ?? 0;
   const percentuale = (n: number, d: number) => (d > 0 ? `${Math.round((n / d) * 100)}%` : "—");
+  function renderDettaglioPersona(athleteId: string) {
+    const righe = dettaglio[athleteId] ?? [];
+    return (
+                    <View style={styles.tabellaDettaglio}>
+                      <View style={styles.rigaTabella}>
+                        <Text style={[styles.cellaFondamentale, styles.intestazioneTabella]}>Fondamentale</Text>
+                        <Text style={[styles.cellaNumero, styles.intestazioneTabella]}>Az.</Text>
+                        <Text style={[styles.cellaNumero, styles.intestazioneTabella]}>Pt</Text>
+                        <Text style={[styles.cellaNumero, styles.intestazioneTabella]}>Neu</Text>
+                        <Text style={[styles.cellaNumero, styles.intestazioneTabella]}>Err</Text>
+                        <Text style={[styles.cellaEfficienza, styles.intestazioneTabella]}>Eff.</Text>
+                        <Text style={[styles.cellaVoto, styles.intestazioneTabella]}>Voto</Text>
+                      </View>
+                      {righe.map((r) => {
+                        const eff = efficienzaDi(r.punti, r.errori, r.azioni);
+                        return (
+                          <View key={r.fondamentale}>
+                            <View style={styles.rigaTabella}>
+                              <Text style={styles.cellaFondamentale}>{r.fondamentale}</Text>
+                              <Text style={styles.cellaNumero}>{r.azioni}</Text>
+                              <Text style={styles.cellaNumero}>{r.punti}</Text>
+                              <Text style={styles.cellaNumero}>{r.neutri}</Text>
+                              <Text style={styles.cellaNumero}>{r.errori}</Text>
+                              <Text style={[styles.cellaEfficienza, { color: coloreEfficienza(eff) }]}>{formattaEfficienza(eff)}</Text>
+                              {(() => {
+                                const vf = voti[athleteId]?.fondamentali.find((x) => x.fondamentale === r.fondamentale);
+                                return <Text style={[styles.cellaVoto, { color: brand.colors[coloreVoto(vf?.voto ?? null)] }]}>{vf ? vf.voto.toFixed(1) : "—"}</Text>;
+                              })()}
+                            </View>
+                            {(r.fondamentale === "Ricezione" || r.fondamentale === "Difesa") && (() => {
+                              const vf = voti[athleteId]?.fondamentali.find((x) => x.fondamentale === r.fondamentale);
+                              if (!vf || vf.perfette + vf.buone + vf.scarse === 0) return null;
+                              return (
+                                <Text style={styles.dettaglioRicezione}>
+                                  Qualità: {vf.perfette} perfette · {vf.buone} buone · {vf.scarse} scarse · {vf.errori} errori
+                                </Text>
+                              );
+                            })()}
+                          </View>
+                        );
+                      })}
+                      {(() => {
+                        const totAz = righe.reduce((s, r) => s + r.azioni, 0);
+                        const totPt = righe.reduce((s, r) => s + r.punti, 0);
+                        const totNeu = righe.reduce((s, r) => s + r.neutri, 0);
+                        const totErr = righe.reduce((s, r) => s + r.errori, 0);
+                        const eff = efficienzaDi(totPt, totErr, totAz);
+                        return (
+                          <View style={[styles.rigaTabella, styles.rigaTotale]}>
+                            <Text style={[styles.cellaFondamentale, styles.testoTotale]}>Totale</Text>
+                            <Text style={[styles.cellaNumero, styles.testoTotale]}>{totAz}</Text>
+                            <Text style={[styles.cellaNumero, styles.testoTotale]}>{totPt}</Text>
+                            <Text style={[styles.cellaNumero, styles.testoTotale]}>{totNeu}</Text>
+                            <Text style={[styles.cellaNumero, styles.testoTotale]}>{totErr}</Text>
+                            <Text style={[styles.cellaEfficienza, styles.testoTotale, { color: coloreEfficienza(eff) }]}>{formattaEfficienza(eff)}</Text>
+                            <Text style={[styles.cellaVoto, styles.testoTotale, { color: brand.colors[coloreVoto(voti[athleteId]?.voto ?? null)] }]}>{voti[athleteId]?.voto != null ? voti[athleteId].voto!.toFixed(1) : "n.c."}</Text>
+                          </View>
+                        );
+                      })()}
+                      <Text style={styles.notaTabella}>Pt = punti, Neu = neutri, Err = errori. Efficienza = (punti − errori) / azioni.</Text>
+                      {renderTrend(athleteId)}
+                    </View>
+    );
+  }
+
   function alternaSetRivivi(setId: string) {
     setSetRivivi((prev) => { const n = new Set(prev); if (n.has(setId)) n.delete(setId); else n.add(setId); return n; });
   }
@@ -472,7 +537,18 @@ export default function AnalisiPartita() {
           <Text style={styles.sezione}>Contributo individuale</Text>
           <Text style={styles.nota}>Ordinate dal saldo migliore. Il voto è da 0 a 10 (n.c. sotto le {MIN_AZIONI_VOTO} azioni).{Object.keys(dettaglio).length > 0 ? " Tocca una giocatrice per vedere voto e numeri fondamentale per fondamentale." : ""}</Text>
           {migliore && (
-            <Text style={styles.migliore}>⭐ Migliore in campo: {nomeAtleta(migliore.athlete_id)} ({migliore.voto?.toFixed(1)})</Text>
+            <View>
+              <Pressable onPress={() => alternaDettaglio(migliore.athlete_id)}>
+                <Text style={styles.migliore}>
+                  ⭐ Migliore in campo: {nomeAtleta(migliore.athlete_id)} ({migliore.voto?.toFixed(1)}) {aperti.has(migliore.athlete_id) ? "▾" : "▸ vedi i fondamentali"}
+                </Text>
+              </Pressable>
+              {aperti.has(migliore.athlete_id) && (
+                (dettaglio[migliore.athlete_id] ?? []).length > 0
+                  ? renderDettaglioPersona(migliore.athlete_id)
+                  : <Text style={styles.nota}>Nessun dettaglio per fondamentale disponibile.</Text>
+              )}
+            </View>
           )}
           <Pressable onPress={() => setMostraCalcoloVoto((v) => !v)}>
             <Text style={styles.linkCalcolo}>{mostraCalcoloVoto ? "▾" : "▸"} Come si calcola il voto</Text>
@@ -509,67 +585,7 @@ export default function AnalisiPartita() {
                     </View>
                   </Pressable>
 
-                  {aperta && (
-                    <View style={styles.tabellaDettaglio}>
-                      <View style={styles.rigaTabella}>
-                        <Text style={[styles.cellaFondamentale, styles.intestazioneTabella]}>Fondamentale</Text>
-                        <Text style={[styles.cellaNumero, styles.intestazioneTabella]}>Az.</Text>
-                        <Text style={[styles.cellaNumero, styles.intestazioneTabella]}>Pt</Text>
-                        <Text style={[styles.cellaNumero, styles.intestazioneTabella]}>Neu</Text>
-                        <Text style={[styles.cellaNumero, styles.intestazioneTabella]}>Err</Text>
-                        <Text style={[styles.cellaEfficienza, styles.intestazioneTabella]}>Eff.</Text>
-                        <Text style={[styles.cellaVoto, styles.intestazioneTabella]}>Voto</Text>
-                      </View>
-                      {righe.map((r) => {
-                        const eff = efficienzaDi(r.punti, r.errori, r.azioni);
-                        return (
-                          <View key={r.fondamentale}>
-                            <View style={styles.rigaTabella}>
-                              <Text style={styles.cellaFondamentale}>{r.fondamentale}</Text>
-                              <Text style={styles.cellaNumero}>{r.azioni}</Text>
-                              <Text style={styles.cellaNumero}>{r.punti}</Text>
-                              <Text style={styles.cellaNumero}>{r.neutri}</Text>
-                              <Text style={styles.cellaNumero}>{r.errori}</Text>
-                              <Text style={[styles.cellaEfficienza, { color: coloreEfficienza(eff) }]}>{formattaEfficienza(eff)}</Text>
-                              {(() => {
-                                const vf = voti[p.athlete_id]?.fondamentali.find((x) => x.fondamentale === r.fondamentale);
-                                return <Text style={[styles.cellaVoto, { color: brand.colors[coloreVoto(vf?.voto ?? null)] }]}>{vf ? vf.voto.toFixed(1) : "—"}</Text>;
-                              })()}
-                            </View>
-                            {(r.fondamentale === "Ricezione" || r.fondamentale === "Difesa") && (() => {
-                              const vf = voti[p.athlete_id]?.fondamentali.find((x) => x.fondamentale === r.fondamentale);
-                              if (!vf || vf.perfette + vf.buone + vf.scarse === 0) return null;
-                              return (
-                                <Text style={styles.dettaglioRicezione}>
-                                  Qualità: {vf.perfette} perfette · {vf.buone} buone · {vf.scarse} scarse · {vf.errori} errori
-                                </Text>
-                              );
-                            })()}
-                          </View>
-                        );
-                      })}
-                      {(() => {
-                        const totAz = righe.reduce((s, r) => s + r.azioni, 0);
-                        const totPt = righe.reduce((s, r) => s + r.punti, 0);
-                        const totNeu = righe.reduce((s, r) => s + r.neutri, 0);
-                        const totErr = righe.reduce((s, r) => s + r.errori, 0);
-                        const eff = efficienzaDi(totPt, totErr, totAz);
-                        return (
-                          <View style={[styles.rigaTabella, styles.rigaTotale]}>
-                            <Text style={[styles.cellaFondamentale, styles.testoTotale]}>Totale</Text>
-                            <Text style={[styles.cellaNumero, styles.testoTotale]}>{totAz}</Text>
-                            <Text style={[styles.cellaNumero, styles.testoTotale]}>{totPt}</Text>
-                            <Text style={[styles.cellaNumero, styles.testoTotale]}>{totNeu}</Text>
-                            <Text style={[styles.cellaNumero, styles.testoTotale]}>{totErr}</Text>
-                            <Text style={[styles.cellaEfficienza, styles.testoTotale, { color: coloreEfficienza(eff) }]}>{formattaEfficienza(eff)}</Text>
-                            <Text style={[styles.cellaVoto, styles.testoTotale, { color: brand.colors[coloreVoto(voti[p.athlete_id]?.voto ?? null)] }]}>{voti[p.athlete_id]?.voto != null ? voti[p.athlete_id].voto!.toFixed(1) : "n.c."}</Text>
-                          </View>
-                        );
-                      })()}
-                      <Text style={styles.notaTabella}>Pt = punti, Neu = neutri, Err = errori. Efficienza = (punti − errori) / azioni.</Text>
-                      {renderTrend(p.athlete_id)}
-                    </View>
-                  )}
+                  {aperta && renderDettaglioPersona(p.athlete_id)}
                 </View>
               );
             })

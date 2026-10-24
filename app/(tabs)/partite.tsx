@@ -2,11 +2,11 @@ import { useCallback, useEffect, useState } from "react";
 import { View, Text, FlatList, TextInput, Pressable, StyleSheet, RefreshControl, ActivityIndicator, Modal, ScrollView } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { useAuth } from "@/src/context/AuthContext";
-import { andamentoSquadraPartite, convertiPartitaInAllenamento, creaMatch, eliminaPartita, impostaLuogoPartita, elencaPartite, rendimentoRotazioniPartita, type AndamentoSquadraPartiteVoce, type RendimentoRotazionePartita } from "@/src/services/matches";
+import { andamentoSquadraPartite, convertiPartitaInAllenamento, creaMatch, eliminaPartita, impostaLuogoPartita, elencaPartite, elencaSet, rendimentoRotazioniPartita, type AndamentoSquadraPartiteVoce, type RendimentoRotazionePartita } from "@/src/services/matches";
 import { elencaCampionati, riassegnaCampionatoPartita } from "@/src/services/championships";
 import { PannelloSporteasy } from "@/src/components/PannelloSporteasy";
 import { brand } from "@/src/config";
-import type { Campionato, Match } from "@/src/types/database";
+import type { Campionato, Match, MatchSet } from "@/src/types/database";
 import { avvisa, confermaAzione } from "@/src/lib/confermaAzione";
 import { elencaScoutOspiti, invitaScoutOspite, rimuoviScoutOspite, type ScoutOspite } from "@/src/services/scoutOspiti";
 import { cambiaCodiceScout, elencaScoutAnonimi, escludiScoutAnonimo, linkScout, ottieniCodiceScout, rilasciaTurnoScout, type ScoutAnonimo } from "@/src/services/scoutQr";
@@ -30,6 +30,9 @@ export default function Partite() {
   const [mostraAndamento, setMostraAndamento] = useState(false);
   const [mostraPassate, setMostraPassate] = useState(false);
   const [rotazioniPartita, setRotazioniPartita] = useState<{ nome: string; righe: RendimentoRotazionePartita[] } | null>(null);
+
+  // Toccando una partita conclusa: prima i punteggi dei set, poi la scelta dell'analisi.
+  const [menuPartita, setMenuPartita] = useState<{ match: Match; sets: MatchSet[] } | null>(null);
 
   async function apriRotazioni(m: Match) {
     try {
@@ -89,6 +92,12 @@ export default function Partite() {
     if (m.stato === "programmata") {
       if (!puoScrivere) { avvisa("Partita non ancora iniziata", "L'allenatore non ha ancora preparato questa partita."); return; }
       router.push(`/partita/${m.id}/prepara`);
+      return;
+    }
+    if (m.stato === "conclusa") {
+      elencaSet(m.id)
+        .then((sets) => setMenuPartita({ match: m, sets: sets.filter((x) => x.punti_noi + x.punti_avversario > 0).sort((a, b) => a.numero_set - b.numero_set) }))
+        .catch(() => setMenuPartita({ match: m, sets: [] }));
       return;
     }
     router.push(`/partita/${m.id}`);
@@ -244,6 +253,44 @@ export default function Partite() {
 
   return (
     <View style={styles.container}>
+      <Modal visible={!!menuPartita} animationType="slide" transparent onRequestClose={() => setMenuPartita(null)}>
+        <View style={styles.sfondoPopup}>
+          <View style={styles.cartaPopup}>
+            <Text style={styles.titoloPopup}>vs {menuPartita?.match.avversario}</Text>
+            <Text style={styles.nota}>
+              {menuPartita ? new Date(menuPartita.match.data).toLocaleDateString("it-IT") : ""} — Set vinti {menuPartita?.match.set_vinti_noi} - {menuPartita?.match.set_vinti_avversario}
+            </Text>
+            <View style={{ gap: 4, marginVertical: 8 }}>
+              {(menuPartita?.sets ?? []).length === 0 ? (
+                <Text style={styles.nota}>Nessun punteggio di set registrato.</Text>
+              ) : menuPartita!.sets.map((x) => (
+                <View key={x.id} style={styles.rigaRotazione}>
+                  <Text style={styles.rigaRotazioneNome}>Set {x.numero_set}</Text>
+                  <Text style={[styles.rigaRotazioneSaldo, x.punti_noi < x.punti_avversario && styles.saldoNegativo]}>{x.punti_noi} - {x.punti_avversario}</Text>
+                </View>
+              ))}
+            </View>
+            <Text style={styles.titoloPopup}>Quale analisi vuoi vedere?</Text>
+            <View style={{ gap: 8, marginTop: 8 }}>
+              {puoScrivere && (
+                <Pressable style={styles.bottone} onPress={() => { const m = menuPartita!.match; setMenuPartita(null); router.push(`/analisi-partita/${m.id}`); }}>
+                  <Text style={styles.bottoneTesto}>📈 Analisi completa</Text>
+                </Pressable>
+              )}
+              {puoScrivere && (
+                <Pressable style={styles.bottone} onPress={() => { const m = menuPartita!.match; setMenuPartita(null); apriRotazioni(m); }}>
+                  <Text style={styles.bottoneTesto}>📊 Analisi per rotazione</Text>
+                </Pressable>
+              )}
+              <Pressable style={styles.bottoneSecondario} onPress={() => { const m = menuPartita!.match; setMenuPartita(null); router.push(`/partita/${m.id}`); }}>
+                <Text style={styles.bottoneSecondarioTesto}>Apri la partita</Text>
+              </Pressable>
+            </View>
+            <Pressable onPress={() => setMenuPartita(null)}><Text style={styles.chiudiPopup}>Chiudi</Text></Pressable>
+          </View>
+        </View>
+      </Modal>
+
       <Modal visible={!!rotazioniPartita} animationType="slide" transparent onRequestClose={() => setRotazioniPartita(null)}>
         <View style={styles.sfondoPopup}>
           <View style={styles.cartaPopup}>
