@@ -895,7 +895,6 @@ export default function PartitaLive() {
       <View style={{ alignItems: orizzontale ? "flex-end" : "center" }}>
         <Text style={styles.setNumero}>Set {setCorrente.numero_set} · TO {timeoutNoi}-{timeoutLoro}</Text>
         <Text style={[styles.punteggio, { fontSize: orizzontale ? d(26) : 24 }]}>{setCorrente.punti_noi}-{setCorrente.punti_avversario}</Text>
-        {!orizzontale && etichettaFase}
         {!orizzontale && (
           <Text style={styles.nota} numberOfLines={1}>
             🏐 {setCorrente.squadra_al_servizio === "noi" ? (alServizio ? etichettaAtleta(alServizio.athlete_id) : "noi") : "loro"}
@@ -930,16 +929,6 @@ export default function PartitaLive() {
             <Pressable onPress={apriRegolaLibero} style={[styles.tastoLibero, { height: 44 }, regolaLibero?.libero_id && styles.tastoPiccoloAttivo]}>
               <Text style={[styles.tastoPiccoloTesto, regolaLibero?.libero_id && styles.tastoPiccoloTestoAttivo]}>⚙ Centr.</Text>
             </Pressable>
-            {faseCambiabile && (
-              <Pressable
-                onPress={() => alternaVariante(faseCambiabile)}
-                style={[styles.tastoLibero, { height: 58 }, varianteDi(faseCambiabile) === 2 ? styles.tastoPiccoloAttivo : styles.tastoVariante]}
-              >
-                <Text style={[styles.tastoPiccoloTesto, { fontSize: 10 }, varianteDi(faseCambiabile) === 2 && styles.tastoPiccoloTestoAttivo]}>{faseCambiabile === "ricezione" ? "Ricez." : "Cop."}</Text>
-                <Text style={[styles.tastoPiccoloTesto, { fontWeight: "800" }, varianteDi(faseCambiabile) === 2 && styles.tastoPiccoloTestoAttivo]}>{varianteDi(faseCambiabile) === 1 ? "Std" : "Alt"}</Text>
-                <Text style={[styles.tastoPiccoloTesto, { fontSize: 10 }, varianteDi(faseCambiabile) === 2 && styles.tastoPiccoloTestoAttivo]}>⇄ cambia</Text>
-              </Pressable>
-            )}
           </View>
         )}
         <View style={{ width: latoCampo, height: latoCampo }}>
@@ -963,27 +952,45 @@ export default function PartitaLive() {
         </View>
         {!orizzontale && <View style={{ flex: 1 }}>{tabelloneJsx}</View>}
         </View>
-        {orizzontale && etichettaFase}
         {orizzontale && (
           <Text style={styles.nota} numberOfLines={1}>
             servizio: {setCorrente.squadra_al_servizio === "noi" ? (alServizio ? etichettaAtleta(alServizio.athlete_id) : "noi") : "loro"}
           </Text>
         )}
         {puoScoutare && (
+          <>
           <View style={[styles.rigaComandiFissi, { marginTop: 6, width: orizzontale ? latoCampo + LARGHEZZA_TASTO_LIBERO + 6 : "100%" }]}>
-            <Pressable onPress={() => setModalitaEssenziale((v) => !v)} style={[styles.tastoPiccolo, modalitaEssenziale && styles.tastoPiccoloAttivo]}>
-              <Text style={[styles.tastoPiccoloTesto, modalitaEssenziale && styles.tastoPiccoloTestoAttivo]}>⚡ Essenziale {modalitaEssenziale ? "ON" : "off"}</Text>
+            <Pressable
+              disabled={!faseCambiabile}
+              onPress={() => faseCambiabile && alternaVariante(faseCambiabile)}
+              style={[styles.tastoComando, faseCambiabile && varianteDi(faseCambiabile) === 2 && styles.tastoPiccoloAttivo, !faseCambiabile && { opacity: 0.45 }]}
+            >
+              <Text style={[styles.tastoPiccoloTesto, faseCambiabile && varianteDi(faseCambiabile) === 2 && styles.tastoPiccoloTestoAttivo]} numberOfLines={1}>
+                {faseCambiabile === "ricezione" ? "Ricez." : faseCambiabile === "copertura" ? "Copert." : "Schema"} ⇄
+              </Text>
+              <Text style={[styles.tastoComandoStato, faseCambiabile && varianteDi(faseCambiabile) === 2 && styles.tastoPiccoloTestoAttivo]} numberOfLines={1}>
+                {faseCambiabile ? (varianteDi(faseCambiabile) === 1 ? "Std" : "Alt") : "—"}
+              </Text>
             </Pressable>
-            <Pressable onPress={alternaZone} style={[styles.tastoPiccolo, zoneAttive && styles.tastoPiccoloAttivo]}>
-              <Text style={[styles.tastoPiccoloTesto, zoneAttive && styles.tastoPiccoloTestoAttivo]}>🎯 Zone {zoneAttive ? "ON" : "off"}</Text>
+            <Pressable onPress={() => setModalitaEssenziale((v) => !v)} style={[styles.tastoComando, modalitaEssenziale && styles.tastoPiccoloAttivo]}>
+              <Text style={[styles.tastoPiccoloTesto, modalitaEssenziale && styles.tastoPiccoloTestoAttivo]} numberOfLines={1}>⚡ Essenz.</Text>
+              <Text style={[styles.tastoComandoStato, modalitaEssenziale && styles.tastoPiccoloTestoAttivo]}>{modalitaEssenziale ? "ON" : "off"}</Text>
             </Pressable>
-            <Pressable onPress={ricaricaPagina} style={styles.tastoPiccolo} accessibilityLabel="Ricarica la pagina">
-              <Text style={styles.tastoPiccoloTesto}>🔄 Ricarica</Text>
+            <Pressable onPress={alternaZone} style={[styles.tastoComando, zoneAttive && styles.tastoPiccoloAttivo]}>
+              <Text style={[styles.tastoPiccoloTesto, zoneAttive && styles.tastoPiccoloTestoAttivo]} numberOfLines={1}>🎯 Zone</Text>
+              <Text style={[styles.tastoComandoStato, zoneAttive && styles.tastoPiccoloTestoAttivo]}>{zoneAttive ? "ON" : "off"}</Text>
             </Pressable>
+            <Pressable onPress={ricaricaPagina} style={styles.tastoComando} accessibilityLabel="Ricarica la pagina">
+              <Text style={styles.tastoPiccoloTesto} numberOfLines={1}>🔄 Ricarica</Text>
+              <Text style={styles.tastoComandoStato}> </Text>
+            </Pressable>
+          </View>
+          <View style={[styles.rigaComandiFissi, { width: orizzontale ? latoCampo + LARGHEZZA_TASTO_LIBERO + 6 : "100%" }]}>
             <Pressable onPress={() => setPopupTimeout(true)} style={styles.tastoPiccolo}>
               <Text style={styles.tastoPiccoloTesto}>⏱ Time out</Text>
             </Pressable>
           </View>
+          </>
         )}
       </View>
 
@@ -1487,7 +1494,9 @@ const styles = StyleSheet.create({
   rigaComandiSecondari: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
   rigaComandiFissi: { flexDirection: "row", flexWrap: "wrap", gap: 6, alignItems: "center" },
   rigaToggleFisso: { flexDirection: "row", alignItems: "center", gap: 2 },
-  zonaFissa: { gap: 4, paddingTop: 4, borderTopWidth: 1, borderTopColor: brand.colors.border },
+  zonaFissa: { gap: 4, paddingTop: 4, borderTopWidth: 1, borderTopColor: brand.colors.border, marginBottom: 38 },
+  tastoComando: { flex: 1, flexBasis: 0, minWidth: 0, backgroundColor: brand.colors.surfaceSecondary, paddingVertical: 6, paddingHorizontal: 4, borderRadius: 8, alignItems: "center", minHeight: 48, justifyContent: "center" },
+  tastoComandoStato: { color: brand.colors.onSurface, fontSize: 12, fontWeight: "800" },
   barraFissa: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
   bottoneDistruttivo: { borderColor: brand.colors.error, borderWidth: 1, paddingVertical: 12, borderRadius: 8, alignItems: "center" },
   bottoneDistruttivoTesto: { color: brand.colors.error, fontWeight: "700" },
