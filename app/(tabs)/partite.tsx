@@ -282,9 +282,6 @@ export default function Partite() {
                   <Text style={styles.bottoneTesto}>📊 Analisi per rotazione</Text>
                 </Pressable>
               )}
-              <Pressable style={styles.bottoneSecondario} onPress={() => { const m = menuPartita!.match; setMenuPartita(null); router.push(`/partita/${m.id}`); }}>
-                <Text style={styles.bottoneSecondarioTesto}>Apri la partita</Text>
-              </Pressable>
             </View>
             <Pressable onPress={() => setMenuPartita(null)}><Text style={styles.chiudiPopup}>Chiudi</Text></Pressable>
           </View>
