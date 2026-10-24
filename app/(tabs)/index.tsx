@@ -3,7 +3,7 @@ import { View, Text, FlatList, TextInput, Pressable, StyleSheet, RefreshControl 
 import { router, useFocusEffect } from "expo-router";
 import { useAuth } from "@/src/context/AuthContext";
 import { creaAtleta, elencaAtlete, elencaAtleteArchiviate, ripristinaAtleta } from "@/src/services/athletes";
-import { FabAggiungi } from "@/src/components/Fab";
+import { FabMenu } from "@/src/components/Fab";
 import { PopupForm } from "@/src/components/PopupForm";
 import { brand, ruoliCampo } from "@/src/config";
 import type { Athlete, RuoloCampo } from "@/src/types/database";
@@ -76,10 +76,13 @@ export default function Atlete() {
       />
 
       {puoScrivere && (
-        <>
-          <FabAggiungi onPress={() => router.push("/importa-atlete")} posizione="secondaria" icona="📄" colore={brand.colors.brandSecondary} />
-          <FabAggiungi onPress={() => setPopupAperto(true)} />
-        </>
+        <FabMenu
+          titolo="Aggiungi alla rosa"
+          voci={[
+            { icona: "✍️", etichetta: "Una atleta a mano", descrizione: "Scrivi nome, cognome e ruolo", onPress: () => setPopupAperto(true) },
+            { icona: "📄", etichetta: "Importa la rosa da un file", descrizione: "Carichi l'elenco e le atlete entrano tutte insieme", onPress: () => router.push("/importa-atlete") },
+          ]}
+        />
       )}
 
       <PopupForm visibile={popupAperto} titolo="Nuova atleta" haModifiche={!!(nome.trim() || cognome.trim())} onChiudi={() => { setPopupAperto(false); setNome(""); setCognome(""); setRuoloCampo(null); }}>

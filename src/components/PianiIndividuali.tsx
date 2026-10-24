@@ -1,12 +1,17 @@
 import { useCallback, useState } from "react";
-import { View, Text, Pressable, StyleSheet, ActivityIndicator, TextInput } from "react-native";
+import { View, Text, Pressable, StyleSheet, ActivityIndicator, TextInput, Modal, ScrollView } from "react-native";
 import { useFocusEffect } from "expo-router";
 import {
-  aggiungiEsercizioPiano, cambiaStatoPiano, creaPianoIndividuale, elencaEserciziPiano,
-  elencaPianiIndividuali, eliminaPianoIndividuale, generaPianoIndividualeAI, impostaSvolgimentiSettimana, svolgimentiDellaSettimana,
-  type EsercizioPiano, type PianoIndividuale,
+  aggiornaEsercizioPiano, aggiungiEsercizioAlPiano, aggiungiEsercizioPiano, bozzaDaEsercizioPiano, cambiaStatoPiano, copiaPianoSuPersone, creaPianoIndividuale, elencaEserciziPiano,
+  elencaPianiIndividuali, eliminaEsercizioPiano, eliminaPianoIndividuale, generaPianoIndividualeAI, impostaSvolgimentiSettimana, sostituisciEsercizioPiano, svolgimentiDellaSettimana,
+  type BozzaEsercizio, type EsercizioPiano, type PianoIndividuale,
 } from "@/src/services/pianiIndividuali";
 import { elencaEsercizi } from "@/src/services/exercises";
+import { elencaAtlete } from "@/src/services/athletes";
+import { EditorEsercizio } from "@/src/components/piani/EditorEsercizio";
+import { NuovoPianoForm } from "@/src/components/piani/NuovoPianoForm";
+import { SelettorePersone } from "@/src/components/piani/SelettorePersone";
+import type { Athlete } from "@/src/types/database";
 import { confermaAzione, avvisa } from "@/src/lib/confermaAzione";
 import { brand } from "@/src/config";
 
@@ -33,6 +38,11 @@ export function PianiIndividuali({ teamId, athleteId, nomePersona, ruolo, modifi
   const [generando, setGenerando] = useState(false);
   const [istruzioni, setIstruzioni] = useState("");
   const [mostraIstruzioni, setMostraIstruzioni] = useState(false);
+  const [editor, setEditor] = useState<{ modo: "aggiungi" | "modifica" | "sostituisci"; piano: PianoIndividuale; esercizio?: EsercizioPiano } | null>(null);
+  const [squadra, setSquadra] = useState<Athlete[]>([]);
+  const [nuovoPiano, setNuovoPiano] = useState(false);
+  const [assegna, setAssegna] = useState<PianoIndividuale | null>(null);
+  const [selAssegna, setSelAssegna] = useState<Set<string>>(new Set());
 
   const carica = useCallback(async () => {
     setCaricamento(true);
@@ -49,6 +59,52 @@ export function PianiIndividuali({ teamId, athleteId, nomePersona, ruolo, modifi
     try {
       setEsercizi(await elencaEserciziPiano(pianoId));
       setSvolgimentiSettimana(await svolgimentiDellaSettimana(pianoId));
+    } catch (e) { avvisa("Errore", (e as Error).message); }
+  }
+
+  async function ricaricaEsercizi(pianoId: string) {
+    try {
+      setEsercizi(await elencaEserciziPiano(pianoId));
+      setSvolgimentiSettimana(await svolgimentiDellaSettimana(pianoId));
+    } catch (e) { avvisa("Errore", (e as Error).message); }
+    carica();
+  }
+
+  async function caricaSquadra() {
+    if (squadra.length === 0) setSquadra(await elencaAtlete(teamId).catch(() => []));
+  }
+
+  async function salvaEditor(b: BozzaEsercizio) {
+    if (!editor) return;
+    const { modo, piano, esercizio } = editor;
+    try {
+      if (modo === "aggiungi") await aggiungiEsercizioAlPiano(piano.id, b, esercizi.length);
+      else if (modo === "modifica" && esercizio) await aggiornaEsercizioPiano(esercizio.id, b);
+      else if (modo === "sostituisci" && esercizio) await sostituisciEsercizioPiano(esercizio.id, piano.id, esercizio.ordine, b);
+      setEditor(null);
+      await ricaricaEsercizi(piano.id);
+    } catch (e) { avvisa("Errore", (e as Error).message); }
+  }
+
+  function togliEsercizio(piano: PianoIndividuale, pe: EsercizioPiano) {
+    confermaAzione("Togliere l'esercizio?", `"${pe.nome_libero ?? "Esercizio"}" esce dal piano, insieme alle sedute già spuntate.`, "Togli", async () => {
+      try { await eliminaEsercizioPiano(pe.id); await ricaricaEsercizi(piano.id); }
+      catch (e) { avvisa("Errore", (e as Error).message); }
+    }, true);
+  }
+
+  async function apriAssegna(p: PianoIndividuale) {
+    await caricaSquadra();
+    setSelAssegna(new Set());
+    setAssegna(p);
+  }
+
+  async function confermaAssegna() {
+    if (!assegna || selAssegna.size === 0) return;
+    try {
+      const n = await copiaPianoSuPersone(assegna.id, Array.from(selAssegna));
+      setAssegna(null);
+      avvisa("Piano assegnato", `Copia creata per ${n} ${n === 1 ? "persona" : "persone"}. Ognuna spunta le sue sedute.`);
     } catch (e) { avvisa("Errore", (e as Error).message); }
   }
 
@@ -151,13 +207,26 @@ export function PianiIndividuali({ teamId, athleteId, nomePersona, ruolo, modifi
                       <Text style={styles.frequenza}>
                         {pe.volte_a_settimana}× a settimana · {pe.durata_minuti ?? 10}′ · {ETICHETTE_QUANDO[pe.quando]}
                       </Text>
+                      {modificabile && (
+                        <View style={styles.rigaModifica}>
+                          <Pressable onPress={() => setEditor({ modo: "modifica", piano: p, esercizio: pe })} hitSlop={8}><Text style={styles.azione}>Modifica</Text></Pressable>
+                          <Pressable onPress={() => setEditor({ modo: "sostituisci", piano: p, esercizio: pe })} hitSlop={8}><Text style={styles.azione}>Sostituisci</Text></Pressable>
+                          <Pressable onPress={() => togliEsercizio(p, pe)} hitSlop={8}><Text style={styles.azioneDistruttiva}>Togli</Text></Pressable>
+                        </View>
+                      )}
                     </View>
                   </View>
                 ))}
                 <Text style={styles.nota}>Tocca i quadratini numerati per segnare le sedute svolte questa settimana.</Text>
+                {modificabile && (
+                  <Pressable style={styles.bottoneAggiungi} onPress={() => setEditor({ modo: "aggiungi", piano: p })}>
+                    <Text style={styles.bottoneAggiungiTesto}>+ Aggiungi esercizio</Text>
+                  </Pressable>
+                )}
 
                 {modificabile && (
                   <View style={styles.rigaAzioni}>
+                    <Pressable onPress={() => apriAssegna(p)}><Text style={styles.azione}>Assegna ad altre persone</Text></Pressable>
                     <Pressable onPress={() => cambiaStatoPiano(p.id, p.stato === "attivo" ? "concluso" : "attivo").then(carica)}>
                       <Text style={styles.azione}>{p.stato === "attivo" ? "Concludi" : "Riattiva"}</Text>
                     </Pressable>
@@ -193,11 +262,55 @@ export function PianiIndividuali({ teamId, athleteId, nomePersona, ruolo, modifi
             <Pressable style={styles.bottoneAI} onPress={onGenera} disabled={generando}>
               {generando
                 ? <ActivityIndicator color={brand.colors.brandSecondary} />
-                : <Text style={styles.bottoneAITesto}>✨ Crea piano</Text>}
+                : <Text style={styles.bottoneAITesto}>✨ Crea con l'AI</Text>}
+            </Pressable>
+            <Pressable style={styles.bottoneAI} onPress={async () => { await caricaSquadra(); setNuovoPiano(true); }}>
+              <Text style={styles.bottoneAITesto}>✍️ Piano a mano</Text>
             </Pressable>
           </View>
         </>
       )}
+
+      {editor && (
+        <EditorEsercizio
+          visibile
+          teamId={teamId}
+          titolo={editor.modo === "aggiungi" ? "Aggiungi un esercizio" : editor.modo === "sostituisci" ? "Sostituisci con un altro esercizio" : "Modifica esercizio"}
+          iniziale={editor.modo === "modifica" && editor.esercizio ? bozzaDaEsercizioPiano(editor.esercizio) : null}
+          onChiudi={() => setEditor(null)}
+          onSalva={salvaEditor}
+        />
+      )}
+
+      <Modal visible={nuovoPiano} animationType="slide" transparent onRequestClose={() => setNuovoPiano(false)}>
+        <View style={styles.sfondoModale}>
+          <ScrollView style={{ maxHeight: "94%" }} contentContainerStyle={{ padding: 4 }} keyboardShouldPersistTaps="handled">
+            <NuovoPianoForm
+              teamId={teamId}
+              atlete={squadra}
+              preselezionate={[athleteId]}
+              onAnnulla={() => setNuovoPiano(false)}
+              onCreato={() => { setNuovoPiano(false); carica(); avvisa("Piano creato", "Lo trovi qui sotto."); }}
+            />
+          </ScrollView>
+        </View>
+      </Modal>
+
+      <Modal visible={!!assegna} animationType="slide" transparent onRequestClose={() => setAssegna(null)}>
+        <View style={styles.sfondoModale}>
+          <View style={styles.cartaModale}>
+            <Text style={styles.titolo}>Assegna "{assegna?.titolo}" ad altre persone</Text>
+            <Text style={styles.nota}>Ognuna riceve una copia del piano con gli stessi esercizi e spunta le sue sedute.</Text>
+            <ScrollView style={{ maxHeight: 380 }}>
+              <SelettorePersone atlete={squadra.filter((a) => a.id !== athleteId)} selezionate={selAssegna} onChange={setSelAssegna} />
+            </ScrollView>
+            <Pressable style={[styles.bottoneAI, selAssegna.size === 0 && { opacity: 0.4 }]} onPress={confermaAssegna} disabled={selAssegna.size === 0}>
+              <Text style={styles.bottoneAITesto}>Assegna a {selAssegna.size} {selAssegna.size === 1 ? "persona" : "persone"}</Text>
+            </Pressable>
+            <Pressable onPress={() => setAssegna(null)}><Text style={styles.nota}>Annulla</Text></Pressable>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -222,7 +335,12 @@ const styles = StyleSheet.create({
   nomeEsercizio: { color: brand.colors.onSurface, fontSize: 14, fontWeight: "600" },
   indicazioni: { color: brand.colors.onSurfaceSecondary, fontSize: 12, lineHeight: 17, marginTop: 2 },
   frequenza: { color: brand.colors.brandSecondary, fontSize: 11, marginTop: 2 },
-  rigaAzioni: { flexDirection: "row", justifyContent: "flex-end", gap: 16 },
+  rigaModifica: { flexDirection: "row", gap: 16, marginTop: 6 },
+  bottoneAggiungi: { borderWidth: 1, borderColor: brand.colors.brand, borderRadius: 8, padding: 10, alignItems: "center" },
+  bottoneAggiungiTesto: { color: brand.colors.brand, fontWeight: "600" },
+  sfondoModale: { flex: 1, backgroundColor: "rgba(0,0,0,0.55)", justifyContent: "center", padding: 16 },
+  cartaModale: { backgroundColor: brand.colors.surfaceSecondary, borderRadius: 16, padding: 18, gap: 10 },
+  rigaAzioni: { flexDirection: "row", justifyContent: "flex-end", gap: 16, flexWrap: "wrap" },
   azione: { color: brand.colors.brand, fontSize: 13, fontWeight: "600" },
   azioneDistruttiva: { color: brand.colors.error, fontSize: 13, fontWeight: "600" },
   nota: { color: brand.colors.muted, fontSize: 12, lineHeight: 17 },

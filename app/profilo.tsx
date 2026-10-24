@@ -91,6 +91,9 @@ export default function Profilo() {
           <Pressable style={styles.bottoneSecondario} onPress={() => router.push("/pianificazione-annuale")}>
             <Text style={styles.bottoneSecondarioTesto}>📋 Pianificazione annuale (cicli)</Text>
           </Pressable>
+          <Pressable style={styles.bottoneSecondario} onPress={() => router.push("/esercizi-individuali")}>
+            <Text style={styles.bottoneSecondarioTesto}>🎯 Esercizi individuali (piani e gruppi)</Text>
+          </Pressable>
           <Pressable style={styles.bottoneSecondario} onPress={() => router.push("/campionati")}>
             <Text style={styles.bottoneSecondarioTesto}>🏆 Campionati</Text>
           </Pressable>

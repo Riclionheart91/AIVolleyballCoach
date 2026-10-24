@@ -210,3 +210,95 @@ export async function impostaSvolgimentiSettimana(pianoEsercizioId: string, quan
     if (error) throw error;
   }
 }
+
+/** Un esercizio da mettere in un piano: scelto dal catalogo (exercise_id) oppure scritto a mano. */
+export interface BozzaEsercizio {
+  exercise_id: string | null;
+  nome: string;
+  indicazioni: string;
+  volte_a_settimana: number;
+  durata_minuti: number;
+  quando: EsercizioPiano["quando"];
+}
+
+export function bozzaDaEsercizioPiano(e: EsercizioPiano): BozzaEsercizio {
+  return {
+    exercise_id: e.exercise_id,
+    nome: e.nome_libero ?? "Esercizio",
+    indicazioni: e.indicazioni,
+    volte_a_settimana: e.volte_a_settimana,
+    durata_minuti: e.durata_minuti ?? 10,
+    quando: e.quando,
+  };
+}
+
+function rigaEsercizio(pianoId: string, b: BozzaEsercizio, ordine: number) {
+  return {
+    piano_id: pianoId,
+    exercise_id: b.exercise_id,
+    nome_libero: b.nome.trim(),
+    indicazioni: b.indicazioni.trim(),
+    volte_a_settimana: Math.min(7, Math.max(1, b.volte_a_settimana || 2)),
+    durata_minuti: b.durata_minuti || null,
+    quando: b.quando,
+    ordine,
+  };
+}
+
+/**
+ * Assegna lo stesso piano a piu' persone: ognuna riceve la sua copia, con i suoi svolgimenti da spuntare.
+ * Ritorna quante copie sono state create.
+ */
+export async function creaPianoPerPersone(
+  athleteIds: string[],
+  piano: { titolo: string; obiettivo: string; fondamentale_target: string | null; data_fine: string | null },
+  esercizi: BozzaEsercizio[],
+): Promise<number> {
+  let create = 0;
+  for (const athleteId of athleteIds) {
+    const pianoId = await creaPianoIndividuale(athleteId, piano.titolo, piano.obiettivo, piano.fondamentale_target, piano.data_fine);
+    if (esercizi.length > 0) {
+      const { error } = await supabaseClient.from("piano_individuale_esercizi").insert(esercizi.map((b, i) => rigaEsercizio(pianoId, b, i)));
+      if (error) throw error;
+    }
+    create++;
+  }
+  return create;
+}
+
+/** Copia un piano esistente (con i suoi esercizi, senza svolgimenti) su altre persone. */
+export async function copiaPianoSuPersone(pianoId: string, athleteIds: string[]): Promise<number> {
+  const { data: p, error } = await supabaseClient.from("piani_individuali").select("titolo, obiettivo, fondamentale_target, data_fine").eq("id", pianoId).single();
+  if (error) throw error;
+  const esercizi = (await elencaEserciziPiano(pianoId)).map(bozzaDaEsercizioPiano);
+  return creaPianoPerPersone(athleteIds, { titolo: p.titolo, obiettivo: p.obiettivo, fondamentale_target: p.fondamentale_target, data_fine: p.data_fine }, esercizi);
+}
+
+export async function aggiungiEsercizioAlPiano(pianoId: string, b: BozzaEsercizio, ordine: number): Promise<void> {
+  const { error } = await supabaseClient.from("piano_individuale_esercizi").insert(rigaEsercizio(pianoId, b, ordine));
+  if (error) throw error;
+}
+
+/** Modifica un esercizio mantenendo gli svolgimenti gia' spuntati (stesso esercizio, solo ritoccato). */
+export async function aggiornaEsercizioPiano(esercizioId: string, b: BozzaEsercizio): Promise<void> {
+  const { error } = await supabaseClient.from("piano_individuale_esercizi").update({
+    exercise_id: b.exercise_id,
+    nome_libero: b.nome.trim(),
+    indicazioni: b.indicazioni.trim(),
+    volte_a_settimana: Math.min(7, Math.max(1, b.volte_a_settimana || 2)),
+    durata_minuti: b.durata_minuti || null,
+    quando: b.quando,
+  }).eq("id", esercizioId);
+  if (error) throw error;
+}
+
+export async function eliminaEsercizioPiano(esercizioId: string): Promise<void> {
+  const { error } = await supabaseClient.from("piano_individuale_esercizi").delete().eq("id", esercizioId);
+  if (error) throw error;
+}
+
+/** Sostituisce un esercizio con un altro nella stessa posizione: i vecchi svolgimenti non si portano dietro, e' un altro esercizio. */
+export async function sostituisciEsercizioPiano(esercizioId: string, pianoId: string, ordine: number, b: BozzaEsercizio): Promise<void> {
+  await aggiungiEsercizioAlPiano(pianoId, b, ordine);
+  await eliminaEsercizioPiano(esercizioId);
+}
