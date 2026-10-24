@@ -2,15 +2,16 @@ import { useCallback, useState } from "react";
 import { View, Text, Pressable, StyleSheet, ActivityIndicator, TextInput, Modal, ScrollView } from "react-native";
 import { useFocusEffect } from "expo-router";
 import {
-  aggiornaEsercizioPiano, aggiungiEsercizioAlPiano, aggiungiEsercizioPiano, bozzaDaEsercizioPiano, cambiaStatoPiano, copiaPianoSuPersone, creaPianoIndividuale, elencaEserciziPiano,
-  elencaPianiIndividuali, eliminaEsercizioPiano, eliminaPianoIndividuale, generaPianoIndividualeAI, impostaSvolgimentiSettimana, sostituisciEsercizioPiano, svolgimentiDellaSettimana,
-  type BozzaEsercizio, type EsercizioPiano, type PianoIndividuale,
+  aggiornaEsercizioPiano, aggiungiEsercizioAlPiano, aggiungiEsercizioPiano, avanzamentoGruppo, bozzaDaEsercizioPiano, cambiaStatoPianoGruppo, copiaPianoSuPersone, creaPianoIndividuale, elencaEserciziPiano,
+  elencaPianiIndividuali, eliminaEsercizioPiano, eliminaPianoGruppo, generaPianoIndividualeAI, impostaSvolgimentiSettimana, riallineaEsercizio, sostituisciEsercizioPiano, svolgimentiDellaSettimana, togliDalGruppo,
+  type Ambito, type BozzaEsercizio, type EsercizioPiano, type MembroGruppo, type PianoIndividuale,
 } from "@/src/services/pianiIndividuali";
 import { elencaEsercizi } from "@/src/services/exercises";
 import { elencaAtlete } from "@/src/services/athletes";
 import { EditorEsercizio } from "@/src/components/piani/EditorEsercizio";
 import { NuovoPianoForm } from "@/src/components/piani/NuovoPianoForm";
 import { SelettorePersone } from "@/src/components/piani/SelettorePersone";
+import { SceltaAmbito } from "@/src/components/piani/SceltaAmbito";
 import type { Athlete } from "@/src/types/database";
 import { confermaAzione, avvisa } from "@/src/lib/confermaAzione";
 import { brand } from "@/src/config";
@@ -43,6 +44,11 @@ export function PianiIndividuali({ teamId, athleteId, nomePersona, ruolo, modifi
   const [nuovoPiano, setNuovoPiano] = useState(false);
   const [assegna, setAssegna] = useState<PianoIndividuale | null>(null);
   const [selAssegna, setSelAssegna] = useState<Set<string>>(new Set());
+  // Piano condiviso: prima di cambiarlo si chiede se vale per la persona o per tutto il gruppo.
+  const [ambitoRichiesto, setAmbitoRichiesto] = useState<{ titolo: string; persone: number; testo?: string; distruttiva?: boolean; azione: (a: Ambito) => Promise<void> } | null>(null);
+  const [gruppoAperto, setGruppoAperto] = useState<PianoIndividuale | null>(null);
+  const [membri, setMembri] = useState<MembroGruppo[]>([]);
+  const [personeNelGruppo, setPersoneNelGruppo] = useState<Set<string>>(new Set());
 
   const carica = useCallback(async () => {
     setCaricamento(true);
@@ -74,37 +80,129 @@ export function PianiIndividuali({ teamId, athleteId, nomePersona, ruolo, modifi
     if (squadra.length === 0) setSquadra(await elencaAtlete(teamId).catch(() => []));
   }
 
-  async function salvaEditor(b: BozzaEsercizio) {
+  const inGruppo = (p: PianoIndividuale) => !!p.gruppo_id && p.persone_gruppo > 1;
+
+  /** Piano condiviso: chiede su chi vale la modifica; piano di una persona sola: la esegue subito. */
+  function chiediAmbito(piano: PianoIndividuale, condiviso: boolean, titolo: string, azione: (a: Ambito) => Promise<void>, opzioni?: { testo?: string; distruttiva?: boolean }) {
+    if (condiviso) setAmbitoRichiesto({ titolo, persone: piano.persone_gruppo, azione, ...opzioni });
+    else azione("singolo").catch((e) => avvisa("Errore", (e as Error).message));
+  }
+
+  async function eseguiAmbito(a: Ambito) {
+    const r = ambitoRichiesto;
+    setAmbitoRichiesto(null);
+    if (!r) return;
+    try { await r.azione(a); }
+    catch (e) { avvisa("Errore", (e as Error).message); }
+  }
+
+  function avvisaSaltati(saltati: number) {
+    if (saltati > 0) {
+      avvisa("Fatto", `${saltati} ${saltati === 1 ? "persona ha" : "persone hanno"} una versione personalizzata di questo esercizio: non è stata toccata.`);
+    }
+  }
+
+  function salvaEditor(b: BozzaEsercizio) {
     if (!editor) return;
     const { modo, piano, esercizio } = editor;
-    try {
-      if (modo === "aggiungi") await aggiungiEsercizioAlPiano(piano.id, b, esercizi.length);
-      else if (modo === "modifica" && esercizio) await aggiornaEsercizioPiano(esercizio.id, b);
-      else if (modo === "sostituisci" && esercizio) await sostituisciEsercizioPiano(esercizio.id, piano.id, esercizio.ordine, b);
-      setEditor(null);
+    setEditor(null);
+    const condiviso = inGruppo(piano) && (modo === "aggiungi" || !!esercizio?.voce_id);
+    const titolo = modo === "aggiungi" ? "Aggiungere l'esercizio" : modo === "sostituisci" ? "Sostituire l'esercizio" : "Modificare l'esercizio";
+    chiediAmbito(piano, condiviso, titolo, async (ambito) => {
+      let saltati = 0;
+      if (modo === "aggiungi") await aggiungiEsercizioAlPiano(piano, b, ambito);
+      else if (modo === "modifica" && esercizio) saltati = await aggiornaEsercizioPiano(esercizio, b, ambito);
+      else if (modo === "sostituisci" && esercizio) saltati = await sostituisciEsercizioPiano(esercizio, b, ambito);
       await ricaricaEsercizi(piano.id);
-    } catch (e) { avvisa("Errore", (e as Error).message); }
+      avvisaSaltati(saltati);
+    });
   }
 
   function togliEsercizio(piano: PianoIndividuale, pe: EsercizioPiano) {
-    confermaAzione("Togliere l'esercizio?", `"${pe.nome_libero ?? "Esercizio"}" esce dal piano, insieme alle sedute già spuntate.`, "Togli", async () => {
-      try { await eliminaEsercizioPiano(pe.id); await ricaricaEsercizi(piano.id); }
-      catch (e) { avvisa("Errore", (e as Error).message); }
-    }, true);
+    const nome = pe.nome_libero ?? "Esercizio";
+    const esegui = async (ambito: Ambito) => {
+      const saltati = await eliminaEsercizioPiano(pe, ambito);
+      await ricaricaEsercizi(piano.id);
+      avvisaSaltati(saltati);
+    };
+    if (inGruppo(piano) && pe.voce_id) {
+      chiediAmbito(piano, true, `Togliere "${nome}"`, esegui, { testo: "Le sedute già spuntate di questo esercizio vanno perse.", distruttiva: true });
+    } else {
+      confermaAzione("Togliere l'esercizio?", `"${nome}" esce dal piano, insieme alle sedute già spuntate.`, "Togli", async () => {
+        try { await esegui("singolo"); } catch (e) { avvisa("Errore", (e as Error).message); }
+      }, true);
+    }
+  }
+
+  async function riallinea(piano: PianoIndividuale, pe: EsercizioPiano) {
+    try { await riallineaEsercizio(pe); await ricaricaEsercizi(piano.id); }
+    catch (e) { avvisa("Errore", (e as Error).message); }
+  }
+
+  function cambiaStato(p: PianoIndividuale) {
+    const nuovo = p.stato === "attivo" ? "concluso" : "attivo";
+    chiediAmbito(p, inGruppo(p), nuovo === "concluso" ? "Concludere il piano" : "Riattivare il piano", async (ambito) => {
+      await cambiaStatoPianoGruppo(p, nuovo, ambito);
+      carica();
+    });
+  }
+
+  function eliminaPiano(p: PianoIndividuale) {
+    const esegui = async (ambito: Ambito) => {
+      await eliminaPianoGruppo(p, ambito);
+      setEspanso(null); carica();
+    };
+    if (inGruppo(p)) {
+      chiediAmbito(p, true, "Eliminare il piano", esegui, { testo: "Verranno persi anche gli svolgimenti registrati.", distruttiva: true });
+    } else {
+      confermaAzione("Eliminare il piano?", "Verranno persi anche gli svolgimenti registrati.", "Elimina", async () => {
+        try { await esegui("singolo"); } catch (e) { avvisa("Errore", (e as Error).message); }
+      }, true);
+    }
+  }
+
+  async function apriGruppo(p: PianoIndividuale) {
+    setGruppoAperto(p);
+    setMembri([]);
+    try { setMembri(await avanzamentoGruppo(p.id)); }
+    catch (e) { avvisa("Errore", (e as Error).message); }
+  }
+
+  function togliPersonaDalGruppo(m: MembroGruppo) {
+    confermaAzione(
+      "Togliere dal gruppo?",
+      `${m.nome} tiene il suo piano così com'è, ma non cambia più insieme agli altri.`,
+      "Togli dal gruppo",
+      async () => {
+        try {
+          await togliDalGruppo(m.piano_id);
+          if (gruppoAperto) setMembri(await avanzamentoGruppo(gruppoAperto.id).catch(() => []));
+          carica();
+        } catch (e) { avvisa("Errore", (e as Error).message); }
+      },
+    );
   }
 
   async function apriAssegna(p: PianoIndividuale) {
     await caricaSquadra();
     setSelAssegna(new Set());
+    if (inGruppo(p)) {
+      const m = await avanzamentoGruppo(p.id).catch(() => [] as MembroGruppo[]);
+      setPersoneNelGruppo(new Set(m.map((x) => x.athlete_id)));
+    } else {
+      setPersoneNelGruppo(new Set());
+    }
+    setGruppoAperto(null);
     setAssegna(p);
   }
 
   async function confermaAssegna() {
     if (!assegna || selAssegna.size === 0) return;
     try {
-      const n = await copiaPianoSuPersone(assegna.id, Array.from(selAssegna));
+      const n = await copiaPianoSuPersone(assegna, Array.from(selAssegna));
       setAssegna(null);
-      avvisa("Piano assegnato", `Copia creata per ${n} ${n === 1 ? "persona" : "persone"}. Ognuna spunta le sue sedute.`);
+      carica();
+      avvisa("Piano assegnato", `${n} ${n === 1 ? "persona entra" : "persone entrano"} nel gruppo: le modifiche di gruppo valgono anche per ${n === 1 ? "lei" : "loro"}. Ognuna spunta le sue sedute.`);
     } catch (e) { avvisa("Errore", (e as Error).message); }
   }
 
@@ -180,6 +278,12 @@ export function PianiIndividuali({ teamId, athleteId, nomePersona, ruolo, modifi
               </View>
             </Pressable>
 
+            {modificabile && inGruppo(p) && (
+              <Pressable onPress={() => apriGruppo(p)} hitSlop={6}>
+                <Text style={styles.gruppoLink}>👥 Piano condiviso da {p.persone_gruppo} persone · chi c'è e a che punto sono ▸</Text>
+              </Pressable>
+            )}
+
             {espanso === p.id && (
               <View style={styles.dettaglioPiano}>
                 {esercizi.map((pe) => (
@@ -207,10 +311,16 @@ export function PianiIndividuali({ teamId, athleteId, nomePersona, ruolo, modifi
                       <Text style={styles.frequenza}>
                         {pe.volte_a_settimana}× a settimana · {pe.durata_minuti ?? 10}′ · {ETICHETTE_QUANDO[pe.quando]}
                       </Text>
+                      {modificabile && inGruppo(p) && (pe.personalizzato || !pe.voce_id) && (
+                        <Text style={styles.personalizzato}>
+                          {pe.personalizzato ? `✏️ Versione personalizzata per ${nomePersona.split(" ")[0]}: le modifiche di gruppo la saltano` : `✏️ Solo per ${nomePersona.split(" ")[0]}`}
+                        </Text>
+                      )}
                       {modificabile && (
                         <View style={styles.rigaModifica}>
                           <Pressable onPress={() => setEditor({ modo: "modifica", piano: p, esercizio: pe })} hitSlop={8}><Text style={styles.azione}>Modifica</Text></Pressable>
                           <Pressable onPress={() => setEditor({ modo: "sostituisci", piano: p, esercizio: pe })} hitSlop={8}><Text style={styles.azione}>Sostituisci</Text></Pressable>
+                          {pe.personalizzato && <Pressable onPress={() => riallinea(p, pe)} hitSlop={8}><Text style={styles.azione}>Riallinea al gruppo</Text></Pressable>}
                           <Pressable onPress={() => togliEsercizio(p, pe)} hitSlop={8}><Text style={styles.azioneDistruttiva}>Togli</Text></Pressable>
                         </View>
                       )}
@@ -226,13 +336,11 @@ export function PianiIndividuali({ teamId, athleteId, nomePersona, ruolo, modifi
 
                 {modificabile && (
                   <View style={styles.rigaAzioni}>
-                    <Pressable onPress={() => apriAssegna(p)}><Text style={styles.azione}>Assegna ad altre persone</Text></Pressable>
-                    <Pressable onPress={() => cambiaStatoPiano(p.id, p.stato === "attivo" ? "concluso" : "attivo").then(carica)}>
+                    <Pressable onPress={() => apriAssegna(p)}><Text style={styles.azione}>{inGruppo(p) ? "Aggiungi persone al gruppo" : "Assegna ad altre persone"}</Text></Pressable>
+                    <Pressable onPress={() => cambiaStato(p)}>
                       <Text style={styles.azione}>{p.stato === "attivo" ? "Concludi" : "Riattiva"}</Text>
                     </Pressable>
-                    <Pressable onPress={() => confermaAzione("Eliminare il piano?", "Verranno persi anche gli svolgimenti registrati.", "Elimina", async () => {
-                      await eliminaPianoIndividuale(p.id); setEspanso(null); carica();
-                    }, true)}>
+                    <Pressable onPress={() => eliminaPiano(p)}>
                       <Text style={styles.azioneDistruttiva}>Elimina</Text>
                     </Pressable>
                   </View>
@@ -296,13 +404,56 @@ export function PianiIndividuali({ teamId, athleteId, nomePersona, ruolo, modifi
         </View>
       </Modal>
 
+      <SceltaAmbito
+        visibile={!!ambitoRichiesto}
+        titolo={ambitoRichiesto?.titolo ?? ""}
+        testo={ambitoRichiesto?.testo}
+        nomePersona={nomePersona}
+        persone={ambitoRichiesto?.persone ?? 2}
+        distruttiva={ambitoRichiesto?.distruttiva}
+        onScegli={eseguiAmbito}
+        onAnnulla={() => setAmbitoRichiesto(null)}
+      />
+
+      <Modal visible={!!gruppoAperto} animationType="slide" transparent onRequestClose={() => setGruppoAperto(null)}>
+        <View style={styles.sfondoModale}>
+          <View style={styles.cartaModale}>
+            <Text style={styles.titolo}>{gruppoAperto?.titolo}</Text>
+            <Text style={styles.nota}>Chi ha questo piano e quante sedute ha fatto negli ultimi 7 giorni su quelle previste.</Text>
+            <ScrollView style={{ maxHeight: 380 }}>
+              {membri.length === 0 ? <ActivityIndicator color={brand.colors.brand} /> : membri.map((m) => {
+                const perc = m.attesi > 0 ? Math.min(100, Math.round((m.svolti / m.attesi) * 100)) : 0;
+                return (
+                  <View key={m.piano_id} style={styles.rigaMembro}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.nomeEsercizio}>{m.nome} {m.cognome}{m.stato !== "attivo" ? ` · ${m.stato}` : ""}</Text>
+                      <View style={styles.barraSfondo}><View style={[styles.barraRiempimento, { width: `${perc}%` }]} /></View>
+                      <Text style={styles.dettaglio}>{m.svolti}/{m.attesi} sedute · {perc}%</Text>
+                    </View>
+                    {membri.length > 1 && (
+                      <Pressable onPress={() => togliPersonaDalGruppo(m)} hitSlop={8}><Text style={styles.azioneDistruttiva}>Togli</Text></Pressable>
+                    )}
+                  </View>
+                );
+              })}
+            </ScrollView>
+            {gruppoAperto && (
+              <Pressable style={styles.bottoneAI} onPress={() => apriAssegna(gruppoAperto)}>
+                <Text style={styles.bottoneAITesto}>+ Aggiungi persone</Text>
+              </Pressable>
+            )}
+            <Pressable onPress={() => setGruppoAperto(null)}><Text style={styles.nota}>Chiudi</Text></Pressable>
+          </View>
+        </View>
+      </Modal>
+
       <Modal visible={!!assegna} animationType="slide" transparent onRequestClose={() => setAssegna(null)}>
         <View style={styles.sfondoModale}>
           <View style={styles.cartaModale}>
             <Text style={styles.titolo}>Assegna "{assegna?.titolo}" ad altre persone</Text>
-            <Text style={styles.nota}>Ognuna riceve una copia del piano con gli stessi esercizi e spunta le sue sedute.</Text>
+            <Text style={styles.nota}>Ognuna riceve una copia con gli stessi esercizi e spunta le sue sedute. Le copie restano collegate: potrai cambiarle tutte insieme.</Text>
             <ScrollView style={{ maxHeight: 380 }}>
-              <SelettorePersone atlete={squadra.filter((a) => a.id !== athleteId)} selezionate={selAssegna} onChange={setSelAssegna} />
+              <SelettorePersone atlete={squadra.filter((a) => a.id !== athleteId && !personeNelGruppo.has(a.id))} selezionate={selAssegna} onChange={setSelAssegna} />
             </ScrollView>
             <Pressable style={[styles.bottoneAI, selAssegna.size === 0 && { opacity: 0.4 }]} onPress={confermaAssegna} disabled={selAssegna.size === 0}>
               <Text style={styles.bottoneAITesto}>Assegna a {selAssegna.size} {selAssegna.size === 1 ? "persona" : "persone"}</Text>
@@ -344,6 +495,9 @@ const styles = StyleSheet.create({
   azione: { color: brand.colors.brand, fontSize: 13, fontWeight: "600" },
   azioneDistruttiva: { color: brand.colors.error, fontSize: 13, fontWeight: "600" },
   nota: { color: brand.colors.muted, fontSize: 12, lineHeight: 17 },
+  gruppoLink: { color: brand.colors.brandSecondary, fontSize: 12, fontWeight: "600" },
+  personalizzato: { color: brand.colors.muted, fontSize: 11, marginTop: 2, fontStyle: "italic" },
+  rigaMembro: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: brand.colors.border },
   input: { backgroundColor: brand.colors.surfaceTertiary, color: brand.colors.onSurface, borderRadius: 8, padding: 10, minHeight: 56, textAlignVertical: "top" },
   rigaGenerazione: { flexDirection: "row", gap: 8 },
   bottoneAI: { flex: 1, borderWidth: 1, borderColor: brand.colors.brandSecondary, borderRadius: 10, paddingVertical: 10, alignItems: "center" },

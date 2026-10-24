@@ -71,7 +71,7 @@ export default function EserciziIndividuali() {
           )}
 
           <Text style={styles.nota}>
-            Un piano si assegna a più persone insieme: ognuna riceve la sua copia. Tocca una persona per vedere i suoi piani, cambiare, sostituire o togliere gli esercizi, aggiungerne di nuovi o assegnare il piano ad altre.
+            Un piano si assegna a più persone insieme: ognuna spunta le sue sedute, ma le copie restano collegate. Tocca una persona per vedere i suoi piani: quando modifichi, sostituisci, togli o aggiungi un esercizio scegli se vale solo per lei o per tutto il gruppo. Sul piano condiviso vedi chi c'è e a che punto è ognuno.
           </Text>
 
           {caricamento && righe.length === 0 ? <ActivityIndicator color={brand.colors.brand} style={{ marginTop: 20 }} /> : righe.map(({ atleta, piani }) => {

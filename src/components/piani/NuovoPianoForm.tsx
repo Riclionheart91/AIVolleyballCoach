@@ -11,7 +11,7 @@ const QUANDO: Record<string, string> = { riscaldamento: "riscaldamento", tecnico
 
 /**
  * Nuovo piano individuale: titolo e obiettivo, gli esercizi (dal catalogo o scritti a mano) e le persone
- * a cui assegnarlo. Ogni persona riceve la sua copia, con gli svolgimenti da spuntare per conto suo.
+ * a cui assegnarlo. Ogni persona riceve la sua copia, con gli svolgimenti da spuntare per conto suo; le copie restano collegate e si cambiano tutte insieme.
  */
 export function NuovoPianoForm({ teamId, atlete, preselezionate, onCreato, onAnnulla }: {
   teamId: string; atlete: Athlete[]; preselezionate?: string[]; onCreato: (quante: number) => void; onAnnulla?: () => void;
