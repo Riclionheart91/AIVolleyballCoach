@@ -12,7 +12,7 @@ import { elencaScoutOspiti, invitaScoutOspite, rimuoviScoutOspite, type ScoutOsp
 import { cambiaCodiceScout, elencaScoutAnonimi, escludiScoutAnonimo, linkScout, ottieniCodiceScout, rilasciaTurnoScout, type ScoutAnonimo } from "@/src/services/scoutQr";
 import { CodiceQr } from "@/src/components/CodiceQr";
 import { MessaggioWhatsApp } from "@/src/components/MessaggioWhatsApp";
-import { commentoPartita } from "@/src/lib/messaggiWhatsApp";
+import { commentoPartita, inviaLinkScout } from "@/src/lib/messaggiWhatsApp";
 
 export default function Partite() {
   const { team, puoScrivere, isSuperuser } = useAuth();
@@ -132,6 +132,7 @@ export default function Partite() {
   const [anonimi, setAnonimi] = useState<ScoutAnonimo[]>([]);
   const [mostraQr, setMostraQr] = useState(false);
   const [linkCopiato, setLinkCopiato] = useState(false);
+  const [whatsappScout, setWhatsappScout] = useState(false);
 
   async function caricaAnonimi(matchId: string) {
     try { setAnonimi(await elencaScoutAnonimi(matchId)); } catch { /* resta l'elenco di prima */ }
@@ -327,6 +328,16 @@ export default function Partite() {
         </View>
       </Modal>
 
+      {team && ospitiPartita && codiceQr && whatsappScout && (
+        <MessaggioWhatsApp
+          visibile
+          titolo={`Link scout — vs ${ospitiPartita.avversario}`}
+          nota="Si apre WhatsApp col messaggio e il link pronti: scegli tu la persona a cui mandarlo e premi invia."
+          modelli={[{ etichetta: "Link scout", testo: inviaLinkScout(team.nome, ospitiPartita.avversario, linkScout(codiceQr)) }]}
+          onChiudi={() => setWhatsappScout(false)}
+        />
+      )}
+
       <Modal visible={!!ospitiPartita} animationType="slide" transparent onRequestClose={() => setOspitiPartita(null)}>
         <View style={styles.sfondoPopup}>
           <View style={[styles.cartaPopup, { maxHeight: "92%" }]}>
@@ -346,6 +357,7 @@ export default function Partite() {
                 <CodiceQr testo={linkScout(codiceQr)} dimensione={220} />
                 <Text style={[styles.nota, { textAlign: "center" }]} selectable>{linkScout(codiceQr)}</Text>
                 <View style={styles.selettoreRiga}>
+                  <Pressable style={styles.chip} onPress={() => setWhatsappScout(true)}><Text style={styles.chipTesto}>💬 Manda su WhatsApp</Text></Pressable>
                   <Pressable style={styles.chip} onPress={onCopiaLink}><Text style={styles.chipTesto}>{linkCopiato ? "Copiato ✓" : "Copia il link"}</Text></Pressable>
                   <Pressable style={styles.chip} onPress={onCambiaCodice}><Text style={styles.chipTesto}>Cambia codice</Text></Pressable>
                   <Pressable style={styles.chip} onPress={() => setMostraQr(false)}><Text style={styles.chipTesto}>Nascondi</Text></Pressable>

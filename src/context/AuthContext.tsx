@@ -3,7 +3,8 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { Session } from "@supabase/supabase-js";
 import { supabaseClient } from "@/src/lib/supabase";
 import { supabase as cfg } from "@/src/config";
-import { accettaInvitiPendenti } from "@/src/services/teamInvites";
+import { accettaInvitiPendenti, accettaInvitoLink, CHIAVE_INVITO_LINK } from "@/src/services/teamInvites";
+import { avvisa } from "@/src/lib/confermaAzione";
 import { miaSocietaPresidenza, type MiaSocieta } from "@/src/services/societa";
 import type { Ruolo, Season, Team } from "@/src/types/database";
 
@@ -152,6 +153,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     setCaricamentoContesto(true);
+    await usaInvitoLinkInSospeso();
     await accettaInvitiPendenti();
 
     const { data, error } = await supabaseClient.rpc("mio_contesto_team");
@@ -210,6 +212,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       provider: "google",
       options: { redirectTo: cfg.authRedirectUrl },
     });
+  }
+
+  /**
+   * Chi ha aperto un link d'invito dello staff e ha poi fatto l'accesso con Google: qui l'invito
+   * si abbina all'account e si chiude. Il link ricordato si toglie subito, cosi' un errore non si ripete a ogni caricamento.
+   */
+  async function usaInvitoLinkInSospeso() {
+    const token = await AsyncStorage.getItem(CHIAVE_INVITO_LINK);
+    if (!token || !session || (session.user as { is_anonymous?: boolean }).is_anonymous) return;
+    await AsyncStorage.removeItem(CHIAVE_INVITO_LINK);
+    try {
+      const teamId = await accettaInvitoLink(token);
+      await AsyncStorage.setItem(CHIAVE_ULTIMO_TEAM, teamId);
+      avvisa("Benvenuto in squadra", "L'invito è stato abbinato al tuo account.");
+    } catch (e) {
+      avvisa("Invito non utilizzabile", (e as Error).message);
+    }
   }
 
   async function esci() {

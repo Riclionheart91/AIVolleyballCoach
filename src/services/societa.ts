@@ -36,12 +36,6 @@ export async function creaSquadraInSocieta(nome: string, societaId: string): Pro
   return data as string;
 }
 
-/** Invita per email chi diventerà allenatore o vice-allenatore di questa squadra. */
-export async function assegnaCollaboratoreSquadra(teamId: string, email: string, ruolo: "allenatore" | "vice_allenatore"): Promise<void> {
-  const { error } = await supabaseClient.rpc("assegna_collaboratore_squadra", { p_team_id: teamId, p_email: email, p_ruolo: ruolo });
-  if (error) throw error;
-}
-
 /** Rimuove allenatore o vice-allenatore dalla squadra senza assegnarne subito uno nuovo. */
 export async function rimuoviCollaboratoreSquadra(teamId: string, ruolo: "allenatore" | "vice_allenatore"): Promise<void> {
   const { error } = await supabaseClient.rpc("rimuovi_collaboratore_squadra", { p_team_id: teamId, p_ruolo: ruolo });

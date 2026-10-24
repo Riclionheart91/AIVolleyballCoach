@@ -8,8 +8,12 @@ export function invitoApp(squadra: string): string {
   return `Ciao {nome}! Ti invito nell'app della squadra ${squadra}: ${URL_APP}\nAccedi con Google usando l'email che mi hai dato e troverai partite, allenamenti e i tuoi dati.`;
 }
 
-export function invitoStaff(squadra: string, ruolo: string, email: string): string {
-  return `Ciao! Ti ho invitato come ${ruolo} nella squadra ${squadra} sull'app: ${URL_APP}\nAccedi con Google usando ${email} e entrerai direttamente in squadra.`;
+export function invitoStaffLink(squadra: string, ruolo: string, link: string): string {
+  return `Ciao! Ti invito come ${ruolo} nella squadra ${squadra} sull'app.\nApri questo link e accedi con il tuo account Google (la tua email Google): ${link}\nIl link vale per una sola persona e scade tra 7 giorni.`;
+}
+
+export function inviaLinkScout(squadra: string, avversario: string, link: string): string {
+  return `Ciao! Sei scout per la partita ${squadra} vs ${avversario}. Apri questo link, scrivi il tuo nome e inizia a registrare (non serve nessun account): ${link}`;
 }
 
 export function promemoriaCertificato(squadra: string, scadenzaIso: string): string {

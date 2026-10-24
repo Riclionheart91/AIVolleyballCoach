@@ -27,21 +27,20 @@ function apriLink(url: string) {
  *  - senza `atleta`: apre WhatsApp col testo e si sceglie il gruppo della squadra.
  * Niente invio automatico: l'ultimo tocco ("invia") resta in WhatsApp, a chi scrive.
  */
-export function MessaggioWhatsApp({ visibile, titolo, atleta, chiediNumero, modelli, onChiudi }: {
+export function MessaggioWhatsApp({ visibile, titolo, atleta, nota, modelli, onChiudi }: {
   visibile: boolean; titolo: string; atleta?: Athlete | null;
-  /** Per chi non ha un numero in anagrafica (es. lo staff): si puo' digitarlo, senza salvarlo; vuoto = si sceglie il contatto in WhatsApp. */
-  chiediNumero?: boolean; modelli: ModelloMessaggio[]; onChiudi: () => void;
+  /** Senza atleta si sceglie la chat in WhatsApp: questa e' la spiegazione sotto il pulsante. */
+  nota?: string; modelli: ModelloMessaggio[]; onChiudi: () => void;
 }) {
   const [testo, setTesto] = useState("");
-  const [numeroDigitato, setNumeroDigitato] = useState("");
 
   useEffect(() => {
-    if (visibile) { setTesto(modelli[0]?.testo ?? ""); setNumeroDigitato(""); }
+    if (visibile) setTesto(modelli[0]?.testo ?? "");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visibile]);
 
   const numero = atleta ? numeroWhatsApp(atleta.telefono) : null;
-  const testoFinale = testo.replace(/\{nome\}/g, atleta?.nome ?? (chiediNumero ? "" : "ragazze"));
+  const testoFinale = testo.replace(/\{nome\}/g, atleta?.nome ?? "ragazze");
 
   return (
     <Modal visible={visibile} animationType="slide" transparent onRequestClose={onChiudi}>
@@ -73,23 +72,10 @@ export function MessaggioWhatsApp({ visibile, titolo, atleta, chiediNumero, mode
               )
             ) : (
               <>
-                {chiediNumero && (
-                  <TextInput style={styles.inputNumero} keyboardType="phone-pad" value={numeroDigitato} onChangeText={setNumeroDigitato} placeholder="Numero di telefono (facoltativo, non viene salvato)" placeholderTextColor={brand.colors.muted} />
-                )}
-                <Pressable
-                  style={styles.bottone}
-                  onPress={() => {
-                    const n = chiediNumero ? numeroWhatsApp(numeroDigitato) : null;
-                    apriLink(`https://wa.me/${n ?? ""}?text=${encodeURIComponent(testoFinale)}`);
-                  }}
-                >
+                <Pressable style={styles.bottone} onPress={() => apriLink(`https://wa.me/?text=${encodeURIComponent(testoFinale)}`)}>
                   <Text style={styles.bottoneTesto}>💬 Apri WhatsApp</Text>
                 </Pressable>
-                <Text style={styles.nota}>
-                  {chiediNumero
-                    ? "Con il numero si apre direttamente la chat; senza numero scegli il contatto in WhatsApp. Poi premi invia."
-                    : "Si apre WhatsApp col messaggio pronto: scegli il gruppo della squadra e premi invia. Aggiungi qui sopra il tuo commento."}
-                </Text>
+                <Text style={styles.nota}>{nota ?? "Si apre WhatsApp col messaggio pronto: scegli il gruppo della squadra e premi invia. Aggiungi qui sopra il tuo commento."}</Text>
               </>
             )}
           </ScrollView>
@@ -111,7 +97,6 @@ const styles = StyleSheet.create({
   chipTesto: { color: brand.colors.onSurfaceSecondary, fontSize: 13 },
   chipTestoAttivo: { color: "#000", fontWeight: "700" },
   input: { backgroundColor: brand.colors.surfaceTertiary, color: brand.colors.onSurface, borderRadius: 8, padding: 10, minHeight: 110, textAlignVertical: "top" },
-  inputNumero: { backgroundColor: brand.colors.surfaceTertiary, color: brand.colors.onSurface, borderRadius: 8, padding: 10 },
   nota: { color: brand.colors.muted, fontSize: 12 },
   bottone: { backgroundColor: brand.colors.brand, padding: 12, borderRadius: 8, alignItems: "center" },
   bottoneTesto: { color: "#000", fontWeight: "700" },

@@ -5,7 +5,6 @@ import { useAuth } from "@/src/context/AuthContext";
 import {
   elencaSquadreSocieta,
   creaSquadraInSocieta,
-  assegnaCollaboratoreSquadra,
   rimuoviCollaboratoreSquadra,
   rinominaSquadra,
   eliminaSquadra,
@@ -26,6 +25,9 @@ import {
 import { elencaAtlete } from "@/src/services/athletes";
 import { confermaAzione, avvisa } from "@/src/lib/confermaAzione";
 import { brand } from "@/src/config";
+import { MessaggioWhatsApp } from "@/src/components/MessaggioWhatsApp";
+import { invitoStaffLink } from "@/src/lib/messaggiWhatsApp";
+import { creaInvitoLink, linkInvito } from "@/src/services/teamInvites";
 import type { Athlete } from "@/src/types/database";
 
 /**
@@ -51,9 +53,7 @@ export default function GestioneSocieta() {
   const [nomeStagione, setNomeStagione] = useState("");
   const [apertura, setApertura] = useState(false);
 
-  const [squadraPerCollaboratore, setSquadraPerCollaboratore] = useState<SquadraSocieta | null>(null);
-  const [ruoloCollaboratore, setRuoloCollaboratore] = useState<"allenatore" | "vice_allenatore">("allenatore");
-  const [emailCollaboratore, setEmailCollaboratore] = useState("");
+  const [invitoStaff, setInvitoStaff] = useState<{ nomeSquadra: string; token: string; ruolo: "allenatore" | "vice_allenatore" } | null>(null);
 
   const [inCorsoAttivazione, setInCorsoAttivazione] = useState<string | null>(null);
 
@@ -160,21 +160,11 @@ export default function GestioneSocieta() {
     }
   }
 
-  function apriAssegnaCollaboratore(s: SquadraSocieta, ruolo: "allenatore" | "vice_allenatore") {
-    setSquadraPerCollaboratore(s);
-    setRuoloCollaboratore(ruolo);
-    setEmailCollaboratore("");
-  }
-
-  async function onAssegnaCollaboratore() {
-    if (!squadraPerCollaboratore || !emailCollaboratore.trim()) return;
+  /** Crea il link di invito per quel ruolo e apre WhatsApp col messaggio pronto: chi lo riceve accede con Google ed entra in squadra. */
+  async function onInvitaCollaboratore(s: SquadraSocieta, ruolo: "allenatore" | "vice_allenatore") {
     try {
-      await assegnaCollaboratoreSquadra(squadraPerCollaboratore.team_id, emailCollaboratore.trim(), ruoloCollaboratore);
-      const etichetta = ruoloCollaboratore === "allenatore" ? "allenatore" : "vice-allenatore";
-      avvisa("Invito inviato", `${emailCollaboratore.trim()} diventerà ${etichetta} al primo accesso con quell'email.`);
-      setSquadraPerCollaboratore(null);
-      setEmailCollaboratore("");
-      carica();
+      const token = await creaInvitoLink(s.team_id, ruolo);
+      setInvitoStaff({ nomeSquadra: s.nome, token, ruolo });
     } catch (e) {
       avvisa("Errore", (e as Error).message);
     }
@@ -432,16 +422,16 @@ export default function GestioneSocieta() {
               )}
 
               <View style={{ flexDirection: "row", gap: 8, flexWrap: "wrap" }}>
-                <Pressable style={styles.bottoneSecondario} onPress={() => apriAssegnaCollaboratore(s, "allenatore")}>
-                  <Text style={styles.bottoneSecondarioTesto}>{s.allenatore_email ? "Cambia allenatore" : "Assegna allenatore"}</Text>
+                <Pressable style={styles.bottoneSecondario} onPress={() => onInvitaCollaboratore(s, "allenatore")}>
+                  <Text style={styles.bottoneSecondarioTesto}>💬 Invita allenatore</Text>
                 </Pressable>
                 {s.allenatore_email && (
                   <Pressable style={styles.bottoneSecondarioDistruttivo} onPress={() => onRimuoviCollaboratore(s, "allenatore")}>
                     <Text style={styles.bottoneSecondarioDistruttivoTesto}>Rimuovi allenatore</Text>
                   </Pressable>
                 )}
-                <Pressable style={styles.bottoneSecondario} onPress={() => apriAssegnaCollaboratore(s, "vice_allenatore")}>
-                  <Text style={styles.bottoneSecondarioTesto}>{s.vice_allenatore_email ? "Cambia vice" : "Assegna vice"}</Text>
+                <Pressable style={styles.bottoneSecondario} onPress={() => onInvitaCollaboratore(s, "vice_allenatore")}>
+                  <Text style={styles.bottoneSecondarioTesto}>💬 Invita vice</Text>
                 </Pressable>
                 {s.vice_allenatore_email && (
                   <Pressable style={styles.bottoneSecondarioDistruttivo} onPress={() => onRimuoviCollaboratore(s, "vice_allenatore")}>
@@ -481,30 +471,15 @@ export default function GestioneSocieta() {
         )}
       </ScrollView>
 
-      <Modal visible={!!squadraPerCollaboratore} animationType="fade" transparent onRequestClose={() => setSquadraPerCollaboratore(null)}>
-        <View style={styles.sfondoPopup}>
-          <View style={styles.cartaPopup}>
-            <Text style={styles.titoloPopup}>
-              {ruoloCollaboratore === "allenatore" ? "Allenatore" : "Vice-allenatore"} di {squadraPerCollaboratore?.nome}
-            </Text>
-            <Text style={styles.nota}>Un invito parte subito: al primo accesso con questa email, la persona entra con questo profilo.</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Email Google"
-              placeholderTextColor={brand.colors.muted}
-              autoCapitalize="none"
-              keyboardType="email-address"
-              value={emailCollaboratore}
-              onChangeText={setEmailCollaboratore}
-              autoFocus
-            />
-            <Pressable style={styles.bottone} onPress={onAssegnaCollaboratore} disabled={!emailCollaboratore.trim()}>
-              <Text style={styles.bottoneTesto}>Invia invito</Text>
-            </Pressable>
-            <Pressable onPress={() => setSquadraPerCollaboratore(null)}><Text style={styles.chiudi}>Annulla</Text></Pressable>
-          </View>
-        </View>
-      </Modal>
+      {invitoStaff && (
+        <MessaggioWhatsApp
+          visibile
+          titolo={`${invitoStaff.ruolo === "allenatore" ? "Allenatore" : "Vice-allenatore"} di ${invitoStaff.nomeSquadra}`}
+          nota="Si apre WhatsApp col messaggio e il link pronti: scegli tu la persona a cui mandarlo e premi invia. Chi apre il link accede con Google ed entra in squadra con questo ruolo."
+          modelli={[{ etichetta: "Invito", testo: invitoStaffLink(invitoStaff.nomeSquadra, invitoStaff.ruolo === "allenatore" ? "allenatore" : "vice-allenatore", linkInvito(invitoStaff.token)) }]}
+          onChiudi={() => { setInvitoStaff(null); carica(); }}
+        />
+      )}
 
       <Modal visible={!!squadraPerRinomina} animationType="fade" transparent onRequestClose={() => setSquadraPerRinomina(null)}>
         <View style={styles.sfondoPopup}>

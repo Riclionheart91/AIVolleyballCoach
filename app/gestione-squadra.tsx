@@ -3,12 +3,12 @@ import { View, Text, TextInput, Pressable, StyleSheet, ScrollView, ActivityIndic
 import { router, useFocusEffect } from "expo-router";
 import { useAuth } from "@/src/context/AuthContext";
 import { elencaMembri, cambiaRuoloMembro, impostaPermessoScout, rimuoviMembro, RUOLI_CON_SCOUT, type MembroTeam } from "@/src/services/membri";
-import { annullaInvito, elencaInvitiPendenti, invitaMembro, type TeamInvite } from "@/src/services/teamInvites";
+import { annullaInvito, annullaInvitoLink, creaInvitoLink, elencaInvitiLink, elencaInvitiPendenti, invitaMembro, linkInvito, type InvitoLink, type RuoloStaff, type TeamInvite } from "@/src/services/teamInvites";
 import { aggiornaAtleta, elencaAtlete } from "@/src/services/athletes";
 import { confermaAzione, avvisa } from "@/src/lib/confermaAzione";
 import { brand, etichetteRuolo } from "@/src/config";
 import { MessaggioWhatsApp } from "@/src/components/MessaggioWhatsApp";
-import { invitoApp, invitoStaff } from "@/src/lib/messaggiWhatsApp";
+import { invitoApp, invitoStaffLink } from "@/src/lib/messaggiWhatsApp";
 import type { Athlete, Ruolo } from "@/src/types/database";
 
 const RUOLI_COLLABORATORE: Ruolo[] = ["allenatore", "vice_allenatore"];
@@ -16,20 +16,20 @@ const RUOLI_COLLABORATORE: Ruolo[] = ["allenatore", "vice_allenatore"];
 /**
  * Gestione della squadra: chi ha accesso e con quale profilo.
  * Separata in due parti perché rispondono a bisogni diversi —
- * i collaboratori si invitano per email, mentre la rosa esistono già
+ * i collaboratori si invitano con un link (su WhatsApp), mentre la rosa esistono già
  * in anagrafica e vanno solo collegate a un account.
  */
 export default function GestioneSquadra() {
   const { team } = useAuth();
   const [whatsappInvito, setWhatsappInvito] = useState<Athlete | null>(null);
-  const [whatsappStaff, setWhatsappStaff] = useState<TeamInvite | null>(null);
+  const [whatsappStaff, setWhatsappStaff] = useState<{ token: string; ruolo: RuoloStaff } | null>(null);
+  const [invitiLink, setInvitiLink] = useState<InvitoLink[]>([]);
   const [membri, setMembri] = useState<MembroTeam[]>([]);
   const [inviti, setInviti] = useState<TeamInvite[]>([]);
   const [atlete, setAtlete] = useState<Athlete[]>([]);
   const [caricamento, setCaricamento] = useState(true);
 
-  const [emailNuovo, setEmailNuovo] = useState("");
-  const [ruoloNuovo, setRuoloNuovo] = useState<Ruolo>("vice_allenatore");
+  const [ruoloNuovo, setRuoloNuovo] = useState<RuoloStaff>("vice_allenatore");
 
   const [membroInModifica, setMembroInModifica] = useState<MembroTeam | null>(null);
   const [atletaPerEmail, setAtletaPerEmail] = useState<Athlete | null>(null);
@@ -39,12 +39,13 @@ export default function GestioneSquadra() {
     if (!team) return;
     setCaricamento(true);
     try {
-      const [m, i, a] = await Promise.all([
+      const [m, i, a, l] = await Promise.all([
         elencaMembri(team.id).catch(() => []),
         elencaInvitiPendenti(team.id).catch(() => []),
         elencaAtlete(team.id).catch(() => []),
+        elencaInvitiLink(team.id).catch(() => []),
       ]);
-      setMembri(m); setInviti(i); setAtlete(a);
+      setMembri(m); setInviti(i); setAtlete(a); setInvitiLink(l);
     } finally {
       setCaricamento(false);
     }
@@ -56,13 +57,13 @@ export default function GestioneSquadra() {
   const atleteCollegate = new Set(membri.filter((m) => m.atleta_id).map((m) => m.atleta_id!));
   const invitiPerAtleta = new Map(inviti.filter((i) => i.atleta_id).map((i) => [i.atleta_id!, i]));
 
-  async function invitaCollaboratore() {
-    if (!team || !emailNuovo.trim()) return;
+  /** Crea il link per il ruolo scelto e apre subito WhatsApp col messaggio pronto: il contatto si sceglie li'. */
+  async function creaLinkStaff() {
+    if (!team) return;
     try {
-      await invitaMembro(team.id, emailNuovo.trim(), ruoloNuovo, null);
-      setEmailNuovo("");
+      const token = await creaInvitoLink(team.id, ruoloNuovo);
       carica();
-      avvisa("Invito creato", "Al primo accesso con Google entrerà nella squadra con il profilo scelto.");
+      setWhatsappStaff({ token, ruolo: ruoloNuovo });
     } catch (e) { avvisa("Errore", (e as Error).message); }
   }
 
@@ -126,27 +127,19 @@ export default function GestioneSquadra() {
           ))}
 
           <Text style={styles.etichetta}>Invita un collaboratore</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Email Google"
-            placeholderTextColor={brand.colors.muted}
-            autoCapitalize="none"
-            keyboardType="email-address"
-            value={emailNuovo}
-            onChangeText={setEmailNuovo}
-          />
           <View style={styles.chipRiga}>
             {RUOLI_COLLABORATORE.map((r) => (
-              <Pressable key={r} onPress={() => setRuoloNuovo(r)} style={[styles.chip, ruoloNuovo === r && styles.chipAttivo]}>
+              <Pressable key={r} onPress={() => setRuoloNuovo(r as RuoloStaff)} style={[styles.chip, ruoloNuovo === r && styles.chipAttivo]}>
                 <Text style={[styles.chipTesto, ruoloNuovo === r && styles.chipTestoAttivo]}>{etichetteRuolo[r] ?? r}</Text>
               </Pressable>
             ))}
           </View>
           <Text style={styles.nota}>
-            Il permesso di registrare lo scouting si assegna dopo, toccando la persona nell'elenco qui sopra: vale solo per allenatore e vice.
+            Scegli il ruolo e crea il link: si apre WhatsApp e scegli tu a chi mandarlo. Chi lo apre accede con il suo account Google ed entra in squadra con quel ruolo. Il link vale per una persona e scade dopo 7 giorni.
+            Il permesso di registrare lo scouting si assegna dopo, toccando la persona nell'elenco qui sopra.
           </Text>
-          <Pressable style={styles.bottone} onPress={invitaCollaboratore} disabled={!emailNuovo.trim()}>
-            <Text style={styles.bottoneTesto}>Invia invito</Text>
+          <Pressable style={styles.bottone} onPress={creaLinkStaff}>
+            <Text style={styles.bottoneTesto}>💬 Crea il link e invia su WhatsApp</Text>
           </Pressable>
         </View>
 
@@ -219,15 +212,26 @@ export default function GestioneSquadra() {
           })}
         </View>
 
-        {inviti.filter((i) => !i.atleta_id).length > 0 && (
+        {(invitiLink.length > 0 || inviti.filter((i) => !i.atleta_id).length > 0) && (
           <View style={styles.card}>
-            <Text style={styles.sezione}>Inviti in attesa</Text>
-            {inviti.filter((i) => !i.atleta_id).map((i) => (
-              <View key={i.id} style={styles.riga}>
-                <Text style={styles.rigaTitolo}>{i.email} — {etichetteRuolo[i.ruolo] ?? i.ruolo}</Text>
-                <Pressable style={styles.chipScout} onPress={() => setWhatsappStaff(i)} hitSlop={6} accessibilityLabel="Invita su WhatsApp">
+            <Text style={styles.sezione}>Inviti staff in attesa</Text>
+            {invitiLink.map((l) => (
+              <View key={l.id} style={styles.riga}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.rigaTitolo}>Link per {(etichetteRuolo[l.ruolo] ?? l.ruolo).toLowerCase()}</Text>
+                  <Text style={styles.rigaSotto}>scade il {new Date(l.scade_il).toLocaleDateString("it-IT")}</Text>
+                </View>
+                <Pressable style={styles.chipScout} onPress={() => setWhatsappStaff({ token: l.token, ruolo: l.ruolo })} hitSlop={6} accessibilityLabel="Rimanda su WhatsApp">
                   <Text style={styles.chipScoutTesto}>💬</Text>
                 </Pressable>
+                <Pressable onPress={async () => { await annullaInvitoLink(l.id); carica(); }} hitSlop={8}>
+                  <Text style={styles.azioneAnnulla}>Annulla</Text>
+                </Pressable>
+              </View>
+            ))}
+            {inviti.filter((i) => !i.atleta_id).map((i) => (
+              <View key={i.id} style={styles.riga}>
+                <Text style={styles.rigaTitolo}>{i.email} — {etichetteRuolo[i.ruolo] ?? i.ruolo} (invito via email)</Text>
                 <Pressable onPress={async () => { await annullaInvito(i.id); carica(); }} hitSlop={8}>
                   <Text style={styles.azioneAnnulla}>Annulla</Text>
                 </Pressable>
@@ -250,9 +254,9 @@ export default function GestioneSquadra() {
       {team && whatsappStaff && (
         <MessaggioWhatsApp
           visibile
-          titolo={`Invito all'app — ${whatsappStaff.email}`}
-          chiediNumero
-          modelli={[{ etichetta: "Invito", testo: invitoStaff(team.nome, etichetteRuolo[whatsappStaff.ruolo] ?? whatsappStaff.ruolo, whatsappStaff.email) }]}
+          titolo="Invito staff su WhatsApp"
+          nota="Si apre WhatsApp col messaggio e il link pronti: scegli tu la persona a cui mandarlo e premi invia."
+          modelli={[{ etichetta: "Invito", testo: invitoStaffLink(team.nome, (etichetteRuolo[whatsappStaff.ruolo] ?? whatsappStaff.ruolo).toLowerCase(), linkInvito(whatsappStaff.token)) }]}
           onChiudi={() => setWhatsappStaff(null)}
         />
       )}
