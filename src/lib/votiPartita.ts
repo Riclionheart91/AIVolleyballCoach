@@ -7,7 +7,7 @@
  *  - gli altri (e quando manca la qualita'): (punti - errori) / azioni
  * Con poche azioni l'indice si smorza verso il "sufficiente" (n / (n + 3)).
  * Voto del fondamentale = 6 + 4 x s (0 = tutto errori, 6 = in equilibrio, 10 = tutto punti), tra 0 e 10.
- * Voto generale = media dei voti dei fondamentali pesata sulla radice delle azioni.
+ * Voto generale = media dei voti dei fondamentali pesata sul numero di azioni.
  * Sotto le 5 azioni totali non si da' il voto (n.c.).
  */
 export const MIN_AZIONI_VOTO = 5;
@@ -81,7 +81,7 @@ export function calcolaVoti(eventi: EventoPerVoto[]): Record<string, VotoGiocatr
     const azioni = fondamentali.reduce((s, f) => s + f.azioni, 0);
     let voto: number | null = null;
     if (azioni >= MIN_AZIONI_VOTO) {
-      const pesi = fondamentali.map((f) => Math.sqrt(f.azioni));
+      const pesi = fondamentali.map((f) => f.azioni);
       const somma = pesi.reduce((s, p) => s + p, 0);
       voto = arrotonda(fondamentali.reduce((s, f, i) => s + f.voto * pesi[i], 0) / somma);
     }

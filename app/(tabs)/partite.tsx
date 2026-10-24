@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { View, Text, FlatList, TextInput, Pressable, StyleSheet, RefreshControl, ActivityIndicator, Modal, ScrollView } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { useAuth } from "@/src/context/AuthContext";
@@ -9,6 +9,8 @@ import { brand } from "@/src/config";
 import type { Campionato, Match } from "@/src/types/database";
 import { avvisa, confermaAzione } from "@/src/lib/confermaAzione";
 import { elencaScoutOspiti, invitaScoutOspite, rimuoviScoutOspite, type ScoutOspite } from "@/src/services/scoutOspiti";
+import { cambiaCodiceScout, elencaScoutAnonimi, escludiScoutAnonimo, linkScout, ottieniCodiceScout, rilasciaTurnoScout, type ScoutAnonimo } from "@/src/services/scoutQr";
+import { CodiceQr } from "@/src/components/CodiceQr";
 
 export default function Partite() {
   const { team, puoScrivere, isSuperuser } = useAuth();
@@ -113,8 +115,71 @@ export default function Partite() {
   const [emailOspite, setEmailOspite] = useState("");
   const [invioOspite, setInvioOspite] = useState(false);
 
+  // Scout senza account: QR della partita e persone agganciate.
+  const [codiceQr, setCodiceQr] = useState<string | null>(null);
+  const [anonimi, setAnonimi] = useState<ScoutAnonimo[]>([]);
+  const [mostraQr, setMostraQr] = useState(false);
+  const [linkCopiato, setLinkCopiato] = useState(false);
+
+  async function caricaAnonimi(matchId: string) {
+    try { setAnonimi(await elencaScoutAnonimi(matchId)); } catch { /* resta l'elenco di prima */ }
+  }
+
+  async function onMostraQr() {
+    if (!ospitiPartita) return;
+    try {
+      setCodiceQr(await ottieniCodiceScout(ospitiPartita.id));
+      setMostraQr(true);
+    } catch (e) { avvisa("QR non disponibile", (e as Error).message); }
+  }
+
+  function onCambiaCodice() {
+    if (!ospitiPartita) return;
+    confermaAzione(
+      "Cambiare il codice?",
+      "Il QR attuale smette di funzionare: chi è già dentro resta collegato, chi non è ancora entrato dovrà usare il nuovo QR.",
+      "Cambia codice",
+      async () => {
+        try { setCodiceQr(await cambiaCodiceScout(ospitiPartita.id)); setLinkCopiato(false); }
+        catch (e) { avvisa("Impossibile cambiare il codice", (e as Error).message); }
+      },
+    );
+  }
+
+  async function onCopiaLink() {
+    if (!codiceQr) return;
+    try {
+      await (navigator as unknown as { clipboard: { writeText: (t: string) => Promise<void> } }).clipboard.writeText(linkScout(codiceQr));
+      setLinkCopiato(true);
+      setTimeout(() => setLinkCopiato(false), 3000);
+    } catch { avvisa("Copia non riuscita", "Seleziona e copia il link a mano."); }
+  }
+
+  async function onEscludiAnonimo(a: ScoutAnonimo) {
+    if (!ospitiPartita) return;
+    try { await escludiScoutAnonimo(a.id, !a.escluso); await caricaAnonimi(ospitiPartita.id); }
+    catch (e) { avvisa("Operazione non riuscita", (e as Error).message); }
+  }
+
+  async function onLiberaTurno() {
+    if (!ospitiPartita) return;
+    try { await rilasciaTurnoScout(ospitiPartita.id); await caricaAnonimi(ospitiPartita.id); }
+    catch (e) { avvisa("Operazione non riuscita", (e as Error).message); }
+  }
+
+  // Finestra aperta: l'elenco degli scout col QR si aggiorna da solo.
+  useEffect(() => {
+    if (!ospitiPartita) return;
+    caricaAnonimi(ospitiPartita.id);
+    const t = setInterval(() => caricaAnonimi(ospitiPartita.id), 5000);
+    return () => clearInterval(t);
+  }, [ospitiPartita?.id]);
+
   async function apriOspiti(m: Match) {
     setOspitiPartita(m);
+    setMostraQr(false);
+    setCodiceQr(null);
+    setAnonimi([]);
     setEmailOspite("");
     setOspitiElenco([]);
     try { setOspitiElenco(await elencaScoutOspiti(m.id)); }
@@ -203,10 +268,51 @@ export default function Partite() {
 
       <Modal visible={!!ospitiPartita} animationType="slide" transparent onRequestClose={() => setOspitiPartita(null)}>
         <View style={styles.sfondoPopup}>
-          <View style={styles.cartaPopup}>
+          <View style={[styles.cartaPopup, { maxHeight: "92%" }]}>
+          <ScrollView contentContainerStyle={{ gap: 10 }}>
             <Text style={styles.titoloPopup}>Scout ospite — vs {ospitiPartita?.avversario}</Text>
+
+            <Text style={styles.sottotitoloPopup}>Con il QR (senza account)</Text>
             <Text style={styles.nota}>
-              Invita una persona esterna alla squadra: accede con Google usando questa email e vede soltanto questa partita, solo mentre è in corso. Può registrare azioni, annullare, fare cambi e gestire il Libero; non vede altro e non può avviare o chiudere set e partita. L'accesso termina da solo a partita conclusa.
+              Chi apre il QR scrive il suo nome ed entra subito, senza account. Vede solo questa partita, finché è in corso. Può registrare, fare cambi e gestire il Libero, aprire il set successivo (a set finito) e inserire la formazione. La partita la chiude solo lo staff. Registra una persona alla volta: le altre guardano e possono subentrare.
+            </Text>
+            {!mostraQr ? (
+              <Pressable style={styles.bottone} onPress={onMostraQr}>
+                <Text style={styles.bottoneTesto}>Mostra il QR</Text>
+              </Pressable>
+            ) : codiceQr ? (
+              <View style={{ gap: 8 }}>
+                <CodiceQr testo={linkScout(codiceQr)} dimensione={220} />
+                <Text style={[styles.nota, { textAlign: "center" }]} selectable>{linkScout(codiceQr)}</Text>
+                <View style={styles.selettoreRiga}>
+                  <Pressable style={styles.chip} onPress={onCopiaLink}><Text style={styles.chipTesto}>{linkCopiato ? "Copiato ✓" : "Copia il link"}</Text></Pressable>
+                  <Pressable style={styles.chip} onPress={onCambiaCodice}><Text style={styles.chipTesto}>Cambia codice</Text></Pressable>
+                  <Pressable style={styles.chip} onPress={() => setMostraQr(false)}><Text style={styles.chipTesto}>Nascondi</Text></Pressable>
+                </View>
+              </View>
+            ) : null}
+            {anonimi.length > 0 && (
+              <View>
+                <Text style={styles.nota}>Collegati col QR:</Text>
+                {anonimi.map((a) => (
+                  <View key={a.id} style={styles.rigaRotazione}>
+                    <Text style={[styles.rigaRotazioneNome, a.escluso && { textDecorationLine: "line-through" }]} numberOfLines={1}>
+                      {a.nome}{a.ha_turno ? " · sta registrando ✍️" : ""}{a.escluso ? " · escluso" : ""}
+                    </Text>
+                    <View style={{ flexDirection: "row", gap: 14 }}>
+                      {a.ha_turno && <Pressable onPress={onLiberaTurno} hitSlop={8}><Text style={styles.linkCampionato}>Libera turno</Text></Pressable>}
+                      <Pressable onPress={() => onEscludiAnonimo(a)} hitSlop={8}>
+                        <Text style={a.escluso ? styles.linkCampionato : styles.erroreTesto}>{a.escluso ? "Riammetti" : "Escludi"}</Text>
+                      </Pressable>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            )}
+
+            <Text style={styles.sottotitoloPopup}>Con un account Google</Text>
+            <Text style={styles.nota}>
+              Invita una persona con la sua email: accede con Google e vede soltanto questa partita, solo mentre è in corso. L'accesso termina da solo a partita conclusa.
             </Text>
             <TextInput
               style={styles.input}
@@ -234,6 +340,7 @@ export default function Partite() {
               ))}
             </ScrollView>
             <Pressable onPress={() => setOspitiPartita(null)}><Text style={styles.chiudiPopup}>Chiudi</Text></Pressable>
+          </ScrollView>
           </View>
         </View>
       </Modal>
@@ -418,6 +525,7 @@ const styles = StyleSheet.create({
   vuoto: { color: brand.colors.muted, textAlign: "center", marginTop: 32 },
   sfondoPopup: { flex: 1, backgroundColor: "rgba(0,0,0,0.55)", justifyContent: "center", padding: 20 },
   cartaPopup: { backgroundColor: brand.colors.surfaceSecondary, borderRadius: 16, padding: 18, gap: 10 },
+  sottotitoloPopup: { color: brand.colors.brandSecondary, fontSize: 12, fontWeight: "800", textTransform: "uppercase", marginTop: 4 },
   titoloPopup: { color: brand.colors.onSurface, fontSize: 15, fontWeight: "700" },
   chiudiPopup: { color: brand.colors.muted, fontSize: 13, textAlign: "center", paddingVertical: 6 },
   rigaRotazione: { flexDirection: "row", justifyContent: "space-between", paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: brand.colors.border },

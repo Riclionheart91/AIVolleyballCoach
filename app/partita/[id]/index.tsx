@@ -43,6 +43,8 @@ import { confermaAzione, avvisa } from "@/src/lib/confermaAzione";
 import { CampoPallini, type Pallino } from "@/src/components/CampoPallini";
 import { useSincronizzazioneLive } from "@/src/hooks/useSincronizzazioneLive";
 import { statoPartitaOspite } from "@/src/services/scoutOspiti";
+import { battitoTurnoScout, prendiTurnoScout, rilasciaTurnoScout, statoTurnoScout, type TurnoScout } from "@/src/services/scoutQr";
+import { FormazioneOspite } from "@/src/components/FormazioneOspite";
 import { SelettoreZona } from "@/src/components/ZoneCampo";
 import { FASI_SCHEMA, VARIANTI_SCHEMA, SCHEMA_TRANSIZIONE, ZONA_PREDEFINITA, chiaveSchema, faseDelloScambio, indiceSchema, puntoDiPosizione, puntoRuoloLinea, rotazioneDaFormazione, type Assegnazioni, type FaseSchema } from "@/src/lib/schemiGioco";
 import { elencaSchemiGioco } from "@/src/services/schemiGioco";
@@ -117,7 +119,12 @@ export default function PartitaLive() {
   // Scout OSPITE: persona esterna alla squadra, invitata solo su questa partita.
   // Legge tutto da una funzione dedicata del database e non puo' avviare/chiudere set o partita.
   const modoOspite = ospite === "1";
-  const puoScoutare = modoOspite || puoScoutareDaRuolo;
+  // Scout ospite: registra una persona alla volta. Chi ha il turno scouta, gli altri guardano e possono subentrare.
+  const [turno, setTurno] = useState<TurnoScout | null>(null);
+  const turnoLasciato = useRef(false);
+  const [precedente, setPrecedente] = useState<{ formazione: { athlete_id: string; posizione: number }[]; chi_ha_servito_per_primo: "noi" | "avversario" | null } | null>(null);
+  const [setConclusi, setSetConclusi] = useState<MatchSet[]>([]);
+  const puoScoutare = modoOspite ? !!turno?.mio : puoScoutareDaRuolo;
   const [nomeSquadraOspite, setNomeSquadraOspite] = useState<string | null>(null);
   const [erroreOspite, setErroreOspite] = useState<string | null>(null);
   const [match, setMatch] = useState<Match | null>(null);
@@ -214,6 +221,20 @@ export default function PartitaLive() {
         setLibero(st.libero ?? null);
         setTimeouts(st.timeouts ?? []);
         try { setRegolaLibero(await leggiRegolaLibero(id)); } catch { /* resta quella di prima */ }
+        setPrecedente((st as unknown as { precedente?: { formazione: { athlete_id: string; posizione: number }[]; chi_ha_servito_per_primo: "noi" | "avversario" | null } }).precedente ?? null);
+        setSetConclusi(st.sets);
+        // Turno di scouting: il primo che arriva (a turno libero) lo prende da solo; chi ce l'ha manda un segnale di presenza.
+        try {
+          let t = await statoTurnoScout(id);
+          if (!t.mio && !t.occupato && !turnoLasciato.current) {
+            try { await prendiTurnoScout(id); t = { occupato: true, nome: null, mio: true }; } catch { t = await statoTurnoScout(id); }
+          } else if (t.mio) {
+            await battitoTurnoScout(id).catch(() => undefined);
+          }
+          setTurno(t);
+          const attivoOspite = st.sets.find((x) => x.id === st.set_attivo_id);
+          if (t.mio && attivoOspite) verificaFineSet(attivoOspite, st.match, st.sets, st.regole, true);
+        } catch { /* se il turno non si legge si resta di sola lettura */ }
       } catch (e) {
         setErroreOspite((e as Error).message);
       }
@@ -296,9 +317,9 @@ export default function PartitaLive() {
     return a ? `#${a.numero_maglia ?? "-"} ${a.cognome}` : "—";
   }
 
-  function verificaFineSet(set: MatchSet, m: Match, tuttiISet: MatchSet[]) {
+  function verificaFineSet(set: MatchSet, m: Match, tuttiISet: MatchSet[], regole = regolePunteggio, comeOspite = false) {
     if (set.concluso) return;
-    const soglia = set.numero_set === 5 ? regolePunteggio.puntiSetDecisivo : regolePunteggio.puntiPerSet;
+    const soglia = set.numero_set === 5 ? regole.puntiSetDecisivo : regole.puntiPerSet;
     const noi = set.punti_noi >= soglia && set.punti_noi - set.punti_avversario >= 2;
     const loro = set.punti_avversario >= soglia && set.punti_avversario - set.punti_noi >= 2;
     if (!noi && !loro) return;
@@ -313,10 +334,16 @@ export default function PartitaLive() {
 
     confermaAzione(
       finita ? "Partita conclusa!" : "Set concluso!",
-      `${set.punti_noi} - ${set.punti_avversario} (set ${vintiNoi}-${vintiLoro}). ${finita ? "Chiudere la partita?" : "Passare al prossimo set?"}`,
-      finita ? "Chiudi partita" : "Prossimo set",
+      `${set.punti_noi} - ${set.punti_avversario} (set ${vintiNoi}-${vintiLoro}). ${finita ? (comeOspite ? "La partita è finita: la chiude l'allenatore." : "Chiudere la partita?") : "Passare al prossimo set?"}`,
+      finita ? (comeOspite ? "Ho capito" : "Chiudi partita") : "Prossimo set",
       async () => {
         try {
+          if (comeOspite) {
+            // Lo scout ospite non chiude la partita: apre il set successivo e inserisce la formazione.
+            if (finita) avvisa("Partita finita", "La partita la chiude l'allenatore.");
+            else { await nuovoSet(m.id); carica(); }
+            return;
+          }
           if (finita) { await chiudiMatch(m.id); router.back(); }
           else { await nuovoSet(m.id); router.replace(`/partita/${m.id}/prepara`); }
         } catch (e) { avvisa("Errore", (e as Error).message); }
@@ -519,6 +546,17 @@ export default function PartitaLive() {
     setTitolareLiberoScelto(titolareId);
   }
 
+  /** Lo scout ospite prende il turno di registrazione; se lo ha qualcun altro chiede conferma prima di subentrare. */
+  function subentraComeScout(occupato: boolean) {
+    if (!id) return;
+    const fai = async () => {
+      try { turnoLasciato.current = false; await prendiTurnoScout(id, occupato); await carica(); }
+      catch (e) { avvisa("Turno non preso", (e as Error).message); }
+    };
+    if (occupato) confermaAzione("Subentrare?", `Ora sta registrando ${turno?.nome ?? "un altro scout"}: se subentri smette di poter registrare.`, "Subentra", fai);
+    else fai();
+  }
+
   if (modoOspite && erroreOspite && (!match || match.stato !== "in_corso" || erroreOspite === "Permesso negato")) {
     return (
       <View style={[styles.contenitore, { alignItems: "center", justifyContent: "center", gap: 16 }]}>
@@ -562,10 +600,35 @@ export default function PartitaLive() {
 
   if (!setCorrente) return <View style={styles.contenitore}><Text style={styles.vuoto}>Caricamento set…</Text></View>;
 
+  // Scout ospite: set nuovo senza formazione -> si inserisce qui (non ci sono eventi e meno di 6 in campo).
+  if (modoOspite && formazione.length < 6 && !eventi.some((e) => e.set_id === setCorrente.id)) {
+    const risultatiPrec = setConclusi.filter((x) => x.id !== setCorrente.id).map((x) => `${x.punti_noi}-${x.punti_avversario}`).join(" · ");
+    return (
+      <View style={styles.contenitore}>
+        <FormazioneOspite
+          key={setCorrente.id}
+          setId={setCorrente.id}
+          numeroSet={setCorrente.numero_set}
+          atlete={atlete.filter((a) => convocateIds.includes(a.id) && !liberiIds.has(a.id))}
+          precedente={precedente}
+          risultatiPrecedenti={risultatiPrec}
+          haTurno={!!turno?.mio}
+          nomeTurno={turno?.occupato ? turno.nome : null}
+          onSubentra={() => subentraComeScout(!!turno?.occupato)}
+          onFatto={carica}
+        />
+      </View>
+    );
+  }
+
   const skills = modalitaEssenziale ? skillsScoutingEssenziali : skillsScouting;
   const selezionata = atletaSelId ? nomeAtleta(atletaSelId) : null;
   const noiAlServizio = setCorrente.squadra_al_servizio === "noi";
   const alServizio = noiAlServizio ? formazione.find((f) => f.posizione === 1) : null;
+  const sogliaSet = setCorrente.numero_set === 5 ? regolePunteggio.puntiSetDecisivo : regolePunteggio.puntiPerSet;
+  const setFinitoPerPunteggio = !setCorrente.concluso
+    && Math.max(setCorrente.punti_noi, setCorrente.punti_avversario) >= sogliaSet
+    && Math.abs(setCorrente.punti_noi - setCorrente.punti_avversario) >= 2;
   const timeoutSet = timeouts.filter((t) => t.set_id === setCorrente.id);
   const timeoutNoi = timeoutSet.filter((t) => t.squadra === "noi").length;
   const timeoutLoro = timeoutSet.filter((t) => t.squadra === "avversario").length;
@@ -1084,6 +1147,28 @@ export default function PartitaLive() {
               </Pressable>
             </View>
 
+            {modoOspite && (
+              <View style={styles.rigaComandiFissi}>
+                {setFinitoPerPunteggio && (
+                  <Pressable
+                    style={styles.tastoPiccolo}
+                    onPress={async () => {
+                      try { await nuovoSet(match.id); await carica(); }
+                      catch (e) { avvisa("Errore", (e as Error).message); }
+                    }}
+                  >
+                    <Text style={styles.tastoPiccoloTesto}>Set finito: prossimo set</Text>
+                  </Pressable>
+                )}
+                <Pressable
+                  style={styles.tastoPiccolo}
+                  onPress={async () => { turnoLasciato.current = true; try { await rilasciaTurnoScout(match.id); } catch { /* il turno scade da solo */ } await carica(); }}
+                >
+                  <Text style={styles.tastoPiccoloTesto}>Lascia il turno</Text>
+                </Pressable>
+              </View>
+            )}
+
             {puoScrivere && (
               <View style={styles.rigaComandiFissi}>
                 <Pressable
@@ -1104,7 +1189,18 @@ export default function PartitaLive() {
           </>
         ) : (
           <>
-            <Text style={styles.nota}>Consultazione in sola lettura.</Text>
+            {modoOspite ? (
+              <View style={styles.bannerSerie}>
+                <Text style={styles.bannerLiberoTesto}>
+                  {turno?.occupato ? `👀 Sta registrando ${turno.nome ?? "un altro scout"}: tu guardi.` : "👀 Nessuno sta registrando."}
+                </Text>
+                <Pressable style={styles.bannerLiberoSi} onPress={() => subentraComeScout(!!turno?.occupato)}>
+                  <Text style={styles.bannerLiberoSiTesto}>{turno?.occupato ? "Subentra" : "Prendi il turno"}</Text>
+                </Pressable>
+              </View>
+            ) : (
+              <Text style={styles.nota}>Consultazione in sola lettura.</Text>
+            )}
             <Pressable onPress={ricaricaPagina} style={styles.tastoPiccolo}>
               <Text style={styles.tastoPiccoloTesto}>🔄 Ricarica</Text>
             </Pressable>

@@ -221,6 +221,22 @@ export default function AnalisiPartita() {
     }
     return out;
   }
+  /** Quante azioni di quel fondamentale hanno la zona indicata, rispetto a tutte quelle registrate. */
+  function coperturaZone(fondamentale: string, dimensione: "arrivo" | "partenza"): { con: number; totali: number; quota: number } {
+    const con = Object.values(valoriPerZona(fondamentale, dimensione)).reduce((s, v) => s + v.azioni, 0);
+    const totali = fondamentali.find((f) => f.fondamentale === fondamentale)?.azioni ?? 0;
+    return { con, totali, quota: totali > 0 ? con / totali : 0 };
+  }
+  function notaCopertura(fondamentale: string, dimensione: "arrivo" | "partenza", nome: string) {
+    const c = coperturaZone(fondamentale, dimensione);
+    const poche = c.quota < 0.5;
+    return (
+      <Text style={[styles.dettaglioFondamentale, poche && { color: brand.colors.warning }]}>
+        {poche ? "⚠ " : ""}Zona indicata su {c.con} {nome} su {c.totali} ({Math.round(c.quota * 100)}%).
+        {c.quota < 0.1 ? " Troppo pochi dati per dire qualcosa: le percentuali qui sotto non sono affidabili." : poche ? " Dato parziale: leggilo come indicazione, non come quadro della partita." : ""}
+      </Text>
+    );
+  }
   const haZone = (fondamentale: string, dimensione: "arrivo" | "partenza") => Object.keys(valoriPerZona(fondamentale, dimensione)).length > 0;
 
   const chiaveAvversario = (nome: string) => nome.toLowerCase().replace(/\s+/g, " ").trim();
@@ -375,6 +391,7 @@ export default function AnalisiPartita() {
             {haZone("Servizio", "arrivo") && (
               <View style={styles.bloccoSet}>
                 <Text style={styles.titoloSet}>Battuta — dove cade</Text>
+                {notaCopertura("Servizio", "arrivo", "battute")}
                 <GrigliaZone valori={valoriPerZona("Servizio", "arrivo")} />
               </View>
             )}
@@ -389,6 +406,7 @@ export default function AnalisiPartita() {
                     <Text style={[styles.chipZonaTesto, zonaAttaccoVista === "partenza" && styles.chipZonaTestoAttivo]}>Partenza</Text>
                   </Pressable>
                 </View>
+                {haZone("Attacco", zonaAttaccoVista) && notaCopertura("Attacco", zonaAttaccoVista, "attacchi")}
                 {haZone("Attacco", zonaAttaccoVista)
                   ? <GrigliaZone valori={valoriPerZona("Attacco", zonaAttaccoVista)} />
                   : <Text style={styles.nota}>Nessun dato per questa vista.</Text>}
@@ -481,7 +499,7 @@ export default function AnalisiPartita() {
           </Pressable>
           {mostraCalcoloVoto && (
             <Text style={styles.nota}>
-              Ogni fondamentale ha un indice tra −1 e +1: (punti − errori) / azioni; per ricezione e difesa (perfette + ½ buone − errori) / azioni. Il voto del fondamentale è 6 + 4 × indice (6 = in equilibrio, 10 = tutto punti, 0 = tutto errori), smorzato verso il 6 quando le azioni sono poche. Il voto generale è la media dei fondamentali, dando più peso a quelli con più azioni.
+              Ogni fondamentale ha un indice tra −1 e +1: (punti − errori) / azioni; per ricezione e difesa (perfette + ½ buone − errori) / azioni. Il voto del fondamentale è 6 + 4 × indice (6 = in equilibrio, 10 = tutto punti, 0 = tutto errori), smorzato verso il 6 quando le azioni sono poche. Il voto generale è la media dei fondamentali pesata sul numero di azioni.
             </Text>
           )}
           {persone.length === 0 ? (
