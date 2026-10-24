@@ -1,3 +1,4 @@
+import { IndicatoreScoutQr } from "@/src/components/IndicatoreScoutQr";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { View, Text, Pressable, StyleSheet, ScrollView, Switch, Modal, ActivityIndicator, FlatList, useWindowDimensions } from "react-native";
 import { useLocalSearchParams, useFocusEffect, router } from "expo-router";
@@ -891,6 +892,7 @@ export default function PartitaLive() {
           <Text style={styles.indicatoreServizio}>{noiAlServizio ? "" : "🏐"}</Text>
           <Text style={[styles.nomeSquadra, !noiAlServizio && styles.nomeSquadraAlServizio]} numberOfLines={1}>{match.avversario}</Text>
         </View>
+        {!modoOspite && match.stato === "in_corso" && <IndicatoreScoutQr matchId={match.id} />}
       </View>
       <View style={{ alignItems: orizzontale ? "flex-end" : "center" }}>
         <Text style={styles.setNumero}>Set {setCorrente.numero_set} · TO {timeoutNoi}-{timeoutLoro}</Text>

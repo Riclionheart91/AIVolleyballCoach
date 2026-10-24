@@ -11,6 +11,7 @@ import { avvisa, confermaAzione } from "@/src/lib/confermaAzione";
 import { elencaScoutOspiti, invitaScoutOspite, rimuoviScoutOspite, type ScoutOspite } from "@/src/services/scoutOspiti";
 import { cambiaCodiceScout, elencaScoutAnonimi, escludiScoutAnonimo, linkScout, ottieniCodiceScout, rilasciaTurnoScout, type ScoutAnonimo } from "@/src/services/scoutQr";
 import { CodiceQr } from "@/src/components/CodiceQr";
+import { IndicatoreScoutQr } from "@/src/components/IndicatoreScoutQr";
 import { MessaggioWhatsApp } from "@/src/components/MessaggioWhatsApp";
 import { commentoPartita, inviaLinkScout } from "@/src/lib/messaggiWhatsApp";
 
@@ -552,6 +553,7 @@ export default function Partite() {
                 <Text style={styles.linkConverti}>È un allenamento — spostalo</Text>
               </Pressable>
             )}
+            {puoEliminare && item.stato === "in_corso" && <IndicatoreScoutQr matchId={item.id} />}
             {item.stato === "conclusa" && <Text style={styles.cardRisultato}>Set: {item.set_vinti_noi} - {item.set_vinti_avversario}</Text>}
             {puoScrivere && item.stato !== "programmata" && (
               <View style={{ flexDirection: "row", gap: 16 }}>
