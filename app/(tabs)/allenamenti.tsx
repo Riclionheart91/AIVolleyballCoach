@@ -11,8 +11,6 @@ import { confermaAzione, avvisa } from "@/src/lib/confermaAzione";
 import { FabAggiungi } from "@/src/components/Fab";
 import { PannelloSporteasy } from "@/src/components/PannelloSporteasy";
 import { PopupForm } from "@/src/components/PopupForm";
-import { MessaggioWhatsApp } from "@/src/components/MessaggioWhatsApp";
-import { modelliAllenamento } from "@/src/lib/messaggiWhatsApp";
 import { brand } from "@/src/config";
 import type { Athlete, Attendance, Rpe, Training } from "@/src/types/database";
 
@@ -41,7 +39,6 @@ function meseCorrente(): Date {
 
 export default function Allenamenti() {
   const { team, puoScrivere } = useAuth();
-  const [whatsappAllenamento, setWhatsappAllenamento] = useState<Training | null>(null);
   const [allenamenti, setAllenamenti] = useState<Training[]>([]);
   // Si mostra un mese alla volta: con centinaia di sedute importate da
   // SportEasy un elenco unico diventa illeggibile.
@@ -227,9 +224,6 @@ export default function Allenamenti() {
                 <Pressable style={styles.bottoneAzione} onPress={() => apriModifica(item)}>
                   <Text style={styles.bottoneAzioneTesto}>Modifica</Text>
                 </Pressable>
-                <Pressable style={styles.bottoneAzione} onPress={() => setWhatsappAllenamento(item)}>
-                  <Text style={styles.bottoneAzioneTesto}>💬</Text>
-                </Pressable>
                 <Pressable onPress={() => chiediEliminazione(item)}><Text style={styles.azioneCardDistruttiva}>Elimina</Text></Pressable>
               </View>
             )}
@@ -240,16 +234,6 @@ export default function Allenamenti() {
           </View>
         )}
       />
-
-      {team && whatsappAllenamento && (
-        <MessaggioWhatsApp
-          visibile
-          titolo={`WhatsApp — ${whatsappAllenamento.titolo}`}
-          teamId={team.id}
-          modelli={modelliAllenamento(whatsappAllenamento, team.nome)}
-          onChiudi={() => setWhatsappAllenamento(null)}
-        />
-      )}
 
       {puoScrivere && <FabAggiungi onPress={apriNuovo} />}
 

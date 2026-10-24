@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { View, Text, Pressable, StyleSheet, Modal, ScrollView, TextInput, Linking, Platform } from "react-native";
 import { brand } from "@/src/config";
-import { elencaAtlete } from "@/src/services/athletes";
 import type { Athlete } from "@/src/types/database";
 
 export interface ModelloMessaggio { etichetta: string; testo: string }
@@ -23,29 +22,26 @@ function apriLink(url: string) {
 }
 
 /**
- * Messaggio da inviare su WhatsApp: il testo e' modificabile, "{nome}" viene
- * sostituito col nome di ogni atleta. Un pulsante lo manda al gruppo (si sceglie
- * la chat in WhatsApp), uno per atleta apre la chat col suo numero in anagrafica.
+ * Messaggio WhatsApp precompilato e modificabile. Due usi:
+ *  - con `atleta`: scrive a una persona, al numero in anagrafica ("{nome}" diventa il suo nome);
+ *  - senza `atleta`: apre WhatsApp col testo e si sceglie il gruppo della squadra.
  * Niente invio automatico: l'ultimo tocco ("invia") resta in WhatsApp, a chi scrive.
  */
-export function MessaggioWhatsApp({ visibile, titolo, teamId, modelli, onChiudi }: {
-  visibile: boolean; titolo: string; teamId: string; modelli: ModelloMessaggio[]; onChiudi: () => void;
+export function MessaggioWhatsApp({ visibile, titolo, atleta, chiediNumero, modelli, onChiudi }: {
+  visibile: boolean; titolo: string; atleta?: Athlete | null;
+  /** Per chi non ha un numero in anagrafica (es. lo staff): si puo' digitarlo, senza salvarlo; vuoto = si sceglie il contatto in WhatsApp. */
+  chiediNumero?: boolean; modelli: ModelloMessaggio[]; onChiudi: () => void;
 }) {
-  const [atlete, setAtlete] = useState<Athlete[]>([]);
   const [testo, setTesto] = useState("");
-  const [inviate, setInviate] = useState<Set<string>>(new Set());
+  const [numeroDigitato, setNumeroDigitato] = useState("");
 
   useEffect(() => {
-    if (!visibile) return;
-    setTesto(modelli[0]?.testo ?? "");
-    setInviate(new Set());
-    elencaAtlete(teamId).then(setAtlete).catch(() => setAtlete([]));
+    if (visibile) { setTesto(modelli[0]?.testo ?? ""); setNumeroDigitato(""); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visibile, teamId]);
+  }, [visibile]);
 
-  const personalizza = (nome: string) => testo.replace(/\{nome\}/g, nome);
-  const conNumero = atlete.filter((a) => numeroWhatsApp(a.telefono));
-  const senzaNumero = atlete.filter((a) => !numeroWhatsApp(a.telefono));
+  const numero = atleta ? numeroWhatsApp(atleta.telefono) : null;
+  const testoFinale = testo.replace(/\{nome\}/g, atleta?.nome ?? (chiediNumero ? "" : "ragazze"));
 
   return (
     <Modal visible={visibile} animationType="slide" transparent onRequestClose={onChiudi}>
@@ -53,7 +49,6 @@ export function MessaggioWhatsApp({ visibile, titolo, teamId, modelli, onChiudi 
         <View style={styles.carta}>
           <ScrollView contentContainerStyle={{ gap: 10 }}>
             <Text style={styles.titolo}>{titolo}</Text>
-
             {modelli.length > 1 && (
               <View style={styles.riga}>
                 {modelli.map((m) => (
@@ -63,32 +58,39 @@ export function MessaggioWhatsApp({ visibile, titolo, teamId, modelli, onChiudi 
                 ))}
               </View>
             )}
-
             <TextInput style={styles.input} multiline value={testo} onChangeText={setTesto} placeholderTextColor={brand.colors.muted} />
-            <Text style={styles.nota}>Puoi modificare il testo. «{"{nome}"}» diventa il nome di ogni atleta quando scrivi alle singole.</Text>
 
-            <Pressable style={styles.bottone} onPress={() => apriLink(`https://wa.me/?text=${encodeURIComponent(personalizza("ragazze"))}`)}>
-              <Text style={styles.bottoneTesto}>💬 Manda al gruppo</Text>
-            </Pressable>
-            <Text style={styles.nota}>Si apre WhatsApp con il messaggio pronto: scegli il gruppo della squadra e premi invia.</Text>
-
-            <Text style={styles.sezione}>Oppure a ogni atleta</Text>
-            {conNumero.length === 0 && <Text style={styles.nota}>Nessuna atleta ha un numero di telefono in anagrafica.</Text>}
-            {conNumero.map((a) => (
-              <Pressable
-                key={a.id}
-                style={styles.rigaAtleta}
-                onPress={() => {
-                  setInviate((prev) => new Set(prev).add(a.id));
-                  apriLink(`https://wa.me/${numeroWhatsApp(a.telefono)}?text=${encodeURIComponent(personalizza(a.nome))}`);
-                }}
-              >
-                <Text style={styles.nomeAtleta}>{a.cognome} {a.nome}</Text>
-                <Text style={[styles.statoAtleta, inviate.has(a.id) && { color: brand.colors.success }]}>{inviate.has(a.id) ? "✓ aperto" : "Scrivi ›"}</Text>
-              </Pressable>
-            ))}
-            {senzaNumero.length > 0 && (
-              <Text style={styles.nota}>Senza numero valido: {senzaNumero.map((a) => `${a.nome} ${a.cognome}`).join(", ")}. Aggiungilo nella scheda dell'atleta.</Text>
+            {atleta ? (
+              numero ? (
+                <>
+                  <Pressable style={styles.bottone} onPress={() => apriLink(`https://wa.me/${numero}?text=${encodeURIComponent(testoFinale)}`)}>
+                    <Text style={styles.bottoneTesto}>💬 Scrivi a {atleta.nome} su WhatsApp</Text>
+                  </Pressable>
+                  <Text style={styles.nota}>Si apre la chat con il suo numero ({atleta.telefono}) e il messaggio pronto: premi invia in WhatsApp.</Text>
+                </>
+              ) : (
+                <Text style={styles.nota}>{atleta.nome} non ha un numero di telefono valido in anagrafica. Aggiungilo nella sua scheda (campo Telefono) e riprova.</Text>
+              )
+            ) : (
+              <>
+                {chiediNumero && (
+                  <TextInput style={styles.inputNumero} keyboardType="phone-pad" value={numeroDigitato} onChangeText={setNumeroDigitato} placeholder="Numero di telefono (facoltativo, non viene salvato)" placeholderTextColor={brand.colors.muted} />
+                )}
+                <Pressable
+                  style={styles.bottone}
+                  onPress={() => {
+                    const n = chiediNumero ? numeroWhatsApp(numeroDigitato) : null;
+                    apriLink(`https://wa.me/${n ?? ""}?text=${encodeURIComponent(testoFinale)}`);
+                  }}
+                >
+                  <Text style={styles.bottoneTesto}>💬 Apri WhatsApp</Text>
+                </Pressable>
+                <Text style={styles.nota}>
+                  {chiediNumero
+                    ? "Con il numero si apre direttamente la chat; senza numero scegli il contatto in WhatsApp. Poi premi invia."
+                    : "Si apre WhatsApp col messaggio pronto: scegli il gruppo della squadra e premi invia. Aggiungi qui sopra il tuo commento."}
+                </Text>
+              </>
             )}
           </ScrollView>
           <Pressable onPress={onChiudi}><Text style={styles.chiudi}>Chiudi</Text></Pressable>
@@ -109,6 +111,7 @@ const styles = StyleSheet.create({
   chipTesto: { color: brand.colors.onSurfaceSecondary, fontSize: 13 },
   chipTestoAttivo: { color: "#000", fontWeight: "700" },
   input: { backgroundColor: brand.colors.surfaceTertiary, color: brand.colors.onSurface, borderRadius: 8, padding: 10, minHeight: 110, textAlignVertical: "top" },
+  inputNumero: { backgroundColor: brand.colors.surfaceTertiary, color: brand.colors.onSurface, borderRadius: 8, padding: 10 },
   nota: { color: brand.colors.muted, fontSize: 12 },
   bottone: { backgroundColor: brand.colors.brand, padding: 12, borderRadius: 8, alignItems: "center" },
   bottoneTesto: { color: "#000", fontWeight: "700" },

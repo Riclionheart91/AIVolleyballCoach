@@ -4,11 +4,14 @@ import { router, useFocusEffect } from "expo-router";
 import { useAuth } from "@/src/context/AuthContext";
 import { calcolaNotifiche, type Notifica } from "@/src/services/notifiche";
 import { brand } from "@/src/config";
+import { MessaggioWhatsApp } from "@/src/components/MessaggioWhatsApp";
+import { promemoriaCertificato } from "@/src/lib/messaggiWhatsApp";
 
 export default function CentroNotifiche() {
   const { team, puoScrivere } = useAuth();
   const [notifiche, setNotifiche] = useState<Notifica[]>([]);
   const [caricamento, setCaricamento] = useState(true);
+  const [whatsapp, setWhatsapp] = useState<Notifica | null>(null);
 
   const carica = useCallback(async () => {
     if (!team) return;
@@ -45,8 +48,23 @@ export default function CentroNotifiche() {
             <Pressable style={[styles.riga, item.urgente && styles.rigaUrgente]} onPress={() => apri(item)} disabled={!item.link}>
               <Text style={[styles.rigaTitolo, item.urgente && styles.rigaTitoloUrgente]}>{item.urgente ? "⚠ " : ""}{item.titolo}</Text>
               <Text style={styles.rigaDescrizione}>{item.descrizione}</Text>
+              {item.tipo === "certificato_medico" && item.atleta && (
+                <Pressable style={styles.bottoneWhatsapp} onPress={() => setWhatsapp(item)} hitSlop={6}>
+                  <Text style={styles.bottoneWhatsappTesto}>💬 Avvisa su WhatsApp</Text>
+                </Pressable>
+              )}
             </Pressable>
           )}
+        />
+      )}
+
+      {team && whatsapp?.atleta && whatsapp.scadenza && (
+        <MessaggioWhatsApp
+          visibile
+          titolo={`Certificato — ${whatsapp.atleta.nome} ${whatsapp.atleta.cognome}`}
+          atleta={whatsapp.atleta}
+          modelli={[{ etichetta: "Certificato", testo: promemoriaCertificato(team.nome, whatsapp.scadenza) }]}
+          onChiudi={() => setWhatsapp(null)}
         />
       )}
     </View>
@@ -63,5 +81,7 @@ const styles = StyleSheet.create({
   rigaUrgente: { borderWidth: 1, borderColor: brand.colors.error },
   rigaTitolo: { color: brand.colors.onSurface, fontWeight: "700", fontSize: 14 },
   rigaTitoloUrgente: { color: brand.colors.error },
+  bottoneWhatsapp: { alignSelf: "flex-start", marginTop: 6, paddingVertical: 4, paddingHorizontal: 10, borderRadius: 8, borderWidth: 1, borderColor: brand.colors.brandSecondary },
+  bottoneWhatsappTesto: { color: brand.colors.brandSecondary, fontSize: 12, fontWeight: "600" },
   rigaDescrizione: { color: brand.colors.onSurfaceSecondary, fontSize: 13 },
 });

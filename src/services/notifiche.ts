@@ -1,4 +1,5 @@
 import { elencaAtlete } from "@/src/services/athletes";
+import type { Athlete } from "@/src/types/database";
 import { elencaInvitiPendenti } from "@/src/services/teamInvites";
 import { atleteDaValutare, elencaPropostePendenti as elencaPropostePendentiValutazioni } from "@/src/services/evaluations";
 import { leggiPianoAnnuale, serveProporreAggiornamento } from "@/src/services/pianoAnnuale";
@@ -12,6 +13,9 @@ export interface Notifica {
   descrizione: string;
   urgente: boolean;
   link?: string;
+  /** Solo certificato medico: l'atleta e la scadenza, per il promemoria WhatsApp. */
+  atleta?: Athlete;
+  scadenza?: string;
 }
 
 const GIORNI_PREAVVISO_CERTIFICATO = 30;
@@ -39,14 +43,14 @@ export async function calcolaNotifiche(teamId: string, puoScrivere: boolean): Pr
           id: `certmed-${a.id}`, tipo: "certificato_medico", urgente: true,
           titolo: "Certificato medico scaduto",
           descrizione: `${a.nome} ${a.cognome} — scaduto il ${scadenza.toLocaleDateString("it-IT")}`,
-          link: `/atleta/${a.id}`,
+          link: `/atleta/${a.id}`, atleta: a, scadenza: a.scadenza_certificato_medico,
         });
       } else if (scadenza <= sogliaPreavviso) {
         notifiche.push({
           id: `certmed-${a.id}`, tipo: "certificato_medico", urgente: false,
           titolo: "Certificato medico in scadenza",
           descrizione: `${a.nome} ${a.cognome} — scade il ${scadenza.toLocaleDateString("it-IT")}`,
-          link: `/atleta/${a.id}`,
+          link: `/atleta/${a.id}`, atleta: a, scadenza: a.scadenza_certificato_medico,
         });
       }
     }

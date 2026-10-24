@@ -12,7 +12,7 @@ import { elencaScoutOspiti, invitaScoutOspite, rimuoviScoutOspite, type ScoutOsp
 import { cambiaCodiceScout, elencaScoutAnonimi, escludiScoutAnonimo, linkScout, ottieniCodiceScout, rilasciaTurnoScout, type ScoutAnonimo } from "@/src/services/scoutQr";
 import { CodiceQr } from "@/src/components/CodiceQr";
 import { MessaggioWhatsApp } from "@/src/components/MessaggioWhatsApp";
-import { modelliPartita } from "@/src/lib/messaggiWhatsApp";
+import { commentoPartita } from "@/src/lib/messaggiWhatsApp";
 
 export default function Partite() {
   const { team, puoScrivere, isSuperuser } = useAuth();
@@ -34,7 +34,7 @@ export default function Partite() {
   const [rotazioniPartita, setRotazioniPartita] = useState<{ nome: string; righe: RendimentoRotazionePartita[] } | null>(null);
 
   // Toccando una partita conclusa: prima i punteggi dei set, poi la scelta dell'analisi.
-  const [whatsappPartita, setWhatsappPartita] = useState<Match | null>(null);
+  const [whatsappPartita, setWhatsappPartita] = useState<{ match: Match; sets: MatchSet[] } | null>(null);
   const [menuPartita, setMenuPartita] = useState<{ match: Match; sets: MatchSet[] } | null>(null);
 
   async function apriRotazioni(m: Match) {
@@ -259,9 +259,8 @@ export default function Partite() {
       {team && whatsappPartita && (
         <MessaggioWhatsApp
           visibile
-          titolo={`WhatsApp — vs ${whatsappPartita.avversario}`}
-          teamId={team.id}
-          modelli={modelliPartita(whatsappPartita, team.nome)}
+          titolo={`Gruppo WhatsApp — vs ${whatsappPartita.match.avversario}`}
+          modelli={[{ etichetta: "Commento", testo: commentoPartita(whatsappPartita.match, whatsappPartita.sets, team.nome) }]}
           onChiudi={() => setWhatsappPartita(null)}
         />
       )}
@@ -293,6 +292,11 @@ export default function Partite() {
               {puoScrivere && (
                 <Pressable style={styles.bottone} onPress={() => { const m = menuPartita!.match; setMenuPartita(null); apriRotazioni(m); }}>
                   <Text style={styles.bottoneTesto}>📊 Analisi per rotazione</Text>
+                </Pressable>
+              )}
+              {puoScrivere && (
+                <Pressable style={styles.bottoneSecondario} onPress={() => { setWhatsappPartita(menuPartita); setMenuPartita(null); }}>
+                  <Text style={styles.bottoneSecondarioTesto}>💬 Commento al gruppo WhatsApp</Text>
                 </Pressable>
               )}
             </View>
@@ -523,11 +527,6 @@ export default function Partite() {
                   <Text style={styles.linkCampionato}>📊 Rotazioni</Text>
                 </Pressable>
               </View>
-            )}
-            {puoScrivere && item.stato !== "conclusa" && (
-              <Pressable onPress={() => setWhatsappPartita(item)} hitSlop={8} style={styles.bottoneOspite}>
-                <Text style={styles.bottoneOspiteTesto}>💬 Avvisa su WhatsApp</Text>
-              </Pressable>
             )}
             {puoEliminare && item.stato !== "conclusa" && (
               <Pressable onPress={() => apriOspiti(item)} hitSlop={8} style={styles.bottoneOspite}>

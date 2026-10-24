@@ -7,6 +7,8 @@ import { annullaInvito, elencaInvitiPendenti, invitaMembro, type TeamInvite } fr
 import { aggiornaAtleta, elencaAtlete } from "@/src/services/athletes";
 import { confermaAzione, avvisa } from "@/src/lib/confermaAzione";
 import { brand, etichetteRuolo } from "@/src/config";
+import { MessaggioWhatsApp } from "@/src/components/MessaggioWhatsApp";
+import { invitoApp, invitoStaff } from "@/src/lib/messaggiWhatsApp";
 import type { Athlete, Ruolo } from "@/src/types/database";
 
 const RUOLI_COLLABORATORE: Ruolo[] = ["allenatore", "vice_allenatore"];
@@ -19,6 +21,8 @@ const RUOLI_COLLABORATORE: Ruolo[] = ["allenatore", "vice_allenatore"];
  */
 export default function GestioneSquadra() {
   const { team } = useAuth();
+  const [whatsappInvito, setWhatsappInvito] = useState<Athlete | null>(null);
+  const [whatsappStaff, setWhatsappStaff] = useState<TeamInvite | null>(null);
   const [membri, setMembri] = useState<MembroTeam[]>([]);
   const [inviti, setInviti] = useState<TeamInvite[]>([]);
   const [atlete, setAtlete] = useState<Athlete[]>([]);
@@ -180,6 +184,11 @@ export default function GestioneSquadra() {
                     <Text style={[styles.chipScoutTesto, membro.puo_scoutare && styles.chipScoutTestoAttivo]}>Scout</Text>
                   </Pressable>
                 )}
+                {!collegata && (
+                  <Pressable style={styles.chipScout} onPress={() => setWhatsappInvito(a)} hitSlop={6} accessibilityLabel="Invita su WhatsApp">
+                    <Text style={styles.chipScoutTesto}>💬</Text>
+                  </Pressable>
+                )}
                 {collegata ? (
                   <Pressable
                     onPress={() => {
@@ -216,6 +225,9 @@ export default function GestioneSquadra() {
             {inviti.filter((i) => !i.atleta_id).map((i) => (
               <View key={i.id} style={styles.riga}>
                 <Text style={styles.rigaTitolo}>{i.email} — {etichetteRuolo[i.ruolo] ?? i.ruolo}</Text>
+                <Pressable style={styles.chipScout} onPress={() => setWhatsappStaff(i)} hitSlop={6} accessibilityLabel="Invita su WhatsApp">
+                  <Text style={styles.chipScoutTesto}>💬</Text>
+                </Pressable>
                 <Pressable onPress={async () => { await annullaInvito(i.id); carica(); }} hitSlop={8}>
                   <Text style={styles.azioneAnnulla}>Annulla</Text>
                 </Pressable>
@@ -224,6 +236,26 @@ export default function GestioneSquadra() {
           </View>
         )}
       </ScrollView>
+
+      {team && whatsappInvito && (
+        <MessaggioWhatsApp
+          visibile
+          titolo={`Invito all'app — ${whatsappInvito.nome} ${whatsappInvito.cognome}`}
+          atleta={whatsappInvito}
+          modelli={[{ etichetta: "Invito", testo: invitoApp(team.nome) }]}
+          onChiudi={() => setWhatsappInvito(null)}
+        />
+      )}
+
+      {team && whatsappStaff && (
+        <MessaggioWhatsApp
+          visibile
+          titolo={`Invito all'app — ${whatsappStaff.email}`}
+          chiediNumero
+          modelli={[{ etichetta: "Invito", testo: invitoStaff(team.nome, etichetteRuolo[whatsappStaff.ruolo] ?? whatsappStaff.ruolo, whatsappStaff.email) }]}
+          onChiudi={() => setWhatsappStaff(null)}
+        />
+      )}
 
       <Modal visible={!!membroInModifica} animationType="fade" transparent onRequestClose={() => setMembroInModifica(null)}>
         <View style={styles.sfondoPopup}>
