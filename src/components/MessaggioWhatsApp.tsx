@@ -36,9 +36,9 @@ export function MessaggioWhatsApp({ visibile, titolo, atleta, nota, modelli, onC
   const { session } = useAuth();
   const [testo, setTesto] = useState("");
 
-  // Il messaggio e' firmato con il nome di chi lo sta mandando (nome dell'account Google, altrimenti l'inizio dell'email).
+  // Il messaggio e' firmato con il nome di battesimo di chi lo sta mandando (account Google, altrimenti l'inizio dell'email).
   const meta = (session?.user.user_metadata ?? {}) as { full_name?: string; name?: string };
-  const firmatario = (meta.full_name || meta.name || session?.user.email?.split("@")[0] || "").trim();
+  const firmatario = (meta.full_name || meta.name || session?.user.email?.split("@")[0] || "").trim().split(/\s+/)[0];
   const conFirma = (t: string) => (firmatario ? `${t.replace(/\s+$/, "")}\n— ${firmatario}` : t);
   // Il commento della partita lascia uno spazio fra il risultato e la firma, da riempire.
   const nuovoTesto = (t: string) => (t.endsWith("\n\n") ? `${t}\n${firmatario ? `— ${firmatario}` : ""}` : conFirma(t));

@@ -1,4 +1,6 @@
 import { supabaseClient } from "@/src/lib/supabase";
+import { supabase as cfg } from "@/src/config";
+import { calcolaVoti } from "@/src/lib/votiPartita";
 import type { Esito, Match, MatchConvocato, MatchEvent, MatchSet, MatchSetLineup, QualitaRicezione, Skill } from "@/src/types/database";
 
 export async function elencaPartite(teamId: string): Promise<Match[]> {
@@ -462,4 +464,47 @@ export async function analisiZonePartita(matchId: string): Promise<AnalisiZona[]
   const { data, error } = await supabaseClient.rpc("analisi_zone_partita", { p_match_id: matchId });
   if (error) throw error;
   return (data ?? []) as AnalisiZona[];
+}
+
+/**
+ * Commento per il gruppo WhatsApp della squadra, scritto dall'AI sui numeri della partita
+ * (risultato, parziali, rendimento per fondamentale, chi ha fatto meglio). Riconosce chi ha giocato bene
+ * e non critica nessuna per nome. Ritorna solo il testo del commento: l'intestazione e la firma le mette l'app.
+ */
+export async function generaCommentoPartitaAI(teamId: string, match: Match, sets: MatchSet[], nomiAtlete: Map<string, string>): Promise<{ errore: boolean; messaggio?: string; testo?: string }> {
+  const [fondamentali, eventi] = await Promise.all([
+    analisiFondamentaliPartita(match.id).catch(() => []),
+    elencaEventiPerAndamento(match.id).catch(() => []),
+  ]);
+  const voti = Object.values(calcolaVoti(eventi))
+    .filter((v) => v.voto !== null)
+    .sort((a, b) => (b.voto ?? 0) - (a.voto ?? 0))
+    .slice(0, 3)
+    .map((v) => `${(nomiAtlete.get(v.athlete_id) ?? "").split(" ")[0]} (voto ${v.voto!.toFixed(1)}, ${v.azioni} azioni)`)
+    .filter((x) => !x.startsWith(" "));
+  const righeFond = fondamentali
+    .filter((f) => f.azioni > 0)
+    .map((f) => `- ${f.fondamentale}: ${f.azioni} azioni, ${f.punti} punti, ${f.errori} errori${f.efficienza !== null ? `, efficienza ${Math.round(f.efficienza * 100)}%` : ""}`)
+    .join("\n");
+  const esito = match.set_vinti_noi > match.set_vinti_avversario ? "vittoria" : match.set_vinti_noi < match.set_vinti_avversario ? "sconfitta" : "pareggio";
+  const riassunto =
+    `Partita ${match.tipo_gara === "campionato" ? "di campionato" : "amichevole"} contro ${match.avversario}, ${match.luogo === "trasferta" ? "in trasferta" : "in casa"}.\n` +
+    `Esito: ${esito} ${match.set_vinti_noi}-${match.set_vinti_avversario}. Parziali: ${sets.map((x) => `${x.punti_noi}-${x.punti_avversario}`).join(", ") || "non disponibili"}.\n` +
+    (righeFond ? `Rendimento per fondamentale:\n${righeFond}\n` : "") +
+    (voti.length ? `Migliori della partita: ${voti.join("; ")}.\n` : "");
+
+  const prompt =
+    `Sei l'allenatore di una squadra di pallavolo e scrivi il commento sulla partita da mandare nel gruppo WhatsApp della squadra. Ecco i dati:\n\n${riassunto}\n` +
+    `Scrivi in italiano, 4-6 righe, tono diretto e caldo da allenatore (dai del "voi"). Riconosci quello che è andato bene e dai merito a chi ha giocato meglio, ` +
+    `nominando solo giocatrici che si sono distinte e solo col nome di battesimo. Non criticare nessuna per nome: se c'è da migliorare qualcosa, ` +
+    `parlane come squadra e indica una cosa su cui lavoreremo in settimana. Non elencare tutti i numeri, usane al massimo due o tre se aiutano. ` +
+    `Al massimo due emoji. Niente titolo, niente firma, niente virgolette: solo il testo del messaggio.`;
+
+  const { data: sessione } = await supabaseClient.auth.getSession();
+  if (!sessione.session) return { errore: true, messaggio: "Sessione scaduta, effettua di nuovo l'accesso." };
+  const { data, error } = await supabaseClient.functions.invoke(cfg.aiRouterFunction, { body: { team_id: teamId, prompt } });
+  if (error) return { errore: true, messaggio: error.message };
+  if (data?.errore) return { errore: true, messaggio: [data.messaggio, data.dettagli].filter(Boolean).join("\n\n") };
+  const testo = String(data?.testo ?? "").trim();
+  return testo ? { errore: false, testo } : { errore: true, messaggio: "L'AI non ha restituito nessun testo." };
 }

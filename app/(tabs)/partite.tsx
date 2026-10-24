@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { View, Text, FlatList, TextInput, Pressable, StyleSheet, RefreshControl, ActivityIndicator, Modal, ScrollView } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { useAuth } from "@/src/context/AuthContext";
-import { andamentoSquadraPartite, convertiPartitaInAllenamento, creaMatch, eliminaPartita, impostaLuogoPartita, elencaPartite, elencaSet, rendimentoRotazioniPartita, type AndamentoSquadraPartiteVoce, type RendimentoRotazionePartita } from "@/src/services/matches";
+import { andamentoSquadraPartite, analisiPersonePartita, convertiPartitaInAllenamento, generaCommentoPartitaAI, creaMatch, eliminaPartita, impostaLuogoPartita, elencaPartite, elencaSet, rendimentoRotazioniPartita, type AndamentoSquadraPartiteVoce, type RendimentoRotazionePartita } from "@/src/services/matches";
 import { elencaCampionati, riassegnaCampionatoPartita } from "@/src/services/championships";
 import { PannelloSporteasy } from "@/src/components/PannelloSporteasy";
 import { brand } from "@/src/config";
@@ -34,8 +34,31 @@ export default function Partite() {
   const [rotazioniPartita, setRotazioniPartita] = useState<{ nome: string; righe: RendimentoRotazionePartita[] } | null>(null);
 
   // Toccando una partita conclusa: prima i punteggi dei set, poi la scelta dell'analisi.
-  const [whatsappPartita, setWhatsappPartita] = useState<{ match: Match; sets: MatchSet[] } | null>(null);
+  const [whatsappPartita, setWhatsappPartita] = useState<{ match: Match; sets: MatchSet[]; testo: string } | null>(null);
+  const [generandoCommento, setGenerandoCommento] = useState(false);
   const [menuPartita, setMenuPartita] = useState<{ match: Match; sets: MatchSet[] } | null>(null);
+
+  /** L'AI scrive il commento sui numeri della partita; se non risponde si parte dal solo risultato. Il testo resta modificabile. */
+  async function preparaCommentoGruppo() {
+    if (!menuPartita || !team) return;
+    const { match, sets } = menuPartita;
+    setGenerandoCommento(true);
+    try {
+      const persone = await analisiPersonePartita(match.id).catch(() => []);
+      const nomi = new Map(persone.map((p) => [p.athlete_id, p.nome_completo]));
+      const r = await generaCommentoPartitaAI(team.id, match, sets, nomi);
+      const intestazione = commentoPartita(match, sets, team.nome);
+      if (r.errore || !r.testo) {
+        avvisa("Commento automatico non disponibile", `${r.messaggio ?? "Errore"}\n\nTi ho preparato il risultato: il commento lo scrivi tu.`);
+        setWhatsappPartita({ match, sets, testo: intestazione });
+      } else {
+        setWhatsappPartita({ match, sets, testo: `${intestazione.trimEnd()}\n\n${r.testo}` });
+      }
+      setMenuPartita(null);
+    } finally {
+      setGenerandoCommento(false);
+    }
+  }
 
   async function apriRotazioni(m: Match) {
     try {
@@ -261,7 +284,7 @@ export default function Partite() {
         <MessaggioWhatsApp
           visibile
           titolo={`Gruppo WhatsApp — vs ${whatsappPartita.match.avversario}`}
-          modelli={[{ etichetta: "Commento", testo: commentoPartita(whatsappPartita.match, whatsappPartita.sets, team.nome) }]}
+          modelli={[{ etichetta: "Commento", testo: whatsappPartita.testo }]}
           onChiudi={() => setWhatsappPartita(null)}
         />
       )}
@@ -296,8 +319,8 @@ export default function Partite() {
                 </Pressable>
               )}
               {puoScrivere && (
-                <Pressable style={styles.bottoneSecondario} onPress={() => { setWhatsappPartita(menuPartita); setMenuPartita(null); }}>
-                  <Text style={styles.bottoneSecondarioTesto}>💬 Commento al gruppo WhatsApp</Text>
+                <Pressable style={styles.bottoneSecondario} onPress={preparaCommentoGruppo} disabled={generandoCommento}>
+                  <Text style={styles.bottoneSecondarioTesto}>{generandoCommento ? "Sto scrivendo il commento…" : "💬 Commento al gruppo WhatsApp"}</Text>
                 </Pressable>
               )}
             </View>
