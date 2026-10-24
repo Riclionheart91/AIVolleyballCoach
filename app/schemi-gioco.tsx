@@ -6,7 +6,7 @@ import { brand } from "@/src/config";
 import { avvisa, confermaAzione } from "@/src/lib/confermaAzione";
 import { schemaDiPartenza, FASI_SCHEMA, PUNTI_RUOLO_LINEA, SCHEMA_BASE, VARIANTI_SCHEMA, ZONA_PREDEFINITA, chiaveSchema, faseConZona, indiceSchema, ruoloInPosizione, type Assegnazioni, type FaseSchema, type Punto } from "@/src/lib/schemiGioco";
 import { CampoSchemaEditor } from "@/src/components/CampoPallini";
-import { elencaSchemiGioco, ripristinaSchemaGioco, salvaSchemaGioco } from "@/src/services/schemiGioco";
+import { elencaSchemiGiocoConOrigine, impostaSchemiStandardDaSquadra, ripristinaSchemaGioco, salvaSchemaGioco } from "@/src/services/schemiGioco";
 
 /** Schermata per definire dove stanno le giocatrici in ricezione, difesa e copertura, rotazione per rotazione. */
 export default function SchemiGioco() {
@@ -14,6 +14,7 @@ export default function SchemiGioco() {
   // Gli schemi li vedono tutti (staff, atlete, presidenti); li modifica solo chi allena.
   const modificabile = puoScrivere || isSuperuser;
   const [salvati, setSalvati] = useState<Record<string, Assegnazioni>>({});
+  const [daStandard, setDaStandard] = useState<Record<string, boolean>>({});
   const [bozze, setBozze] = useState<Record<string, Assegnazioni>>({});
   const [fase, setFase] = useState<FaseSchema>("ricezione");
   const [variante, setVariante] = useState(1);
@@ -25,7 +26,7 @@ export default function SchemiGioco() {
 
   const carica = useCallback(async () => {
     if (!team) return;
-    try { setSalvati(await elencaSchemiGioco(team.id)); setBozze({}); }
+    try { const r = await elencaSchemiGiocoConOrigine(team.id); setSalvati(r.schemi); setDaStandard(r.standard); setBozze({}); }
     catch (e) { avvisa("Errore", (e as Error).message); }
   }, [team]);
 
@@ -69,11 +70,30 @@ export default function SchemiGioco() {
     if (!team) return;
     setInCorso(true);
     try {
-      if (salvati[chiave]) await ripristinaSchemaGioco(team.id, fase, variante, indice);
+      if (salvati[chiave] && !daStandard[chiave]) await ripristinaSchemaGioco(team.id, fase, variante, indice);
       setBozze((b) => { const c = { ...b }; delete c[chiave]; return c; });
       await carica();
     } catch (e) { avvisa("Errore", (e as Error).message); }
     finally { setInCorso(false); }
+  }
+
+  async function impostaStandard() {
+    if (!team) return;
+    confermaAzione(
+      "Usare questi schemi come standard?",
+      "Gli schemi di questa squadra diventano lo standard di tutte le squadre: chi non li ha personalizzati li vedrà subito, e le nuove squadre partiranno da qui.",
+      "Imposta standard",
+      async () => {
+        setInCorso(true);
+        try {
+          const n = await impostaSchemiStandardDaSquadra(team.id);
+          await carica();
+          setMessaggio(`Standard aggiornato (${n} schemi) ✓`);
+          setTimeout(() => setMessaggio(null), 4000);
+        } catch (e) { avvisa("Errore", (e as Error).message); }
+        finally { setInCorso(false); }
+      },
+    );
   }
 
   const infoFase = FASI_SCHEMA.find((f) => f.fase === fase)!;
@@ -162,6 +182,10 @@ export default function SchemiGioco() {
             : `Rotazione ${rotazione}: palleggiatrice in posizione ${rotazione}. ${[1, 2, 3, 4, 5, 6].map((s) => `${ruoloInPosizione(s, rotazione)} in ${s}`).join(" · ")}.`}
           {modificabile ? " Trascina i pallini dove stanno in questa fase, oppure tocca un pallino e poi il punto del campo." : ""}
         </Text>
+        <Text style={styles.nota}>
+          {daStandard[chiave] ? "📋 Schema standard (uguale per tutte le squadre): se lo modifichi e salvi, diventa personalizzato per la tua squadra."
+            : salvati[chiave] ? "✏️ Schema personalizzato dalla tua squadra." : "Nessuno schema salvato: si usano le posizioni base."}
+        </Text>
 
       </ScrollView>
 
@@ -178,8 +202,13 @@ export default function SchemiGioco() {
               </Pressable>
             )}
             <Pressable disabled={inCorso} onPress={ripristina} style={styles.bottoneSecondario}>
-              <Text style={styles.bottoneSecondarioTesto}>Torna alle posizioni di rotazione</Text>
+              <Text style={styles.bottoneSecondarioTesto}>Torna allo standard</Text>
             </Pressable>
+            {isSuperuser && (
+              <Pressable disabled={inCorso} onPress={impostaStandard} style={styles.bottoneSecondario}>
+                <Text style={styles.bottoneSecondarioTesto}>Usa questa squadra come standard</Text>
+              </Pressable>
+            )}
           </View>
         </View>
       )}
