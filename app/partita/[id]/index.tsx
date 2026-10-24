@@ -867,6 +867,16 @@ export default function PartitaLive() {
             <Pressable onPress={apriRegolaLibero} style={[styles.tastoLibero, { height: 44 }, regolaLibero?.libero_id && styles.tastoPiccoloAttivo]}>
               <Text style={[styles.tastoPiccoloTesto, regolaLibero?.libero_id && styles.tastoPiccoloTestoAttivo]}>⚙ Centr.</Text>
             </Pressable>
+            {faseCambiabile && (
+              <Pressable
+                onPress={() => alternaVariante(faseCambiabile)}
+                style={[styles.tastoLibero, { height: 58 }, varianteDi(faseCambiabile) === 2 ? styles.tastoPiccoloAttivo : styles.tastoVariante]}
+              >
+                <Text style={[styles.tastoPiccoloTesto, { fontSize: 10 }, varianteDi(faseCambiabile) === 2 && styles.tastoPiccoloTestoAttivo]}>{faseCambiabile === "ricezione" ? "Ricez." : "Cop."}</Text>
+                <Text style={[styles.tastoPiccoloTesto, { fontWeight: "800" }, varianteDi(faseCambiabile) === 2 && styles.tastoPiccoloTestoAttivo]}>{varianteDi(faseCambiabile) === 1 ? "Std" : "Alt"}</Text>
+                <Text style={[styles.tastoPiccoloTesto, { fontSize: 10 }, varianteDi(faseCambiabile) === 2 && styles.tastoPiccoloTestoAttivo]}>⇄ cambia</Text>
+              </Pressable>
+            )}
           </View>
         )}
         <View style={{ width: latoCampo, height: latoCampo }}>
@@ -895,6 +905,22 @@ export default function PartitaLive() {
           <Text style={styles.nota} numberOfLines={1}>
             servizio: {setCorrente.squadra_al_servizio === "noi" ? (alServizio ? etichettaAtleta(alServizio.athlete_id) : "noi") : "loro"}
           </Text>
+        )}
+        {puoScoutare && (
+          <View style={[styles.rigaComandiFissi, { marginTop: 6, width: orizzontale ? latoCampo + LARGHEZZA_TASTO_LIBERO + 6 : "100%" }]}>
+            <Pressable onPress={() => setModalitaEssenziale((v) => !v)} style={[styles.tastoPiccolo, modalitaEssenziale && styles.tastoPiccoloAttivo]}>
+              <Text style={[styles.tastoPiccoloTesto, modalitaEssenziale && styles.tastoPiccoloTestoAttivo]}>⚡ Essenziale {modalitaEssenziale ? "ON" : "off"}</Text>
+            </Pressable>
+            <Pressable onPress={alternaZone} style={[styles.tastoPiccolo, zoneAttive && styles.tastoPiccoloAttivo]}>
+              <Text style={[styles.tastoPiccoloTesto, zoneAttive && styles.tastoPiccoloTestoAttivo]}>🎯 Zone {zoneAttive ? "ON" : "off"}</Text>
+            </Pressable>
+            <Pressable onPress={ricaricaPagina} style={styles.tastoPiccolo} accessibilityLabel="Ricarica la pagina">
+              <Text style={styles.tastoPiccoloTesto}>🔄 Ricarica</Text>
+            </Pressable>
+            <Pressable onPress={() => setPopupTimeout(true)} style={styles.tastoPiccolo}>
+              <Text style={styles.tastoPiccoloTesto}>⏱ Time out</Text>
+            </Pressable>
+          </View>
         )}
       </View>
 
@@ -1055,18 +1081,6 @@ export default function PartitaLive() {
               )}
               <Pressable onPress={() => setPopupEventi(true)} style={styles.tastoPiccolo}>
                 <Text style={styles.tastoPiccoloTesto}>🕑 Ultime {Math.min(eventi.length, AZIONI_RECENTI_MOSTRATE)}</Text>
-              </Pressable>
-              <Pressable onPress={() => setPopupTimeout(true)} style={styles.tastoPiccolo}>
-                <Text style={styles.tastoPiccoloTesto}>⏱ TO</Text>
-              </Pressable>
-              <Pressable onPress={ricaricaPagina} style={styles.tastoPiccolo} accessibilityLabel="Ricarica la pagina">
-                <Text style={styles.tastoPiccoloTesto}>🔄</Text>
-              </Pressable>
-              <Pressable onPress={alternaZone} style={[styles.tastoPiccolo, zoneAttive && styles.tastoPiccoloAttivo]}>
-                <Text style={[styles.tastoPiccoloTesto, zoneAttive && styles.tastoPiccoloTestoAttivo]}>🎯 Zone {zoneAttive ? "ON" : "off"}</Text>
-              </Pressable>
-              <Pressable onPress={() => setModalitaEssenziale((v) => !v)} style={[styles.tastoPiccolo, modalitaEssenziale && styles.tastoPiccoloAttivo]}>
-                <Text style={[styles.tastoPiccoloTesto, modalitaEssenziale && styles.tastoPiccoloTestoAttivo]}>⚡ Essenziale {modalitaEssenziale ? "ON" : "off"}</Text>
               </Pressable>
             </View>
 
@@ -1381,6 +1395,7 @@ const styles = StyleSheet.create({
   barraFissa: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
   bottoneDistruttivo: { borderColor: brand.colors.error, borderWidth: 1, paddingVertical: 12, borderRadius: 8, alignItems: "center" },
   bottoneDistruttivoTesto: { color: brand.colors.error, fontWeight: "700" },
+  tastoVariante: { borderWidth: 1.5, borderColor: brand.colors.brand },
   tastoLibero: { backgroundColor: brand.colors.surfaceSecondary, borderRadius: 8, alignItems: "center", justifyContent: "center", paddingHorizontal: 4 },
   tastoPiccolo: { flexGrow: 1, backgroundColor: brand.colors.surfaceSecondary, paddingVertical: 6, paddingHorizontal: 6, borderRadius: 8, alignItems: "center", minHeight: 34, justifyContent: "center" },
   tastoPiccoloAttivo: { backgroundColor: brand.colors.brand },

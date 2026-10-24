@@ -2,7 +2,7 @@ import { useCallback, useState } from "react";
 import { View, Text, FlatList, TextInput, Pressable, StyleSheet, RefreshControl, ActivityIndicator, Modal, ScrollView } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { useAuth } from "@/src/context/AuthContext";
-import { andamentoSquadraPartite, convertiPartitaInAllenamento, creaMatch, eliminaPartita, elencaPartite, rendimentoRotazioniPartita, type AndamentoSquadraPartiteVoce, type RendimentoRotazionePartita } from "@/src/services/matches";
+import { andamentoSquadraPartite, convertiPartitaInAllenamento, creaMatch, eliminaPartita, impostaLuogoPartita, elencaPartite, rendimentoRotazioniPartita, type AndamentoSquadraPartiteVoce, type RendimentoRotazionePartita } from "@/src/services/matches";
 import { elencaCampionati, riassegnaCampionatoPartita } from "@/src/services/championships";
 import { PannelloSporteasy } from "@/src/components/PannelloSporteasy";
 import { brand } from "@/src/config";
@@ -158,6 +158,15 @@ export default function Partite() {
     );
   }
 
+  async function onCambiaLuogo(matchId: string, luogo: "casa" | "trasferta") {
+    try {
+      await impostaLuogoPartita(matchId, luogo);
+      setPartite((prev) => prev.map((p) => (p.id === matchId ? { ...p, luogo } : p)));
+    } catch (e) {
+      avvisa("Errore", (e as Error).message);
+    }
+  }
+
   async function onScegliCampionato(matchId: string, campionatoId: string | null) {
     try {
       await riassegnaCampionatoPartita(matchId, campionatoId);
@@ -307,6 +316,15 @@ export default function Partite() {
               </Text>
             </View>
             <Text style={styles.cardSotto}>{new Date(item.data).toLocaleDateString("it-IT")} — {item.luogo} — {item.tipo_gara}{item.sporteasy_uid ? " · da SportEasy" : ""}</Text>
+            {puoScrivere && (
+              <View style={styles.selettoreRiga}>
+                {(["casa", "trasferta"] as const).map((l) => (
+                  <Pressable key={l} onPress={() => item.luogo !== l && onCambiaLuogo(item.id, l)} style={[styles.chip, item.luogo === l && styles.chipAttivo]}>
+                    <Text style={[styles.chipTesto, item.luogo === l && styles.chipTestoAttivo]}>{l === "casa" ? "🏠 Casa" : "🚌 Trasferta"}</Text>
+                  </Pressable>
+                ))}
+              </View>
+            )}
             {puoScrivere && (
               <Pressable onPress={() => setPickerCampionatoMatchId(pickerCampionatoMatchId === item.id ? null : item.id)}>
                 <Text style={styles.linkCampionato}>

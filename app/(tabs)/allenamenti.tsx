@@ -195,13 +195,23 @@ export default function Allenamenti() {
         ListEmptyComponent={<Text style={styles.vuoto}>Nessun allenamento in questo mese. Usa le frecce per cambiare mese, il pulsante + per aggiungerne uno, oppure sincronizza SportEasy qui sopra.</Text>}
         renderItem={({ item }) => (
           <View style={styles.card}>
-            <Pressable onPress={() => setAperto(aperto === item.id ? null : item.id)}>
-              <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
+              <Pressable style={{ flex: 1 }} onPress={() => setAperto(aperto === item.id ? null : item.id)}>
                 <Text style={styles.cardTitolo}>{item.titolo}</Text>
+                <Text style={styles.cardSotto}>{new Date(item.data).toLocaleString("it-IT", { dateStyle: "medium", timeStyle: "short" })}</Text>
                 {new Date(item.data) > new Date() && <Text style={styles.badgeFuturo}>programmato</Text>}
-              </View>
-              <Text style={styles.cardSotto}>{new Date(item.data).toLocaleString("it-IT", { dateStyle: "medium", timeStyle: "short" })}</Text>
-            </Pressable>
+              </Pressable>
+              {puoScrivere && (
+                <View style={styles.flagAngolo}>
+                  <Pressable style={styles.flag} onPress={() => chiediConversione(item)} accessibilityLabel="È una partita">
+                    <Text style={styles.flagTesto}>🏐 È una partita</Text>
+                  </Pressable>
+                  <Pressable style={styles.flag} onPress={() => onArchiviaSingolo(item, true)} accessibilityLabel="Archivia">
+                    <Text style={styles.flagTesto}>🗄 Archivia</Text>
+                  </Pressable>
+                </View>
+              )}
+            </View>
 
             {puoScrivere && (
               <View style={styles.rigaAzioniCard}>
@@ -213,12 +223,6 @@ export default function Allenamenti() {
                 </Pressable>
                 <Pressable style={styles.bottoneAzione} onPress={() => apriModifica(item)}>
                   <Text style={styles.bottoneAzioneTesto}>Modifica</Text>
-                </Pressable>
-                <Pressable style={styles.bottoneAzione} onPress={() => onArchiviaSingolo(item, true)}>
-                  <Text style={styles.bottoneAzioneTesto}>Archivia</Text>
-                </Pressable>
-                <Pressable style={styles.bottoneAzione} onPress={() => chiediConversione(item)}>
-                  <Text style={styles.bottoneAzioneTesto}>È una partita</Text>
                 </Pressable>
                 <Pressable onPress={() => chiediEliminazione(item)}><Text style={styles.azioneCardDistruttiva}>Elimina</Text></Pressable>
               </View>
@@ -267,6 +271,9 @@ const styles = StyleSheet.create({
   rigaAzioniCard: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 10 },
   bottoneAvvia: { backgroundColor: brand.colors.success, paddingVertical: 10, paddingHorizontal: 16, borderRadius: 10, minHeight: 40, justifyContent: "center" },
   bottoneAvviaTesto: { color: "#000", fontWeight: "800", fontSize: 13 },
+  flagAngolo: { alignItems: "flex-end", gap: 4 },
+  flag: { borderWidth: 1, borderColor: brand.colors.border, borderStyle: "dashed", borderRadius: 12, paddingVertical: 3, paddingHorizontal: 9 },
+  flagTesto: { color: brand.colors.muted, fontSize: 11, fontWeight: "600" },
   bottoneAzione: { borderWidth: 1, borderColor: brand.colors.border, backgroundColor: brand.colors.surfaceTertiary, paddingVertical: 10, paddingHorizontal: 14, borderRadius: 10, minHeight: 40, justifyContent: "center" },
   bottoneAzioneTesto: { color: brand.colors.onSurface, fontWeight: "600", fontSize: 13 },
   azioneCard: { color: brand.colors.brand, fontSize: 12, fontWeight: "600" },

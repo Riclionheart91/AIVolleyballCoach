@@ -7,6 +7,12 @@ export async function elencaPartite(teamId: string): Promise<Match[]> {
   return data ?? [];
 }
 
+/** Cambia dopo la creazione se la partita e' in casa o in trasferta (la sincronizzazione SportEasy non lo sovrascrive). */
+export async function impostaLuogoPartita(matchId: string, luogo: "casa" | "trasferta"): Promise<void> {
+  const { error } = await supabaseClient.from("matches").update({ luogo }).eq("id", matchId);
+  if (error) throw error;
+}
+
 /**
  * Crea SOLO la riga partita, in stato "programmata" — non avvia più
  * nulla in automatico. Il flusso vero è: crea → avviaPreparazione →
