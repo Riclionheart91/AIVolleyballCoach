@@ -26,6 +26,7 @@ export default function Partite() {
   const [pickerCampionatoMatchId, setPickerCampionatoMatchId] = useState<string | null>(null);
   // Chiuso di default: occupava spazio in cima anche quando non serviva.
   const [mostraAndamento, setMostraAndamento] = useState(false);
+  const [mostraPassate, setMostraPassate] = useState(false);
   const [rotazioniPartita, setRotazioniPartita] = useState<{ nome: string; righe: RendimentoRotazionePartita[] } | null>(null);
 
   async function apriRotazioni(m: Match) {
@@ -53,6 +54,23 @@ export default function Partite() {
   }, [team, puoScrivere]);
 
   useFocusEffect(useCallback(() => { carica(); }, [carica]));
+
+  // Ordine: dalla piu' vicina a oggi alla piu' lontana. Una partita conclusa e' "passata"
+  // (nascosta) dal giorno prima della prossima partita da giocare; quelle non concluse
+  // restano sempre visibili.
+  const { visibili, nascoste } = (() => {
+    const oggi = new Date(); oggi.setHours(0, 0, 0, 0);
+    const adesso = Date.now();
+    const prossima = partite
+      .filter((m) => m.stato !== "conclusa" && new Date(m.data).getTime() >= oggi.getTime())
+      .sort((a, b) => new Date(a.data).getTime() - new Date(b.data).getTime())[0];
+    let soglia: number | null = null;
+    if (prossima) { const g = new Date(prossima.data); g.setHours(0, 0, 0, 0); soglia = g.getTime() - 24 * 3600 * 1000; }
+    const sonoPassate = (m: Match) => m.stato === "conclusa" && soglia !== null && adesso >= soglia;
+    const ordinate = [...partite].sort((a, b) => Math.abs(new Date(a.data).getTime() - adesso) - Math.abs(new Date(b.data).getTime() - adesso));
+    return { visibili: ordinate.filter((m) => !sonoPassate(m)), nascoste: ordinate.filter(sonoPassate) };
+  })();
+  const elenco = mostraPassate ? [...visibili, ...nascoste].sort((a, b) => Math.abs(new Date(a.data).getTime() - Date.now()) - Math.abs(new Date(b.data).getTime() - Date.now())) : visibili;
 
   async function nuovaPartita() {
     if (!team || !avversario.trim()) return;
@@ -212,7 +230,7 @@ export default function Partite() {
       </Modal>
 
       <FlatList
-        data={partite}
+        data={elenco}
         keyExtractor={(m) => m.id}
         contentContainerStyle={{ paddingBottom: 60 }}
         ListHeaderComponent={
@@ -269,6 +287,12 @@ export default function Partite() {
             </View>
           ))}
         </View>
+      )}
+
+      {nascoste.length > 0 && (
+        <Pressable style={styles.chip} onPress={() => setMostraPassate(!mostraPassate)}>
+          <Text style={styles.chipTesto}>{mostraPassate ? "Nascondi le partite passate" : `Mostra le partite passate (${nascoste.length})`}</Text>
+        </Pressable>
       )}
           </View>
         }
