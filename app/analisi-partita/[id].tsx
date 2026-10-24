@@ -8,7 +8,7 @@ import {
   type AnalisiFondamentale, type AnalisiPersona, type AnalisiPersonaFondamentale, type AnalisiZona, type AndamentoPartita, type AndamentoPersonaPartita,
   type EventoAndamento, type MatchTimeout, type RendimentoServizioRicezione,
 } from "@/src/services/matches";
-import { GrigliaZone, type ValoreZona } from "@/src/components/ZoneCampo";
+import type { ValoreZona } from "@/src/components/ZoneCampo";
 import { GraficoAndamentoSet } from "@/src/components/GraficoAndamentoSet";
 import { costruisciAndamentoPerSet, seriePiuLunghe } from "@/src/lib/andamentoPunti";
 import { calcolaVoti, coloreVoto, MIN_AZIONI_VOTO } from "@/src/lib/votiPartita";
@@ -43,8 +43,6 @@ export default function AnalisiPartita() {
   const [timeouts, setTimeouts] = useState<MatchTimeout[]>([]);
   const [partiteSquadra, setPartiteSquadra] = useState<Match[]>([]);
   const [zone, setZone] = useState<AnalisiZona[]>([]);
-  // Per l'attacco si puo' guardare dove e' caduta la palla oppure da dove e' partito l'attacco.
-  const [zonaAttaccoVista, setZonaAttaccoVista] = useState<"arrivo" | "partenza">("arrivo");
   const [filtroRivivi, setFiltroRivivi] = useState<"tutti" | "noi" | "loro">("tutti");
   const [setRivivi, setSetRivivi] = useState<Set<string>>(new Set());
   const [mostraCalcoloVoto, setMostraCalcoloVoto] = useState(false);
@@ -187,13 +185,7 @@ export default function AnalisiPartita() {
         squadra: t.squadra === "noi" ? "Noi" : "Loro",
         punteggio: `${t.punti_noi}-${t.punti_avversario}`,
       })),
-      zone: zone.length === 0 ? [] : (["Servizio", "Attacco"] as const).flatMap((fond) =>
-        (["arrivo", "partenza"] as const).flatMap((dim) => {
-          if (fond === "Servizio" && dim === "partenza") return [];
-          const val = valoriPerZona(fond, dim);
-          return Object.keys(val).map((k) => ({ fondamentale: fond, vista: dim === "arrivo" ? "Arrivo" : "Partenza", zona: Number(k), azioni: val[Number(k)].azioni, punti: val[Number(k)].punti, errori: val[Number(k)].errori }));
-        }),
-      ),
+      zone: attaccoPerZona.map((z) => ({ fondamentale: "Attacco", vista: "Partenza", zona: z.zona, azioni: z.azioni, punti: z.punti, errori: z.errori })),
       serie: setGiocati.map((x) => { const sr2 = seriePiuLunghe(andamentoPerSet[x.id] ?? []); return { set: x.numero_set, noi: sr2.noi, avversario: sr2.avversario }; }),
     };
   }
@@ -221,22 +213,6 @@ export default function AnalisiPartita() {
     }
     return out;
   }
-  /** Quante azioni di quel fondamentale hanno la zona indicata, rispetto a tutte quelle registrate. */
-  function coperturaZone(fondamentale: string, dimensione: "arrivo" | "partenza"): { con: number; totali: number; quota: number } {
-    const con = Object.values(valoriPerZona(fondamentale, dimensione)).reduce((s, v) => s + v.azioni, 0);
-    const totali = fondamentali.find((f) => f.fondamentale === fondamentale)?.azioni ?? 0;
-    return { con, totali, quota: totali > 0 ? con / totali : 0 };
-  }
-  function notaCopertura(fondamentale: string, dimensione: "arrivo" | "partenza", nome: string) {
-    const c = coperturaZone(fondamentale, dimensione);
-    const poche = c.quota < 0.5;
-    return (
-      <Text style={[styles.dettaglioFondamentale, poche && { color: brand.colors.warning }]}>
-        {poche ? "⚠ " : ""}Zona indicata su {c.con} {nome} su {c.totali} ({Math.round(c.quota * 100)}%).
-        {c.quota < 0.1 ? " Troppo pochi dati per dire qualcosa: le percentuali qui sotto non sono affidabili." : poche ? " Dato parziale: leggilo come indicazione, non come quadro della partita." : ""}
-      </Text>
-    );
-  }
   const haZone = (fondamentale: string, dimensione: "arrivo" | "partenza") => Object.keys(valoriPerZona(fondamentale, dimensione)).length > 0;
 
   const chiaveAvversario = (nome: string) => nome.toLowerCase().replace(/\s+/g, " ").trim();
@@ -263,6 +239,15 @@ export default function AnalisiPartita() {
   const efficienzaAttacco = fondamentali.find((f) => f.fondamentale === "Attacco")?.efficienza ?? null;
   const setVintiNoi = setGiocati.filter((x) => x.punti_noi > x.punti_avversario).length;
   const setVintiLoro = setGiocati.filter((x) => x.punti_avversario > x.punti_noi).length;
+  const MIN_ATTACCHI_ZONA = 3;
+  const attaccoPerZona = Object.entries(valoriPerZona("Attacco", "partenza"))
+    .map(([zona, v]) => ({ zona: Number(zona), azioni: v.azioni, punti: v.punti, errori: v.errori, efficienza: (v.punti - v.errori) / v.azioni, efficacia: v.punti / v.azioni }))
+    .sort((a, b) => b.efficienza - a.efficienza);
+  const zoneConfrontabili = attaccoPerZona.filter((z) => z.azioni >= MIN_ATTACCHI_ZONA);
+  const migliorePerEfficienza = zoneConfrontabili[0] ?? null;
+  const migliorePerEfficacia = [...zoneConfrontabili].sort((a, b) => b.efficacia - a.efficacia)[0] ?? null;
+  const attacchiConZona = attaccoPerZona.reduce((s2, z) => s2 + z.azioni, 0);
+  const attacchiTotali = fondamentali.find((f) => f.fondamentale === "Attacco")?.azioni ?? 0;
   const percentuale = (n: number, d: number) => (d > 0 ? `${Math.round((n / d) * 100)}%` : "—");
   function alternaSetRivivi(setId: string) {
     setSetRivivi((prev) => { const n = new Set(prev); if (n.has(setId)) n.delete(setId); else n.add(setId); return n; });
@@ -382,39 +367,34 @@ export default function AnalisiPartita() {
           </View>
         )}
 
-        {zone.length > 0 && (
+        {attaccoPerZona.length > 0 && (
           <View>
-            <Text style={styles.sezione}>Zone di battuta e attacco</Text>
+            <Text style={styles.sezione}>Attacco: da quale zona rende di più</Text>
             <Text style={styles.nota}>
-              Campo avversario visto dalla nostra parte (rete in basso). Per ogni zona: quante azioni, punti/errori ed efficienza. Compaiono solo le azioni registrate con la modalità "Zone" attiva.
+              La zona è la posizione del nostro campo da cui parte l'attacco (dalla rotazione, non serve indicare nulla). Efficienza = (punti − errori) / attacchi; efficacia = punti / attacchi. Per il confronto servono almeno {MIN_ATTACCHI_ZONA} attacchi dalla zona.
             </Text>
-            {haZone("Servizio", "arrivo") && (
-              <View style={styles.bloccoSet}>
-                <Text style={styles.titoloSet}>Battuta — dove cade</Text>
-                {notaCopertura("Servizio", "arrivo", "battute")}
-                <GrigliaZone valori={valoriPerZona("Servizio", "arrivo")} />
-              </View>
+            {migliorePerEfficienza && (
+              <Text style={styles.migliore}>⭐ Più efficiente: zona {migliorePerEfficienza.zona} ({formattaEfficienza(migliorePerEfficienza.efficienza)}){migliorePerEfficacia && migliorePerEfficacia.zona !== migliorePerEfficienza.zona ? ` · più efficace: zona ${migliorePerEfficacia.zona} (${Math.round(migliorePerEfficacia.efficacia * 100)}%)` : migliorePerEfficacia ? ` · anche la più efficace (${Math.round(migliorePerEfficacia.efficacia * 100)}%)` : ""}</Text>
             )}
-            {(haZone("Attacco", "arrivo") || haZone("Attacco", "partenza")) && (
-              <View style={styles.bloccoSet}>
-                <Text style={styles.titoloSet}>Attacco — {zonaAttaccoVista === "arrivo" ? "dove cade" : "da dove parte (posizione di rotazione)"}</Text>
-                <View style={{ flexDirection: "row", gap: 8, marginBottom: 4 }}>
-                  <Pressable onPress={() => setZonaAttaccoVista("arrivo")} style={[styles.chipZona, zonaAttaccoVista === "arrivo" && styles.chipZonaAttivo]}>
-                    <Text style={[styles.chipZonaTesto, zonaAttaccoVista === "arrivo" && styles.chipZonaTestoAttivo]}>Arrivo</Text>
-                  </Pressable>
-                  <Pressable onPress={() => setZonaAttaccoVista("partenza")} style={[styles.chipZona, zonaAttaccoVista === "partenza" && styles.chipZonaAttivo]}>
-                    <Text style={[styles.chipZonaTesto, zonaAttaccoVista === "partenza" && styles.chipZonaTestoAttivo]}>Partenza</Text>
-                  </Pressable>
-                </View>
-                {haZone("Attacco", zonaAttaccoVista) && notaCopertura("Attacco", zonaAttaccoVista, "attacchi")}
-                {haZone("Attacco", zonaAttaccoVista)
-                  ? <GrigliaZone valori={valoriPerZona("Attacco", zonaAttaccoVista)} />
-                  : <Text style={styles.nota}>Nessun dato per questa vista.</Text>}
-                {zonaAttaccoVista === "partenza" && (
-                  <Text style={styles.dettaglioFondamentale}>La partenza è la posizione di rotazione di chi attacca: è un'approssimazione (es. un'alzatrice o chi attacca fuori posto).</Text>
-                )}
+            <View style={styles.rigaTabella}>
+              <Text style={[styles.cellaFondamentale, styles.intestazioneTabella]}>Zona</Text>
+              <Text style={[styles.cellaNumero, styles.intestazioneTabella]}>Att.</Text>
+              <Text style={[styles.cellaNumero, styles.intestazioneTabella]}>Pt</Text>
+              <Text style={[styles.cellaNumero, styles.intestazioneTabella]}>Err</Text>
+              <Text style={[styles.cellaEfficienza, styles.intestazioneTabella]}>Effic.</Text>
+              <Text style={[styles.cellaVoto, styles.intestazioneTabella]}>Effic.a</Text>
+            </View>
+            {attaccoPerZona.map((z) => (
+              <View key={z.zona} style={styles.rigaTabella}>
+                <Text style={styles.cellaFondamentale}>{z.zona}{z.zona === migliorePerEfficienza?.zona ? " ⭐" : ""}</Text>
+                <Text style={styles.cellaNumero}>{z.azioni}</Text>
+                <Text style={styles.cellaNumero}>{z.punti}</Text>
+                <Text style={styles.cellaNumero}>{z.errori}</Text>
+                <Text style={[styles.cellaEfficienza, { color: coloreEfficienza(z.efficienza) }]}>{formattaEfficienza(z.efficienza)}</Text>
+                <Text style={styles.cellaVoto}>{Math.round(z.efficacia * 100)}%</Text>
               </View>
-            )}
+            ))}
+            <Text style={styles.notaTabella}>Ultima colonna = efficacia (% di attacchi vincenti). Zone con meno di {MIN_ATTACCHI_ZONA} attacchi non entrano nel confronto. Attacchi con zona nota: {attacchiConZona} su {attacchiTotali}.</Text>
           </View>
         )}
 
