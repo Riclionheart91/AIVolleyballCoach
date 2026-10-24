@@ -4,6 +4,7 @@ import { router, useFocusEffect } from "expo-router";
 import { useAuth } from "@/src/context/AuthContext";
 import { calcolaNotifiche, type Notifica } from "@/src/services/notifiche";
 import { brand } from "@/src/config";
+import { RinvioPromemoria } from "@/src/components/RinvioPromemoria";
 import { MessaggioWhatsApp } from "@/src/components/MessaggioWhatsApp";
 import { promemoriaCertificato } from "@/src/lib/messaggiWhatsApp";
 
@@ -48,6 +49,9 @@ export default function CentroNotifiche() {
             <Pressable style={[styles.riga, item.urgente && styles.rigaUrgente]} onPress={() => apri(item)} disabled={!item.link}>
               <Text style={[styles.rigaTitolo, item.urgente && styles.rigaTitoloUrgente]}>{item.urgente ? "⚠ " : ""}{item.titolo}</Text>
               <Text style={styles.rigaDescrizione}>{item.descrizione}</Text>
+              {team && (item.tipo === "ciclo_valutazione" || item.tipo === "piano_annuale") && (
+                <RinvioPromemoria teamId={team.id} tipo={item.tipo === "ciclo_valutazione" ? "valutazioni" : "piano_annuale"} onCambiato={carica} />
+              )}
               {item.tipo === "certificato_medico" && item.atleta && (
                 <Pressable style={styles.bottoneWhatsapp} onPress={() => setWhatsapp(item)} hitSlop={6}>
                   <Text style={styles.bottoneWhatsappTesto}>💬 Avvisa su WhatsApp</Text>

@@ -1,3 +1,4 @@
+import { RinvioPromemoria } from "@/src/components/RinvioPromemoria";
 import { useCallback, useState } from "react";
 import { View, Text, TextInput, Pressable, StyleSheet, ScrollView, ActivityIndicator } from "react-native";
 import { router, useFocusEffect } from "expo-router";
@@ -40,7 +41,7 @@ function fraMesi(n: number) { const d = new Date(); d.setMonth(d.getMonth() + n)
  * oppure "preparazione" pieno di gare) si vedono a colpo d'occhio.
  */
 export default function PianificazioneAnnuale() {
-  const { team, stagioneAttiva } = useAuth();
+  const { team, stagioneAttiva, puoScrivere } = useAuth();
   const [piano, setPiano] = useState<PianoAnnuale | null>(null);
   const [blocchi, setBlocchi] = useState<BloccoPiano[]>([]);
   const [riepilogo, setRiepilogo] = useState<RiepilogoBlocco[]>([]);
@@ -312,6 +313,7 @@ export default function PianificazioneAnnuale() {
       </View>
 
       <ScrollView contentContainerStyle={{ padding: 16, gap: 14, paddingBottom: 40 }}>
+        {team && puoScrivere && <RinvioPromemoria teamId={team.id} tipo="piano_annuale" />}
         <View style={styles.rigaComandi}>
           <Pressable style={styles.bottoneAI} onPress={() => setGuidaAperta(!guidaAperta)} disabled={generando}>
             {generando ? <Text style={styles.bottoneAITesto}>{percentuale}%</Text> : <Text style={styles.bottoneAITesto}>✨ Guidami nel piano</Text>}

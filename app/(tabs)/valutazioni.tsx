@@ -1,3 +1,4 @@
+import { RinvioPromemoria } from "@/src/components/RinvioPromemoria";
 import { useCallback, useEffect, useState } from "react";
 import { View, Text, TextInput, Pressable, StyleSheet, FlatList, ScrollView, ActivityIndicator } from "react-native";
 import { useFocusEffect } from "expo-router";
@@ -71,6 +72,8 @@ function SezioneCicloValutazione({ teamId }: { teamId: string }) {
           <Text style={styles.linkCadenza}>Cadenza</Text>
         </Pressable>
       </View>
+
+      {daValutare.length > 0 && <RinvioPromemoria teamId={teamId} tipo="valutazioni" />}
 
       {cadenzaInModifica && (
         <View style={styles.rigaCadenza}>

@@ -3,6 +3,7 @@ import type { Athlete } from "@/src/types/database";
 import { elencaInvitiPendenti } from "@/src/services/teamInvites";
 import { atleteDaValutare, elencaPropostePendenti as elencaPropostePendentiValutazioni } from "@/src/services/evaluations";
 import { leggiPianoAnnuale, serveProporreAggiornamento } from "@/src/services/pianoAnnuale";
+import { leggiRinvii, rinvioAttivo } from "@/src/services/promemoria";
 
 export type TipoNotifica = "certificato_medico" | "invito" | "proposta_valutazione" | "piano_annuale" | "ciclo_valutazione";
 
@@ -74,8 +75,11 @@ export async function calcolaNotifiche(teamId: string, puoScrivere: boolean): Pr
       });
     }
 
+    // Promemoria rinviati dall'allenatore: non compaiono fino alla data scelta.
+    const rinvii = await leggiRinvii(teamId).catch(() => null);
+
     const daValutare = await atleteDaValutare(teamId).catch(() => []);
-    if (daValutare.length > 0) {
+    if (daValutare.length > 0 && !rinvioAttivo(rinvii?.valutazioni_fino_a)) {
       const maiValutate = daValutare.filter((a) => a.giorni_dall_ultima === null).length;
       notifiche.push({
         id: "ciclo-valutazione", tipo: "ciclo_valutazione", urgente: false,
@@ -87,7 +91,7 @@ export async function calcolaNotifiche(teamId: string, puoScrivere: boolean): Pr
 
     try {
       const piano = await leggiPianoAnnuale(teamId, null);
-      if (piano && await serveProporreAggiornamento(piano, teamId)) {
+      if (piano && !rinvioAttivo(rinvii?.piano_fino_a) && await serveProporreAggiornamento(piano, teamId)) {
         notifiche.push({
           id: "piano-annuale", tipo: "piano_annuale", urgente: false,
           titolo: "Piano annuale da rivedere",
