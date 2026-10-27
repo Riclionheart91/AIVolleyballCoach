@@ -95,6 +95,12 @@ export async function nuovoSet(matchId: string): Promise<string> {
   return data as string;
 }
 
+/** Ruota a mano la formazione del set di una posizione (in avanti come a ogni cambio palla, o indietro per correggere un giro di troppo). */
+export async function ruotaFormazioneManuale(setId: string, indietro = false): Promise<void> {
+  const { error } = await supabaseClient.rpc("ruota_formazione_manuale", { p_set_id: setId, p_indietro: indietro });
+  if (error) throw error;
+}
+
 /** Un tap sul fondamentale + un tap sull'esito = una sola chiamata: il punteggio E la rotazione si aggiornano da soli lato database (trigger). */
 export async function registraEvento(matchId: string, setId: string, skill: Skill, esito: Esito | null, athleteId: string | null, qualita: QualitaRicezione | null = null): Promise<string> {
   const { data, error } = await supabaseClient.rpc("registra_evento", { p_match_id: matchId, p_set_id: setId, p_skill: skill, p_esito: esito, p_athlete_id: athleteId, p_qualita: qualita });

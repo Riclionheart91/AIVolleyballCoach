@@ -8,7 +8,7 @@ import { miePartiteScoutOspite } from "@/src/services/scoutOspiti";
 export default function Index() {
   // Evita controlli ospite sovrapposti se l'effetto riparte mentre si attende la risposta.
   const controlloOspiteInCorso = useRef(false);
-  const { session, caricamento, caricamentoContesto, caricamentoSocieta, erroreTeam, stagioneAttiva, squadreDisponibili, societaPresidenza, ruolo, ricaricaContesto } = useAuth();
+  const { session, caricamento, caricamentoContesto, caricamentoSocieta, erroreTeam, stagioneAttiva, squadreDisponibili, squadraScelta, societaPresidenza, ruolo, ricaricaContesto } = useAuth();
 
   useEffect(() => {
     // caricamentoContesto copre SIA squadra SIA stagione in un colpo
@@ -32,17 +32,14 @@ export default function Index() {
 
     // Instradamento per chi non è presidente:
     //  - nessuna squadra          -> creazione squadra (unico caso in cui va mostrata)
-    //  - stagione non attiva      -> apertura stagione
-    //  - altrimenti               -> dritti agli allenamenti, per la squadra già scelta
+    //  - piu' squadre, non ancora scelta una in questa apertura -> elenco delle squadre
+    //  - una sola squadra (o gia' scelta) e stagione non attiva -> apertura stagione
+    //  - altrimenti               -> dritti agli allenamenti
     //
-    // BUG CORRETTO: qui c'era anche "più squadre -> seleziona-squadra",
-    // pensato per chi ne ha più di una. Ma squadreDisponibili conta
-    // TUTTE le squadre di cui si fa parte, non cambia mai scegliendone
-    // una: ogni volta che si sceglieva una squadra da quella schermata,
-    // questo effetto ripartiva, trovava ancora length > 1 e rimandava
-    // subito lì — un ciclo che non lasciava mai entrare nessuno con più
-    // di una squadra. La scelta resta comunque disponibile in ogni
-    // momento dal pulsante nell'intestazione delle tab.
+    // L'elenco compare una volta per apertura dell'app: scegliere una squadra
+    // segna "squadraScelta" (cambiaSquadra), cosi' questo effetto non rimanda
+    // piu' all'elenco (il ciclo che aveva fatto togliere questo passaggio).
+    // Dopo, il cambio resta sempre possibile dal pulsante nell'intestazione.
     if (squadreDisponibili.length === 0) {
       // Chi non ha squadre ma e' stato invitato come SCOUT OSPITE su una
       // partita va alla sua schermata dedicata, non alla creazione di una
@@ -55,11 +52,12 @@ export default function Index() {
         .finally(() => { controlloOspiteInCorso.current = false; });
       return;
     }
+    if (squadreDisponibili.length > 1 && !squadraScelta) { router.replace("/seleziona-squadra"); return; }
     if (!stagioneAttiva) { router.replace("/apri-stagione"); return; }
     // Le persone con profilo atleta non hanno accesso ad allenamenti,
     // anagrafica ed esercizi: entrano direttamente nella propria scheda.
     router.replace(ruolo === "atleta" ? "/(tabs)/scheda" : "/(tabs)/allenamenti");
-  }, [session, caricamento, caricamentoContesto, caricamentoSocieta, erroreTeam, stagioneAttiva, squadreDisponibili, societaPresidenza, ruolo]);
+  }, [session, caricamento, caricamentoContesto, caricamentoSocieta, erroreTeam, stagioneAttiva, squadreDisponibili, squadraScelta, societaPresidenza, ruolo]);
 
   if (!caricamento && !caricamentoContesto && erroreTeam) {
     return (

@@ -54,6 +54,8 @@ interface AuthState {
   caricamentoSocieta: boolean;
   squadreDisponibili: SquadraDisponibile[];
   cambiaSquadra: (teamId: string) => Promise<void>;
+  /** Chi ha piu' squadre sceglie all'avvio dall'elenco; da quel momento (finche' l'app resta aperta) si entra dritti nella squadra scelta. */
+  squadraScelta: boolean;
   /**
    * UNICO flag di caricamento per squadra+stagione insieme (prima erano
    * due flag separati con due effetti React indipendenti — la causa
@@ -85,11 +87,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [squadreDisponibili, setSquadreDisponibili] = useState<SquadraDisponibile[]>([]);
   const [isSuperuser, setIsSuperuser] = useState(false);
   const [societaPresidenza, setSocietaPresidenza] = useState<MiaSocieta | null>(null);
-  const [caricamentoSocieta, setCaricamentoSocieta] = useState(true);
-  const [caricamentoContesto, setCaricamentoContesto] = useState(true);
+  const [caricamentoSocietaRaw, setCaricamentoSocieta] = useState(true);
+  const [caricamentoContestoRaw, setCaricamentoContesto] = useState(true);
+  // Per quale utente sono stati caricati contesto e societa'. Serve a non considerare "pronto" un caricamento
+  // fatto quando la sessione non c'era ancora: all'avvio i due flag si spegnevano PRIMA che arrivasse l'accesso
+  // e per un attimo l'app vedeva "nessuna squadra" -> finiva su "crea squadra".
+  const [contestoPer, setContestoPer] = useState<string | null>(null);
+  const [societaPer, setSocietaPer] = useState<string | null>(null);
+  const [squadraScelta, setSquadraScelta] = useState(false);
   const [erroreTeam, setErroreTeam] = useState<string | null>(null);
   const [stagioneAttiva, setStagioneAttiva] = useState<Season | null>(null);
   const [stagioneSocietaEsiste, setStagioneSocietaEsiste] = useState(false);
+
+  const idUtente = session?.user.id ?? null;
+  const caricamentoContesto = caricamentoContestoRaw || (!!idUtente && contestoPer !== idUtente);
+  const caricamentoSocieta = caricamentoSocietaRaw || (!!idUtente && societaPer !== idUtente);
 
   // PRIMA c'erano due fonti indipendenti per la sessione: getSession()
   // (una tantum) e onAuthStateChange (che spara anche lui un evento
@@ -121,7 +133,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [session?.user.id]);
 
   useEffect(() => {
-    if (!session) { setSocietaPresidenza(null); setCaricamentoSocieta(false); return; }
+    if (!session) { setSocietaPresidenza(null); setCaricamentoSocieta(false); setSocietaPer(null); setSquadraScelta(false); return; }
+    const id = session.user.id;
     setCaricamentoSocieta(true);
     // Chi decide le rotte (app/index.tsx) legge societaPresidenza e
     // caricamentoSocieta nello stesso istante e si aspetta che, quando
@@ -135,8 +148,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Un solo callback con entrambi i setState insieme chiude la
     // finestra: React li raggruppa in un solo render.
     miaSocietaPresidenza()
-      .then((r) => { setSocietaPresidenza(r); setCaricamentoSocieta(false); })
-      .catch(() => { setSocietaPresidenza(null); setCaricamentoSocieta(false); });
+      .then((r) => { setSocietaPresidenza(r); setCaricamentoSocieta(false); setSocietaPer(id); })
+      .catch(() => { setSocietaPresidenza(null); setCaricamentoSocieta(false); setSocietaPer(id); });
   }, [session?.user.id]);
 
   /**
@@ -148,10 +161,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!session) {
       setTeam(null); setRuolo(null); setAtletaId(null);
       setSquadreDisponibili([]); setStagioneAttiva(null); setStagioneSocietaEsiste(false);
-      setCaricamentoContesto(false);
+      setCaricamentoContesto(false); setContestoPer(null);
       return;
     }
 
+    const id = session.user.id;
     setCaricamentoContesto(true);
     await usaInvitoLinkInSospeso();
     await accettaInvitiPendenti();
@@ -163,7 +177,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setErroreTeam(error.message);
       setTeam(null); setRuolo(null); setAtletaId(null);
       setSquadreDisponibili([]); setStagioneAttiva(null); setStagioneSocietaEsiste(false);
-      setCaricamentoContesto(false);
+      setCaricamentoContesto(false); setContestoPer(id);
       return;
     }
 
@@ -173,7 +187,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (righe.length === 0) {
       setTeam(null); setRuolo(null); setAtletaId(null);
       setSquadreDisponibili([]); setStagioneAttiva(null); setStagioneSocietaEsiste(false);
-      setCaricamentoContesto(false);
+      setCaricamentoContesto(false); setContestoPer(id);
       return;
     }
 
@@ -199,7 +213,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         ? { id: rigaScelta.stagione_id, societa_id: rigaScelta.team_societa_id ?? "", nome: rigaScelta.stagione_nome!, stato: "attiva", data_apertura: "", data_chiusura: null, creata_il: "", creata_da: null }
         : null,
     );
-    setCaricamentoContesto(false);
+    setCaricamentoContesto(false); setContestoPer(id);
   }
 
   useEffect(() => {
@@ -244,6 +258,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   async function cambiaSquadra(teamId: string) {
+    setSquadraScelta(true);
     await AsyncStorage.setItem(CHIAVE_ULTIMO_TEAM, teamId);
     await ricaricaContesto();
   }
@@ -272,11 +287,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const value = useMemo<AuthState>(
     () => ({
       session, caricamento, team, ruolo, atletaId, puoScrivere, soloLettura, puoScoutare, puoUsareAI, puoGestireStagioni, isSuperuser,
-      societaPresidenza, caricamentoSocieta, squadreDisponibili, cambiaSquadra, caricamentoContesto, erroreTeam, stagioneAttiva, stagioneSocietaEsiste,
+      societaPresidenza, caricamentoSocieta, squadreDisponibili, cambiaSquadra, squadraScelta, caricamentoContesto, erroreTeam, stagioneAttiva, stagioneSocietaEsiste,
       squadraAttivata: stagioneAttiva !== null,
       accediConGoogle, esci, creaPrimaSquadra, ricaricaContesto,
     }),
-    [session, caricamento, team, ruolo, atletaId, isSuperuser, societaPresidenza, caricamentoSocieta, squadreDisponibili, caricamentoContesto, erroreTeam, stagioneAttiva, stagioneSocietaEsiste],
+    [session, caricamento, team, ruolo, atletaId, isSuperuser, societaPresidenza, caricamentoSocieta, squadreDisponibili, squadraScelta, caricamentoContesto, caricamentoSocieta, erroreTeam, stagioneAttiva, stagioneSocietaEsiste],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

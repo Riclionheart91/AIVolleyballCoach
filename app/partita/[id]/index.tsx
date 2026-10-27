@@ -1,6 +1,7 @@
 import { IndicatoreScoutQr } from "@/src/components/IndicatoreScoutQr";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { View, Text, Pressable, StyleSheet, ScrollView, Switch, Modal, ActivityIndicator, FlatList, useWindowDimensions } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useLocalSearchParams, useFocusEffect, router } from "expo-router";
 import { useAuth } from "@/src/context/AuthContext";
 import { elencaAtlete } from "@/src/services/athletes";
@@ -20,6 +21,7 @@ import {
   impostaZoneEvento,
   leggiRegolePunteggio,
   nuovoSet,
+  ruotaFormazioneManuale,
   registraEvento,
   registraTimeout,
   faiUscireLibero,
@@ -55,6 +57,8 @@ type Passo = "giocatrice" | "fondamentale" | "esito" | "zona";
 
 /** La modalita' "zone" (dove e' caduta la palla) si ricorda tra una partita e l'altra su questo dispositivo. */
 const CHIAVE_ZONE_ATTIVE = "scout_zone_attive";
+/** Avvisi del Libero (richiesta di entrata e segnalazione di uscita): acceso o spento, ricordato su questo dispositivo. */
+const CHIAVE_AVVISI_LIBERO = "scout_avvisi_libero";
 function leggiZoneAttive(): boolean {
   try {
     const ls = (globalThis as any).localStorage;
@@ -142,6 +146,36 @@ export default function PartitaLive() {
   const [bozzaRegola, setBozzaRegola] = useState<{ libero: string | null; centrali: string[] }>({ libero: null, centrali: [] });
   // Centrali per cui si e' scelto "lascia senza Libero": non si richiede finche' non tornano in prima linea.
   const [rientroRifiutato, setRientroRifiutato] = useState<string[]>([]);
+  // Avvisi del Libero (chiede se far entrare il Libero, segnala quando sta per uscire): si attivano e disattivano dal pulsante accanto al Libero e si ricordano su questo dispositivo.
+  const [avvisiLibero, setAvvisiLibero] = useState(true);
+  useEffect(() => {
+    AsyncStorage.getItem(CHIAVE_AVVISI_LIBERO).then((v) => { if (v === "no") setAvvisiLibero(false); }).catch(() => { /* resta attivo */ });
+  }, []);
+  function commutaAvvisiLibero() {
+    const nuovo = !avvisiLibero;
+    setAvvisiLibero(nuovo);
+    AsyncStorage.setItem(CHIAVE_AVVISI_LIBERO, nuovo ? "si" : "no").catch(() => { /* vale per questa apertura */ });
+  }
+
+  async function ruotaFormazione(indietro: boolean) {
+    if (!setCorrente) return;
+    try { await ruotaFormazioneManuale(setCorrente.id, indietro); await carica(); }
+    catch (e) { avvisa("Rotazione non riuscita", (e as Error).message); }
+  }
+
+  /** Il nuovo set chiude quello in corso e non si torna indietro: prima si chiede conferma. */
+  function chiediNuovoSet(dopo: () => Promise<void>) {
+    if (!setCorrente || !match) return;
+    confermaAzione(
+      "Aprire un nuovo set?",
+      `Il set ${setCorrente.numero_set} (${setCorrente.punti_noi}-${setCorrente.punti_avversario}) viene chiuso e se ne apre uno nuovo. Non si può tornare indietro.`,
+      "Nuovo set",
+      async () => {
+        try { await nuovoSet(match.id); await dopo(); }
+        catch (e) { avvisa("Errore", (e as Error).message); }
+      },
+    );
+  }
   // Secondo tocco sul Libero in campo: si sceglie solo tra far rientrare la titolare o far entrare l'altro Libero.
   const [popupCambioLibero, setPopupCambioLibero] = useState(false);
   // Chi esce, già scelto, in attesa di sapere quale Libero entra (solo se i Liberi sono più d'uno).
@@ -931,6 +965,10 @@ export default function PartitaLive() {
             <Pressable onPress={apriRegolaLibero} style={[styles.tastoLibero, { height: 44 }, regolaLibero?.libero_id && styles.tastoPiccoloAttivo]}>
               <Text style={[styles.tastoPiccoloTesto, regolaLibero?.libero_id && styles.tastoPiccoloTestoAttivo]}>⚙ Centr.</Text>
             </Pressable>
+            <Pressable onPress={commutaAvvisiLibero} style={[styles.tastoLibero, { height: 40 }, avvisiLibero && styles.tastoPiccoloAttivo]} accessibilityLabel="Avvisi del Libero">
+              <Text style={[styles.tastoPiccoloTesto, avvisiLibero && styles.tastoPiccoloTestoAttivo]}>{avvisiLibero ? "🔔" : "🔕"}</Text>
+              <Text style={[styles.testoAvvisiLibero, avvisiLibero && styles.tastoPiccoloTestoAttivo]}>{avvisiLibero ? "Avvisi" : "Off"}</Text>
+            </Pressable>
           </View>
         )}
         <View style={{ width: latoCampo, height: latoCampo }}>
@@ -1005,7 +1043,7 @@ export default function PartitaLive() {
           </Pressable>
         )}
 
-        {puoScoutare && centralePerLibero && (
+        {puoScoutare && avvisiLibero && centralePerLibero && (
           <View style={styles.bannerLibero}>
             <Text style={styles.bannerLiberoTesto}>
               Libero: entra per {etichettaAtleta(centralePerLibero.athlete_id)} (posizione {centralePerLibero.posizione})?
@@ -1021,7 +1059,7 @@ export default function PartitaLive() {
           </View>
         )}
 
-        {puoScoutare && liberoInUscita && libero && (
+        {puoScoutare && avvisiLibero && liberoInUscita && libero && (
           <View style={styles.bannerLiberoUscita}>
             <Text style={styles.bannerLiberoUscitaTesto}>
               ⚠ Il Libero sta per uscire: al cambio palla va in prima linea e rientra {etichettaAtleta(libero.titolare_id)}.
@@ -1154,6 +1192,13 @@ export default function PartitaLive() {
               <Pressable onPress={() => setPopupEventi(true)} style={styles.tastoPiccolo}>
                 <Text style={styles.tastoPiccoloTesto}>🕑 Ultime {Math.min(eventi.length, AZIONI_RECENTI_MOSTRATE)}</Text>
               </Pressable>
+              {/* Se si sono perse delle azioni l'ordine in campo non torna: si rimette in pari ruotando di una posizione alla volta. */}
+              <Pressable onPress={() => ruotaFormazione(false)} style={styles.tastoPiccolo}>
+                <Text style={styles.tastoPiccoloTesto}>↻ Ruota di 1</Text>
+              </Pressable>
+              <Pressable onPress={() => ruotaFormazione(true)} style={[styles.tastoPiccolo, { flexGrow: 0, paddingHorizontal: 12 }]} accessibilityLabel="Ruota indietro di 1">
+                <Text style={styles.tastoPiccoloTesto}>↺</Text>
+              </Pressable>
             </View>
 
             {modoOspite && (
@@ -1161,10 +1206,7 @@ export default function PartitaLive() {
                 {setFinitoPerPunteggio && (
                   <Pressable
                     style={styles.tastoPiccolo}
-                    onPress={async () => {
-                      try { await nuovoSet(match.id); await carica(); }
-                      catch (e) { avvisa("Errore", (e as Error).message); }
-                    }}
+                    onPress={() => chiediNuovoSet(carica)}
                   >
                     <Text style={styles.tastoPiccoloTesto}>Set finito: prossimo set</Text>
                   </Pressable>
@@ -1182,10 +1224,7 @@ export default function PartitaLive() {
               <View style={styles.rigaComandiFissi}>
                 <Pressable
                   style={styles.tastoPiccolo}
-                  onPress={async () => {
-                    try { await nuovoSet(match.id); router.replace(`/partita/${match.id}/prepara`); }
-                    catch (e) { avvisa("Errore", (e as Error).message); }
-                  }}
+                  onPress={() => chiediNuovoSet(async () => { router.replace(`/partita/${match.id}/prepara`); })}
                 >
                   <Text style={styles.tastoPiccoloTesto}>Nuovo set</Text>
                 </Pressable>
@@ -1507,6 +1546,7 @@ const styles = StyleSheet.create({
   tastoPiccolo: { flexGrow: 1, backgroundColor: brand.colors.surfaceSecondary, paddingVertical: 6, paddingHorizontal: 6, borderRadius: 8, alignItems: "center", minHeight: 34, justifyContent: "center" },
   tastoPiccoloAttivo: { backgroundColor: brand.colors.brand },
   tastoPiccoloTestoAttivo: { color: "#000", fontWeight: "800" },
+  testoAvvisiLibero: { color: brand.colors.onSurface, fontSize: 9, fontWeight: "600" },
   tastoPiccoloTesto: { color: brand.colors.onSurface, fontWeight: "600", fontSize: 12 },
   tastoPiccoloDistruttivo: { flexGrow: 1, borderColor: brand.colors.error, borderWidth: 1, paddingVertical: 6, borderRadius: 8, alignItems: "center", minHeight: 34, justifyContent: "center" },
   tastoPiccoloDistruttivoTesto: { color: brand.colors.error, fontWeight: "600", fontSize: 12 },
