@@ -95,6 +95,27 @@ export async function nuovoSet(matchId: string): Promise<string> {
   return data as string;
 }
 
+/**
+ * Corregge chi sta in campo e dove (e, se indicato, chi sta battendo) senza toccare punti e azioni gia' registrati.
+ * posizioni: { "1": athleteId, ..., "6": athleteId }. Possibile per tutta la partita.
+ */
+export async function correggiFormazione(setId: string, posizioni: Record<string, string>, chiServe: "noi" | "avversario" | null): Promise<void> {
+  const { error } = await supabaseClient.rpc("correggi_formazione", { p_set_id: setId, p_posizioni: posizioni, p_chi_serve: chiServe });
+  if (error) throw error;
+}
+
+/** Aggiunge una persona alla distinta della partita in corso: come Libero per tutta la partita, come convocata solo nel primo set. */
+export async function aggiungiConvocato(matchId: string, athleteId: string, isLibero = false): Promise<void> {
+  const { error } = await supabaseClient.rpc("aggiungi_convocato", { p_match_id: matchId, p_athlete_id: athleteId, p_is_libero: isLibero });
+  if (error) throw error;
+}
+
+/** Riporta una partita in corso (solo durante il primo set) a "da preparare", come appena sincronizzata: cancella set, azioni, formazioni e convocati. */
+export async function ricominciaPartita(matchId: string): Promise<void> {
+  const { error } = await supabaseClient.rpc("ricomincia_partita", { p_match_id: matchId });
+  if (error) throw error;
+}
+
 /** Ruota a mano la formazione del set di una posizione (in avanti come a ogni cambio palla, o indietro per correggere un giro di troppo). */
 export async function ruotaFormazioneManuale(setId: string, indietro = false): Promise<void> {
   const { error } = await supabaseClient.rpc("ruota_formazione_manuale", { p_set_id: setId, p_indietro: indietro });

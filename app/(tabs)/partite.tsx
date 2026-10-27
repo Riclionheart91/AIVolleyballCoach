@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { View, Text, FlatList, TextInput, Pressable, StyleSheet, RefreshControl, ActivityIndicator, Modal, ScrollView } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { useAuth } from "@/src/context/AuthContext";
-import { andamentoSquadraPartite, analisiPersonePartita, convertiPartitaInAllenamento, generaCommentoPartitaAI, creaMatch, eliminaPartita, impostaLuogoPartita, elencaPartite, elencaSet, rendimentoRotazioniPartita, type AndamentoSquadraPartiteVoce, type RendimentoRotazionePartita } from "@/src/services/matches";
+import { andamentoSquadraPartite, analisiPersonePartita, convertiPartitaInAllenamento, generaCommentoPartitaAI, creaMatch, eliminaPartita, impostaLuogoPartita, elencaPartite, elencaSet, ricominciaPartita, rendimentoRotazioniPartita, type AndamentoSquadraPartiteVoce, type RendimentoRotazionePartita } from "@/src/services/matches";
 import { elencaCampionati, riassegnaCampionatoPartita } from "@/src/services/championships";
 import { PannelloSporteasy } from "@/src/components/PannelloSporteasy";
 import { brand } from "@/src/config";
@@ -228,6 +228,28 @@ export default function Partite() {
           setPartite((prev) => prev.filter((p) => p.id !== m.id));
           carica();
         } catch (e) { avvisa("Impossibile eliminare", (e as Error).message); }
+      },
+      true,
+    );
+  }
+
+  async function chiediAzzeramento(m: Match) {
+    try {
+      const sets = await elencaSet(m.id);
+      if (sets.length > 1 || sets.some((x) => x.concluso)) {
+        avvisa("Non più possibile", "La partita si può azzerare solo durante il primo set. Ora si può correggere la formazione dalla schermata di scouting (✏️ Formazione).");
+        return;
+      }
+    } catch (e) { avvisa("Errore", (e as Error).message); return; }
+    confermaAzione(
+      "Azzerare la partita?",
+      `"vs ${m.avversario}" torna "da preparare": vengono cancellati set, punti, azioni, formazioni e convocati (Libero compresi). Il collegamento con SportEasy resta. Dovrai rifare convocati, Libero e formazione di partenza.`,
+      "Azzera",
+      async () => {
+        try {
+          await ricominciaPartita(m.id);
+          carica();
+        } catch (e) { avvisa("Impossibile azzerare", (e as Error).message); }
       },
       true,
     );
@@ -512,6 +534,11 @@ export default function Partite() {
                 <Text style={styles.bottoneOspiteTesto}>📋 Scout con QR</Text>
               </Pressable>
             )}
+            {puoEliminare && item.stato === "in_corso" && (
+              <Pressable onPress={() => chiediAzzeramento(item)} hitSlop={8} style={styles.bottoneAzzera}>
+                <Text style={styles.bottoneAzzeraTesto}>↺ Azzera partita (solo 1° set)</Text>
+              </Pressable>
+            )}
             {puoEliminare && (
               <Pressable onPress={() => chiediEliminazione(item)} hitSlop={8} style={styles.bottoneElimina}>
                 <Text style={styles.bottoneEliminaTesto}>🗑 Elimina partita</Text>
@@ -554,6 +581,8 @@ const styles = StyleSheet.create({
   cardSotto: { color: brand.colors.muted, fontSize: 13 },
   linkCampionato: { color: brand.colors.brandSecondary, fontSize: 12, fontWeight: "600", marginTop: 4 },
   linkConverti: { color: brand.colors.muted, fontSize: 11, marginTop: 4 },
+  bottoneAzzera: { alignSelf: "flex-start", marginTop: 8, paddingVertical: 4, paddingHorizontal: 10, borderRadius: 8, borderWidth: 1, borderColor: brand.colors.muted },
+  bottoneAzzeraTesto: { color: brand.colors.muted, fontSize: 12, fontWeight: "600" },
   bottoneElimina: { alignSelf: "flex-start", marginTop: 8, paddingVertical: 4, paddingHorizontal: 10, borderRadius: 8, borderWidth: 1, borderColor: brand.colors.error },
   bottoneOspite: { alignSelf: "flex-start", marginTop: 8, paddingVertical: 4, paddingHorizontal: 10, borderRadius: 8, borderWidth: 1, borderColor: brand.colors.brandSecondary },
   bottoneOspiteTesto: { color: brand.colors.brandSecondary, fontSize: 12, fontWeight: "600" },

@@ -48,6 +48,7 @@ import { useSincronizzazioneLive } from "@/src/hooks/useSincronizzazioneLive";
 import { statoPartitaOspite } from "@/src/services/scoutOspiti";
 import { battitoTurnoScout, prendiTurnoScout, rilasciaTurnoScout, statoTurnoScout, type TurnoScout } from "@/src/services/scoutQr";
 import { FormazioneOspite } from "@/src/components/FormazioneOspite";
+import { CorreggiFormazione } from "@/src/components/CorreggiFormazione";
 import { SelettoreZona } from "@/src/components/ZoneCampo";
 import { FASI_SCHEMA, VARIANTI_SCHEMA, SCHEMA_TRANSIZIONE, ZONA_PREDEFINITA, chiaveSchema, faseDelloScambio, indiceSchema, puntoDiPosizione, puntoRuoloLinea, rotazioneDaFormazione, type Assegnazioni, type FaseSchema } from "@/src/lib/schemiGioco";
 import { elencaSchemiGioco } from "@/src/services/schemiGioco";
@@ -202,6 +203,7 @@ export default function PartitaLive() {
   const [eventiRotazione, setEventiRotazione] = useState<EventoPerRotazione[]>([]);
   const [chiedendoAI, setChiedendoAI] = useState(false);
   const [popupEventi, setPopupEventi] = useState(false);
+  const [popupCorreggiFormazione, setPopupCorreggiFormazione] = useState(false);
   const [timeouts, setTimeouts] = useState<MatchTimeout[]>([]);
   const [popupTimeout, setPopupTimeout] = useState(false);
   // Modalita' facoltativa: dopo l'esito di battuta/attacco si indica dove e' caduta la palla (zone 1-6).
@@ -1199,6 +1201,25 @@ export default function PartitaLive() {
               <Pressable onPress={() => ruotaFormazione(true)} style={[styles.tastoPiccolo, { flexGrow: 0, paddingHorizontal: 12 }]} accessibilityLabel="Ruota indietro di 1">
                 <Text style={styles.tastoPiccoloTesto}>↺</Text>
               </Pressable>
+              {/* Formazione o servizio sbagliati a partita iniziata: si correggono senza toccare punti e azioni. */}
+              <Pressable onPress={() => setPopupCorreggiFormazione(true)} style={styles.tastoPiccolo}>
+                <Text style={styles.tastoPiccoloTesto}>✏️ Formazione</Text>
+              </Pressable>
+              <CorreggiFormazione
+                visibile={popupCorreggiFormazione}
+                setId={setCorrente.id}
+                matchId={match.id}
+                numeroSet={setCorrente.numero_set}
+                atlete={atlete}
+                convocateIds={convocateIds}
+                liberiIds={liberiIds}
+                inCampo={formazione}
+                chiServe={setCorrente.squadra_al_servizio}
+                liberoInCampo={!!libero}
+                puoCambiareDistinta={puoScrivere && !modoOspite}
+                onChiudi={() => setPopupCorreggiFormazione(false)}
+                onAggiornato={carica}
+              />
             </View>
 
             {modoOspite && (
