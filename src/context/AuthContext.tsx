@@ -47,6 +47,8 @@ interface AuthState {
   puoUsareAI: boolean;
   /** Aprire, attivare e chiudere una stagione: riservato al presidente. */
   puoGestireStagioni: boolean;
+  /** Analisi, andamento punto a punto e resoconto delle partite: staff, presidente e superuser (sola lettura per gli ultimi due). */
+  puoVedereAnalisi: boolean;
   isSuperuser: boolean;
   /** Se si è presidente di una società, questa: null altrimenti. Va controllata anche senza squadre (società appena fondata). */
   societaPresidenza: MiaSocieta | null;
@@ -283,10 +285,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const soloLettura = ruolo === "presidente";
   /** Aprire, attivare e chiudere una stagione: riservato al presidente, non più all'allenatore. */
   const puoGestireStagioni = ePresidenteDiQuestaSquadra;
+  const puoVedereAnalisi = puoScrivere || ePresidenteDiQuestaSquadra || isSuperuser;
 
   const value = useMemo<AuthState>(
     () => ({
-      session, caricamento, team, ruolo, atletaId, puoScrivere, soloLettura, puoScoutare, puoUsareAI, puoGestireStagioni, isSuperuser,
+      session, caricamento, team, ruolo, atletaId, puoScrivere, soloLettura, puoScoutare, puoUsareAI, puoGestireStagioni, puoVedereAnalisi, isSuperuser,
       societaPresidenza, caricamentoSocieta, squadreDisponibili, cambiaSquadra, squadraScelta, caricamentoContesto, erroreTeam, stagioneAttiva, stagioneSocietaEsiste,
       squadraAttivata: stagioneAttiva !== null,
       accediConGoogle, esci, creaPrimaSquadra, ricaricaContesto,

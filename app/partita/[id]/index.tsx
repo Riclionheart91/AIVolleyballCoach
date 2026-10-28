@@ -128,7 +128,7 @@ const INTERVALLO_AGGIORNAMENTO_OSPITE_MS = 4000;
  */
 export default function PartitaLive() {
   const { id, ospite } = useLocalSearchParams<{ id: string; ospite?: string }>();
-  const { team, puoScrivere, puoScoutare: puoScoutareDaRuolo } = useAuth();
+  const { team, puoScrivere, puoScoutare: puoScoutareDaRuolo, puoVedereAnalisi } = useAuth();
   // Scout OSPITE: persona esterna alla squadra, invitata solo su questa partita.
   // Legge tutto da una funzione dedicata del database e non puo' avviare/chiudere set o partita.
   const modoOspite = ospite === "1";
@@ -1323,9 +1323,20 @@ export default function PartitaLive() {
             ) : (
               <Text style={styles.nota}>Consultazione in sola lettura.</Text>
             )}
-            <Pressable onPress={ricaricaPagina} style={styles.tastoPiccolo}>
-              <Text style={styles.tastoPiccoloTesto}>🔄 Ricarica</Text>
-            </Pressable>
+            <View style={styles.rigaComandiFissi}>
+              {/* Presidente e superuser vedono tutto: andamento punto a punto, resoconto e analisi della partita. */}
+              <Pressable onPress={() => setPopupEventi(true)} style={styles.tastoPiccolo}>
+                <Text style={styles.tastoPiccoloTesto}>🕑 Ultime azioni</Text>
+              </Pressable>
+              {!modoOspite && puoVedereAnalisi && (
+                <Pressable onPress={() => router.push(`/analisi-partita/${match.id}`)} style={styles.tastoPiccolo}>
+                  <Text style={styles.tastoPiccoloTesto}>📈 Analisi e andamento</Text>
+                </Pressable>
+              )}
+              <Pressable onPress={ricaricaPagina} style={styles.tastoPiccolo}>
+                <Text style={styles.tastoPiccoloTesto}>🔄 Ricarica</Text>
+              </Pressable>
+            </View>
           </>
         )}
       </View>

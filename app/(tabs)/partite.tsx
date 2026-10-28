@@ -15,7 +15,7 @@ import { MessaggioWhatsApp } from "@/src/components/MessaggioWhatsApp";
 import { commentoPartita, inviaLinkScout } from "@/src/lib/messaggiWhatsApp";
 
 export default function Partite() {
-  const { team, puoScrivere, isSuperuser } = useAuth();
+  const { team, puoScrivere, isSuperuser, puoVedereAnalisi } = useAuth();
   // Stessa regola applicata dal database (funzione elimina_partita):
   // allenatore/vice della squadra oppure superuser.
   const puoEliminare = puoScrivere || isSuperuser;
@@ -304,12 +304,12 @@ export default function Partite() {
             </View>
             <Text style={styles.titoloPopup}>Quale analisi vuoi vedere?</Text>
             <View style={{ gap: 8, marginTop: 8 }}>
-              {puoScrivere && (
+              {puoVedereAnalisi && (
                 <Pressable style={styles.bottone} onPress={() => { const m = menuPartita!.match; setMenuPartita(null); router.push(`/analisi-partita/${m.id}`); }}>
                   <Text style={styles.bottoneTesto}>📈 Analisi completa</Text>
                 </Pressable>
               )}
-              {puoScrivere && (
+              {puoVedereAnalisi && (
                 <Pressable style={styles.bottone} onPress={() => { const m = menuPartita!.match; setMenuPartita(null); apriRotazioni(m); }}>
                   <Text style={styles.bottoneTesto}>📊 Analisi per rotazione</Text>
                 </Pressable>
@@ -519,7 +519,7 @@ export default function Partite() {
             )}
             {puoEliminare && item.stato === "in_corso" && <IndicatoreScoutQr matchId={item.id} />}
             {item.stato === "conclusa" && <Text style={styles.cardRisultato}>Set: {item.set_vinti_noi} - {item.set_vinti_avversario}</Text>}
-            {puoScrivere && item.stato !== "programmata" && (
+            {puoVedereAnalisi && item.stato !== "programmata" && (
               <View style={{ flexDirection: "row", gap: 16 }}>
                 <Pressable onPress={() => router.push(`/analisi-partita/${item.id}`)}>
                   <Text style={styles.linkCampionato}>📈 Analisi completa</Text>

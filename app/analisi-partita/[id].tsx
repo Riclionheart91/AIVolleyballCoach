@@ -58,13 +58,13 @@ export default function AnalisiPartita() {
         analisiFondamentaliPartita(id).catch(() => []),
         analisiPersonePartita(id).catch(() => []),
         analisiPersoneDettaglioPartita(id).catch(() => [] as AnalisiPersonaFondamentale[]),
-        andamentoTraPartite(team.id, 8).catch(() => []),
+        andamentoTraPartite(m?.team_id ?? team.id, 8).catch(() => []),
         rendimentoServizioRicezionePartita(id).catch(() => null),
         elencaSet(id).catch(() => [] as MatchSet[]),
         elencaEventiPerAndamento(id).catch(() => [] as EventoAndamento[]),
         elencaTimeout(id).catch(() => [] as MatchTimeout[]),
-        elencaPartite(team.id).catch(() => [] as Match[]),
-        andamentoPersonePartite(team.id, 5).catch(() => [] as AndamentoPersonaPartita[]),
+        elencaPartite(m?.team_id ?? team.id).catch(() => [] as Match[]),
+        andamentoPersonePartite(m?.team_id ?? team.id, 5).catch(() => [] as AndamentoPersonaPartita[]),
         analisiZonePartita(id).catch(() => [] as AnalisiZona[]),
       ]);
       setZone(zoneRighe);
