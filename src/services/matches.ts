@@ -1,7 +1,7 @@
 import { supabaseClient } from "@/src/lib/supabase";
 import { supabase as cfg } from "@/src/config";
 import { calcolaVoti } from "@/src/lib/votiPartita";
-import type { Esito, Match, MatchConvocato, MatchEvent, MatchSet, MatchSetLineup, QualitaRicezione, Skill } from "@/src/types/database";
+import type { CausaPunto, Esito, Match, MatchConvocato, MatchEvent, MatchSet, MatchSetLineup, QualitaRicezione, Skill } from "@/src/types/database";
 
 export async function elencaPartite(teamId: string): Promise<Match[]> {
   const { data, error } = await supabaseClient.from("matches").select("*").eq("team_id", teamId).order("data", { ascending: false });
@@ -409,6 +409,7 @@ export interface EventoAndamento {
   esito: Esito | null;
   athlete_id: string | null;
   qualita: string | null;
+  causa?: string | null;
   creato_il: string;
 }
 
@@ -416,7 +417,7 @@ export interface EventoAndamento {
 export async function elencaEventiPerAndamento(matchId: string): Promise<EventoAndamento[]> {
   const { data, error } = await supabaseClient
     .from("match_events")
-    .select("id, set_id, skill, esito, athlete_id, qualita, creato_il")
+    .select("id, set_id, skill, esito, athlete_id, qualita, causa, creato_il")
     .eq("match_id", matchId)
     .order("creato_il", { ascending: true })
     .limit(5000);
@@ -471,6 +472,12 @@ export async function andamentoPersonePartite(teamId: string, ultime = 5): Promi
 }
 
 /** Aggiunge zona di arrivo (e di partenza) a un evento di battuta o attacco appena registrato. */
+/** Indica il motivo di un punto diretto (+1 NOI / +1 LORO) appena registrato. */
+export async function impostaCausaEvento(eventId: string, causa: CausaPunto): Promise<void> {
+  const { error } = await supabaseClient.rpc("imposta_causa_evento", { p_event_id: eventId, p_causa: causa });
+  if (error) throw error;
+}
+
 export async function impostaZoneEvento(eventId: string, zonaArrivo: number | null, zonaPartenza: number | null = null): Promise<void> {
   const { error } = await supabaseClient.rpc("imposta_zone_evento", { p_event_id: eventId, p_zona_arrivo: zonaArrivo, p_zona_partenza: zonaPartenza });
   if (error) throw error;

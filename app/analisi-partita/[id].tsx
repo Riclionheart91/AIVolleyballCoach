@@ -232,8 +232,8 @@ export default function AnalisiPartita() {
   const aceBattuta = conta((e) => e.skill === "Servizio" && e.esito === "punto");
   const erroriBattuta = conta((e) => e.skill === "Servizio" && e.esito === "errore");
   const puntiMuro = conta((e) => e.skill === "Muro" && e.esito === "punto");
-  const erroriNostri = conta((e) => e.esito === "errore");
-  const puntiDirettiLoro = conta((e) => e.skill === "Punto_avversario");
+  const erroriNostri = conta((e) => e.esito === "errore" || (e.skill === "Punto_avversario" && e.causa === "errore_nostro"));
+  const puntiDirettiLoro = conta((e) => e.skill === "Punto_avversario" && e.causa !== "errore_nostro");
   const ricezioniTot = conta((e) => e.skill === "Ricezione");
   const ricezioniPositive = conta((e) => e.skill === "Ricezione" && (e.qualita === "ottima" || e.qualita === "buona"));
   const efficienzaAttacco = fondamentali.find((f) => f.fondamentale === "Attacco")?.efficienza ?? null;

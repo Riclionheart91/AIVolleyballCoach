@@ -19,6 +19,7 @@ import {
   elencaStoricoFormazioneSet,
   elencaTimeout,
   impostaZoneEvento,
+  impostaCausaEvento,
   leggiRegolePunteggio,
   nuovoSet,
   ruotaFormazioneManuale,
@@ -40,7 +41,8 @@ import { rendimentoTurniServizio, type RendimentoTurnoServizio } from "@/src/ser
 import { rendimentoServizioRicezionePartita, type RendimentoServizioRicezione } from "@/src/services/matches";
 import { analizzaSituazione, riassuntoPerAI, rotazionePiuDebole, type SegnalazioneSituazione } from "@/src/lib/situazione";
 import { brand, skillsScouting, skillsScoutingEssenziali } from "@/src/config";
-import type { Athlete, Esito, Match, MatchEvent, MatchSet, MatchSetLineup, QualitaRicezione, Skill } from "@/src/types/database";
+import { TESTO_CAUSA } from "@/src/lib/rivivi";
+import type { Athlete, CausaPunto, Esito, Match, MatchEvent, MatchSet, MatchSetLineup, QualitaRicezione, Skill } from "@/src/types/database";
 import { supabaseClient } from "@/src/lib/supabase";
 import { confermaAzione, avvisa } from "@/src/lib/confermaAzione";
 import { CampoPallini, type Pallino } from "@/src/components/CampoPallini";
@@ -214,6 +216,8 @@ export default function PartitaLive() {
   const [chiedendoAI, setChiedendoAI] = useState(false);
   const [popupEventi, setPopupEventi] = useState(false);
   const [popupCorreggiFormazione, setPopupCorreggiFormazione] = useState(false);
+  // +1 NOI / +1 LORO: dopo il tocco si sceglie il motivo del punto (senza indicare la giocatrice).
+  const [sceltaPuntoDiretto, setSceltaPuntoDiretto] = useState<"noi" | "avversario" | null>(null);
   const [timeouts, setTimeouts] = useState<MatchTimeout[]>([]);
   const [popupTimeout, setPopupTimeout] = useState(false);
   // Modalita' facoltativa: dopo l'esito di battuta/attacco si indica dove e' caduta la palla (zone 1-6).
@@ -464,12 +468,12 @@ export default function PartitaLive() {
     registra(z.skill, z.esito, z.athleteId, null, zona);
   }
 
-  async function registra(skill: Skill, esito: Esito | null, athleteId: string | null, qualita: QualitaRicezione | null = null, zonaArrivo: number | null = null) {
+  async function registra(skill: Skill, esito: Esito | null, athleteId: string | null, qualita: QualitaRicezione | null = null, zonaArrivo: number | null = null, causa: CausaPunto | null = null) {
     if (!match || !setCorrente) return;
     setErroreVisibile(null);
     const provvisorio: MatchEvent = {
       id: `temp-${Date.now()}`, match_id: match.id, set_id: setCorrente.id, skill, esito,
-      athlete_id: athleteId, creato_il: new Date().toISOString(), creato_da: null, qualita, zona_arrivo: zonaArrivo,
+      athlete_id: athleteId, creato_il: new Date().toISOString(), creato_da: null, qualita, zona_arrivo: zonaArrivo, causa,
     };
     setEventi((prev) => [provvisorio, ...prev]);
     applicaDelta(skill, esito, 1);
@@ -479,6 +483,10 @@ export default function PartitaLive() {
 
     try {
       const nuovoId = await registraEvento(match.id, setCorrente.id, skill, esito, athleteId, qualita);
+      if (causa) {
+        try { await impostaCausaEvento(nuovoId, causa); }
+        catch (errCausa) { console.warn("Motivo del punto non salvato:", (errCausa as Error).message); }
+      }
       // Zone (solo con la modalita' attiva): l'arrivo e' quello toccato, la partenza dell'attacco e' la posizione di rotazione di chi attacca.
       if (zoneAttive && (skill === "Servizio" || skill === "Attacco")) {
         const partenza = skill === "Attacco" ? (formazione.find((f) => f.athlete_id === athleteId)?.posizione ?? null) : null;
@@ -1227,16 +1235,39 @@ export default function PartitaLive() {
               raggiungibili, qualunque passo sia attivo e qualunque sia
               l'orientamento. */}
           <View style={styles.zonaFissa}>
-            <View style={styles.rigaPuntiDiretti}>
-              <Pressable style={[styles.bottonePuntoNostro, { paddingVertical: d(8) }]} onPress={() => registra("Punto_nostro", null, null)}>
-                <Text style={styles.bottonePuntoNostroTesto}>+1 NOI</Text>
-                <Text style={styles.sottoPulsante}>errore loro</Text>
-              </Pressable>
-              <Pressable style={[styles.bottonePuntoAvversario, { paddingVertical: d(8) }]} onPress={() => registra("Punto_avversario", null, null)}>
-                <Text style={styles.bottonePuntoAvversarioTesto}>+1 LORO</Text>
-                <Text style={styles.sottoPulsante}>errore nostro</Text>
-              </Pressable>
-            </View>
+            {sceltaPuntoDiretto === null ? (
+              <View style={styles.rigaPuntiDiretti}>
+                <Pressable style={[styles.bottonePuntoNostro, { paddingVertical: d(8) }]} onPress={() => setSceltaPuntoDiretto("noi")}>
+                  <Text style={styles.bottonePuntoNostroTesto}>+1 NOI</Text>
+                  <Text style={styles.sottoPulsante}>senza giocatrice</Text>
+                </Pressable>
+                <Pressable style={[styles.bottonePuntoAvversario, { paddingVertical: d(8) }]} onPress={() => setSceltaPuntoDiretto("avversario")}>
+                  <Text style={styles.bottonePuntoAvversarioTesto}>+1 LORO</Text>
+                  <Text style={styles.sottoPulsante}>senza giocatrice</Text>
+                </Pressable>
+              </View>
+            ) : (
+              <View style={{ gap: 6 }}>
+                <Text style={styles.nota}>{sceltaPuntoDiretto === "noi" ? "Punto NOSTRO: com'è arrivato?" : "Punto LORO: com'è arrivato?"}</Text>
+                <View style={styles.rigaPuntiDiretti}>
+                  {(sceltaPuntoDiretto === "noi"
+                    ? ([["errore_loro", "Errore loro"], ["punto_diretto_nostro", "Punto diretto"], ["muro_nostro", "Muro"], ["difesa_nostro", "Difesa / contrattacco"]] as [CausaPunto, string][])
+                    : ([["punto_diretto_loro", "Punto diretto loro"], ["errore_nostro", "Errore nostro"]] as [CausaPunto, string][])
+                  ).map(([causa, etichetta]) => (
+                    <Pressable
+                      key={causa}
+                      style={[sceltaPuntoDiretto === "noi" ? styles.bottonePuntoNostro : styles.bottonePuntoAvversario, { paddingVertical: d(8) }]}
+                      onPress={() => { const chi = sceltaPuntoDiretto; setSceltaPuntoDiretto(null); registra(chi === "noi" ? "Punto_nostro" : "Punto_avversario", null, null, null, null, causa); }}
+                    >
+                      <Text style={sceltaPuntoDiretto === "noi" ? styles.bottonePuntoNostroTesto : styles.bottonePuntoAvversarioTesto}>{etichetta}</Text>
+                    </Pressable>
+                  ))}
+                  <Pressable style={[styles.tastoPiccolo, { flexGrow: 0, paddingHorizontal: 12 }]} onPress={() => setSceltaPuntoDiretto(null)} accessibilityLabel="Annulla">
+                    <Text style={styles.tastoPiccoloTesto}>✕</Text>
+                  </Pressable>
+                </View>
+              </View>
+            )}
 
             <View style={styles.rigaComandiFissi}>
               {!modoOspite && (
@@ -1423,7 +1454,7 @@ export default function PartitaLive() {
               ListEmptyComponent={<Text style={styles.nota}>Nessun evento registrato.</Text>}
               renderItem={({ item }) => (
                 <Text style={styles.rigaLog}>
-                  {new Date(item.creato_il).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })} · {item.skill === "Punto_avversario" ? "Punto avversario" : `${item.skill} ${item.esito}`}
+                  {new Date(item.creato_il).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })} · {item.skill === "Punto_avversario" || item.skill === "Punto_nostro" ? (TESTO_CAUSA[item.causa ?? ""] ?? (item.skill === "Punto_avversario" ? "Punto avversario" : "Punto nostro")) : `${item.skill} ${item.esito}`}
                   {item.athlete_id ? ` · ${etichettaAtleta(item.athlete_id)}` : ""}
                   {item.zona_partenza ? ` · da z${item.zona_partenza}` : ""}{item.zona_arrivo ? ` → z${item.zona_arrivo}` : ""}
                 </Text>

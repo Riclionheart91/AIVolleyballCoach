@@ -6,6 +6,8 @@ export type StatoProposta = "proposta" | "approvata" | "modificata" | "rigettata
 export type StatoStagione = "pianificata" | "attiva" | "conclusa";
 export type Skill = "Servizio" | "Ricezione" | "Attacco" | "Muro" | "Difesa" | "Punto_avversario";
 export type Esito = "punto" | "neutro" | "errore";
+/** Perche' e' stato dato un punto "diretto" (senza giocatrice): +1 LORO o +1 NOI. */
+export type CausaPunto = "punto_diretto_loro" | "errore_nostro" | "errore_loro" | "punto_diretto_nostro" | "muro_nostro" | "difesa_nostro";
 /** Qualità di una ricezione andata a buon fine (esito="neutro"): scala di scouting standard (es. "3-2-1-0" di Coleman). */
 export type QualitaRicezione = "ottima" | "buona" | "scarsa";
 export type StatoMatch = "programmata" | "in_corso" | "conclusa";
@@ -226,6 +228,8 @@ export interface MatchEvent {
   zona_arrivo?: number | null;
   /** Zona (1-6) da cui e' partito l'attacco, ricavata dalla rotazione. */
   zona_partenza?: number | null;
+  /** Solo per Punto_nostro / Punto_avversario: il motivo del punto; null per quelli registrati prima. */
+  causa?: CausaPunto | null;
 }
 
 export interface MatchSetLineup {
