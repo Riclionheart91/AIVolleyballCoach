@@ -60,6 +60,13 @@ type Passo = "giocatrice" | "fondamentale" | "esito" | "zona";
 const CHIAVE_ZONE_ATTIVE = "scout_zone_attive";
 /** Avvisi del Libero (richiesta di entrata e segnalazione di uscita): acceso o spento, ricordato su questo dispositivo. */
 const CHIAVE_AVVISI_LIBERO = "scout_avvisi_libero";
+/** Con gli avvisi del Libero spenti l'entrata e' automatica: appena serve, al montaggio, fa entrare il Libero al posto del centrale. */
+function EntrataLiberoAutomatica({ titolareId, onEntra }: { titolareId: string; onEntra: (titolareId: string) => void }) {
+  useEffect(() => { onEntra(titolareId); // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [titolareId]);
+  return null;
+}
+
 function leggiZoneAttive(): boolean {
   try {
     const ls = (globalThis as any).localStorage;
@@ -1043,6 +1050,10 @@ export default function PartitaLive() {
           <Pressable style={styles.bannerSerie} onPress={() => setPopupTimeout(true)}>
             <Text style={styles.bannerSerieTesto}>⚠ Serie avversaria: {serieAvversaria} punti di fila — valuta un time-out (tocca per chiamarlo)</Text>
           </Pressable>
+        )}
+
+        {puoScoutare && !avvisiLibero && centralePerLibero && (
+          <EntrataLiberoAutomatica key={`${centralePerLibero.athlete_id}-${eventi.length}`} titolareId={centralePerLibero.athlete_id} onEntra={faiEntrareLiberoRegola} />
         )}
 
         {puoScoutare && avvisiLibero && centralePerLibero && (
