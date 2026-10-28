@@ -236,6 +236,10 @@ export interface MatchSetLineup {
   posizione: number | null;
   /** Posizione dichiarata alla partenza del set: non cambia con rotazioni e cambi. Null per chi è entrato dopo e per i set giocati prima che fosse registrata. */
   posizione_iniziale?: number | null;
+  /** Per chi e' entrato dopo l'inizio del set: la titolare che ha sostituito (puo' uscire solo per lei). */
+  sostituisce_id?: string | null;
+  /** La titolare e' gia' rientrata una volta in questo set. */
+  rientrato?: boolean;
   aggiornato_il: string;
 }
 

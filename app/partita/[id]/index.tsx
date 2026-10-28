@@ -199,6 +199,9 @@ export default function PartitaLive() {
   const [popupCambio, setPopupCambio] = useState(false);
   const [erroreVisibile, setErroreVisibile] = useState<string | null>(null);
   const [regolePunteggio, setRegolePunteggio] = useState({ puntiPerSet: 25, puntiSetDecisivo: 15 });
+  // Ultima regola letta: la funzione che carica la partita non rilegge lo stato a ogni render, quindi usa questa copia.
+  const regolePunteggioRef = useRef({ puntiPerSet: 25, puntiSetDecisivo: 15 });
+  regolePunteggioRef.current = regolePunteggio;
   const ultimoPunteggioSegnalato = useRef("");
 
   const [popupSituazione, setPopupSituazione] = useState(false);
@@ -287,6 +290,8 @@ export default function PartitaLive() {
     const { data: m } = await supabaseClient.from("matches").select("*").eq("id", id).single();
     setMatch(m ?? null);
     const set = await elencaSet(id);
+    let regoleFresche = regolePunteggioRef.current;
+    setSetConclusi(set);
     const attivo = set.find((s) => !s.concluso) ?? set[set.length - 1] ?? null;
     setSetCorrente(attivo);
     setEventi(await elencaEventiPartita(id));
@@ -295,7 +300,8 @@ export default function PartitaLive() {
       setAtlete(lista);
       setConvocateIds(convocati.map((c) => c.athlete_id));
       setLiberiIds(new Set(convocati.filter((c) => c.is_libero).map((c) => c.athlete_id)));
-      setRegolePunteggio(await leggiRegolePunteggio(id));
+      regoleFresche = await leggiRegolePunteggio(id);
+      setRegolePunteggio(regoleFresche);
       setTimeouts(await elencaTimeout(id));
       try { setRegolaLibero(await leggiRegolaLibero(id)); } catch { /* resta quella di prima */ }
     }
@@ -305,7 +311,7 @@ export default function PartitaLive() {
       setStoricoFormazione(storico);
       setLibero(await liberoInCampo(attivo.id));
     }
-    if (attivo && m && !modoOspite) verificaFineSet(attivo, m, set);
+    if (attivo && m && !modoOspite) verificaFineSet(attivo, m, set, regoleFresche);
   }, [id, modoOspite]);
 
   useFocusEffect(useCallback(() => { carica(); }, [carica]));
@@ -397,6 +403,19 @@ export default function PartitaLive() {
 
   const idGiaUscite = new Set(storicoFormazione.filter((r) => !r.in_campo).map((r) => r.athlete_id));
   const inPanchina = atlete.filter((a) => convocateIds.includes(a.id) && !formazione.some((f) => f.athlete_id === a.id) && !idGiaUscite.has(a.id));
+
+  // Regolamento: chi e' entrato al posto di una titolare puo' uscire solo per lei, e la titolare rientra una volta sola al suo posto.
+  const rigaUscente = atletaSelId ? formazione.find((f) => f.athlete_id === atletaSelId) : undefined;
+  const sostituitaDaUscente = rigaUscente?.sostituisce_id ?? null;
+  const uscenteEraTitolare = rigaUscente?.posizione_iniziale != null;
+  const titolariUscitePossibili = storicoFormazione.filter((r) => !r.in_campo && r.posizione_iniziale != null && !r.rientrato
+    && !formazione.some((f) => f.sostituisce_id === r.athlete_id)).map((r) => r.athlete_id);
+  const candidatiCambio = sostituitaDaUscente
+    ? atlete.filter((a) => a.id === sostituitaDaUscente)
+    : uscenteEraTitolare
+      ? inPanchina
+      // Cambi registrati prima di questa regola: puo' rientrare una titolare uscita di cui non risulta il rimpiazzo.
+      : [...inPanchina, ...atlete.filter((a) => titolariUscitePossibili.includes(a.id) && convocateIds.includes(a.id))];
 
 
   function applicaDelta(skill: Skill, esito: Esito | null, segno: 1 | -1) {
@@ -673,6 +692,8 @@ export default function PartitaLive() {
   const setFinitoPerPunteggio = !setCorrente.concluso
     && Math.max(setCorrente.punti_noi, setCorrente.punti_avversario) >= sogliaSet
     && Math.abs(setCorrente.punti_noi - setCorrente.punti_avversario) >= 2;
+  const setVintiNoi = setConclusi.filter((x) => x.id !== setCorrente.id && x.concluso && x.punti_noi > x.punti_avversario).length + (setFinitoPerPunteggio && setCorrente.punti_noi > setCorrente.punti_avversario ? 1 : 0);
+  const setVintiLoro = setConclusi.filter((x) => x.id !== setCorrente.id && x.concluso && x.punti_avversario > x.punti_noi).length + (setFinitoPerPunteggio && setCorrente.punti_avversario > setCorrente.punti_noi ? 1 : 0);
   const timeoutSet = timeouts.filter((t) => t.set_id === setCorrente.id);
   const timeoutNoi = timeoutSet.filter((t) => t.squadra === "noi").length;
   const timeoutLoro = timeoutSet.filter((t) => t.squadra === "avversario").length;
@@ -1052,6 +1073,27 @@ export default function PartitaLive() {
           </Pressable>
         )}
 
+        {/* Fine set: il messaggio automatico puo' non comparire (finestra in secondo piano, blocco del browser), questo resta finche' non si agisce. */}
+        {puoScrivere && !modoOspite && setFinitoPerPunteggio && (
+          <View style={styles.bannerSerie}>
+            <Text style={styles.bannerSerieTesto}>
+              ✅ Set {setCorrente.numero_set} concluso: {setCorrente.punti_noi}-{setCorrente.punti_avversario}.
+              {setVintiNoi >= 3 || setVintiLoro >= 3 ? ` Partita finita (set ${setVintiNoi}-${setVintiLoro}).` : ` Set vinti ${setVintiNoi}-${setVintiLoro}.`}
+            </Text>
+            <View style={{ flexDirection: "row", gap: 8, marginTop: 6 }}>
+              {setVintiNoi >= 3 || setVintiLoro >= 3 ? (
+                <Pressable style={styles.bannerLiberoSi} onPress={onChiudiPartita}>
+                  <Text style={styles.bannerLiberoSiTesto}>Chiudi partita</Text>
+                </Pressable>
+              ) : (
+                <Pressable style={styles.bannerLiberoSi} onPress={() => chiediNuovoSet(async () => { router.replace(`/partita/${match.id}/prepara`); })}>
+                  <Text style={styles.bannerLiberoSiTesto}>Prossimo set</Text>
+                </Pressable>
+              )}
+            </View>
+          </View>
+        )}
+
         {puoScoutare && !avvisiLibero && centralePerLibero && (
           <EntrataLiberoAutomatica key={`${centralePerLibero.athlete_id}-${eventi.length}`} titolareId={centralePerLibero.athlete_id} onEntra={faiEntrareLiberoRegola} />
         )}
@@ -1295,8 +1337,11 @@ export default function PartitaLive() {
               <Text style={styles.titoloPopup}>Chi entra per {selezionata?.cognome}?</Text>
               <Pressable onPress={() => setPopupCambio(false)} hitSlop={12}><Text style={styles.chiudiPopup}>✕</Text></Pressable>
             </View>
+            {sostituitaDaUscente && (
+              <Text style={styles.nota}>Per regolamento {selezionata?.cognome} può uscire solo per chi ha sostituito.</Text>
+            )}
             <FlatList
-              data={inPanchina}
+              data={candidatiCambio}
               keyExtractor={(a) => a.id}
               ListEmptyComponent={<Text style={styles.nota}>Nessuna convocata disponibile.</Text>}
               renderItem={({ item }) => (
