@@ -187,9 +187,13 @@ export function analizzaRighe(
   atleteEsistenti: Athlete[],
   colonnaFiltroTipoPersona?: string | null,
 ): RigaAnalizzata[] {
-  const indiceEsistenti = new Map<string, Athlete>();
+  // Due indici: per codice fiscale e per nome+cognome. Una giocatrice gia' in rosa senza codice fiscale va riconosciuta
+  // anche quando il file lo contiene (altrimenti si tenterebbe di crearla di nuovo e il database rifiuta il duplicato).
+  const indicePerCodiceFiscale = new Map<string, Athlete>();
+  const indicePerNome = new Map<string, Athlete>();
   for (const a of atleteEsistenti) {
-    indiceEsistenti.set(chiaveAtleta(a.nome, a.cognome, a.codice_fiscale), a);
+    if (a.codice_fiscale && a.codice_fiscale.trim()) indicePerCodiceFiscale.set(chiaveAtleta(a.nome, a.cognome, a.codice_fiscale), a);
+    indicePerNome.set(chiaveAtleta(a.nome, a.cognome, null), a);
   }
 
   return righe.map((riga): RigaAnalizzata => {
@@ -221,7 +225,7 @@ export function analizzaRighe(
     else delete datiFile.ruolo_campo;
 
     const chiave = chiaveAtleta(datiFile.nome, datiFile.cognome, datiFile.codice_fiscale);
-    const esistente = indiceEsistenti.get(chiave) ?? null;
+    const esistente = indicePerCodiceFiscale.get(chiave) ?? indicePerNome.get(chiaveAtleta(datiFile.nome, datiFile.cognome, null)) ?? null;
 
     if (!esistente) {
       return { chiave, datiFile, atletaEsistente: null, campiDiversi: [], tipo: "nuova", selezionata: true };
