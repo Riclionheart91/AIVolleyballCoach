@@ -416,7 +416,10 @@ export default function PartitaLive() {
   const uscenteEraTitolare = rigaUscente?.posizione_iniziale != null;
   const titolariUscitePossibili = storicoFormazione.filter((r) => !r.in_campo && r.posizione_iniziale != null && !r.rientrato
     && !formazione.some((f) => f.sostituisce_id === r.athlete_id)).map((r) => r.athlete_id);
-  const candidatiCambio = sostituitaDaUscente
+  const uscenteGiaRientrata = !!rigaUscente?.rientrato;
+  const candidatiCambio = uscenteGiaRientrata
+    ? []
+    : sostituitaDaUscente
     ? atlete.filter((a) => a.id === sostituitaDaUscente)
     : uscenteEraTitolare
       ? inPanchina
@@ -1250,23 +1253,25 @@ export default function PartitaLive() {
               </View>
             ) : (
               <View style={{ gap: 6 }}>
-                <Text style={styles.nota}>{sceltaPuntoDiretto === "noi" ? "Punto NOSTRO: com'è arrivato?" : "Punto LORO: com'è arrivato?"}</Text>
-                <View style={styles.rigaPuntiDiretti}>
+                <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+                  <Text style={styles.nota}>{sceltaPuntoDiretto === "noi" ? "Punto NOSTRO: com'è arrivato?" : "Punto LORO: com'è arrivato?"}</Text>
+                  <Pressable style={styles.tastoPiccolo} onPress={() => setSceltaPuntoDiretto(null)} accessibilityLabel="Annulla">
+                    <Text style={styles.tastoPiccoloTesto}>✕ Annulla</Text>
+                  </Pressable>
+                </View>
+                <View style={styles.grigliaCausaPunto}>
                   {(sceltaPuntoDiretto === "noi"
                     ? ([["errore_loro", "Errore loro"], ["punto_diretto_nostro", "Punto diretto"], ["muro_nostro", "Muro"], ["difesa_nostro", "Difesa / contrattacco"]] as [CausaPunto, string][])
                     : ([["punto_diretto_loro", "Punto diretto loro"], ["errore_nostro", "Errore nostro"]] as [CausaPunto, string][])
                   ).map(([causa, etichetta]) => (
                     <Pressable
                       key={causa}
-                      style={[sceltaPuntoDiretto === "noi" ? styles.bottonePuntoNostro : styles.bottonePuntoAvversario, { paddingVertical: d(8) }]}
+                      style={[sceltaPuntoDiretto === "noi" ? styles.bottonePuntoNostro : styles.bottonePuntoAvversario, styles.bottoneCausaPunto, { paddingVertical: d(10) }]}
                       onPress={() => { const chi = sceltaPuntoDiretto; setSceltaPuntoDiretto(null); registra(chi === "noi" ? "Punto_nostro" : "Punto_avversario", null, null, null, null, causa); }}
                     >
-                      <Text style={sceltaPuntoDiretto === "noi" ? styles.bottonePuntoNostroTesto : styles.bottonePuntoAvversarioTesto}>{etichetta}</Text>
+                      <Text style={[sceltaPuntoDiretto === "noi" ? styles.bottonePuntoNostroTesto : styles.bottonePuntoAvversarioTesto, { textAlign: "center" }]}>{etichetta}</Text>
                     </Pressable>
                   ))}
-                  <Pressable style={[styles.tastoPiccolo, { flexGrow: 0, paddingHorizontal: 12 }]} onPress={() => setSceltaPuntoDiretto(null)} accessibilityLabel="Annulla">
-                    <Text style={styles.tastoPiccoloTesto}>✕</Text>
-                  </Pressable>
                 </View>
               </View>
             )}
@@ -1381,7 +1386,10 @@ export default function PartitaLive() {
               <Text style={styles.titoloPopup}>Chi entra per {selezionata?.cognome}?</Text>
               <Pressable onPress={() => setPopupCambio(false)} hitSlop={12}><Text style={styles.chiudiPopup}>✕</Text></Pressable>
             </View>
-            {sostituitaDaUscente && (
+            {uscenteGiaRientrata && (
+              <Text style={styles.nota}>{selezionata?.cognome} è rientrata dopo un cambio: per regolamento non può più uscire in questo set. Se hai sbagliato, correggi dal tasto ✏️ Formazione.</Text>
+            )}
+            {sostituitaDaUscente && !uscenteGiaRientrata && (
               <Text style={styles.nota}>Per regolamento {selezionata?.cognome} può uscire solo per chi ha sostituito.</Text>
             )}
             <FlatList
@@ -1651,6 +1659,8 @@ const styles = StyleSheet.create({
   bottonePuntoNostroTesto: { color: "#000", fontWeight: "800", fontSize: 15 },
   bottonePuntoAvversario: { flex: 1, backgroundColor: "#4A1620", borderRadius: 10, alignItems: "center" },
   bottonePuntoAvversarioTesto: { color: "#fff", fontWeight: "800", fontSize: 15 },
+  grigliaCausaPunto: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
+  bottoneCausaPunto: { flexGrow: 1, flexBasis: "47%", paddingHorizontal: 8, justifyContent: "center" },
   sottoPulsante: { color: "rgba(255,255,255,0.7)", fontSize: 10 },
 
   rigaComandiSecondari: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
