@@ -164,6 +164,8 @@ export default function PartitaLive() {
   function commutaAvvisiLibero() {
     const nuovo = !avvisiLibero;
     setAvvisiLibero(nuovo);
+    // Un "lascia in campo" scelto con gli avvisi attivi non deve bloccare l'entrata automatica (e viceversa).
+    setRientroRifiutato([]);
     AsyncStorage.setItem(CHIAVE_AVVISI_LIBERO, nuovo ? "si" : "no").catch(() => { /* vale per questa apertura */ });
   }
 
@@ -796,7 +798,7 @@ export default function PartitaLive() {
   const liberoDellaPartita = regolaLibero?.libero_id ?? null;
   // Fra un rally e l'altro: un centrale associato e' in seconda linea (in 1 solo se non battiamo noi) e il Libero non c'e'.
   const centralePerLibero = !libero && liberoDellaPartita && inizioScambio
-    ? formazione.find((f) => centraliLibero.includes(f.athlete_id) && !rientroRifiutato.includes(f.athlete_id)
+    ? formazione.find((f) => centraliLibero.includes(f.athlete_id) && (!avvisiLibero || !rientroRifiutato.includes(f.athlete_id))
         && (f.posizione === 5 || f.posizione === 6 || (f.posizione === 1 && !noiAlServizio)))
     : undefined;
   // Libero in 5 mentre riceviamo: al prossimo cambio palla va in prima linea e deve uscire.
@@ -1103,7 +1105,7 @@ export default function PartitaLive() {
         )}
 
         {puoScoutare && !avvisiLibero && centralePerLibero && (
-          <EntrataLiberoAutomatica key={`${centralePerLibero.athlete_id}-${eventi.length}`} titolareId={centralePerLibero.athlete_id} onEntra={faiEntrareLiberoRegola} />
+          <EntrataLiberoAutomatica key={`${centralePerLibero.athlete_id}-${setCorrente.id}-${setCorrente.punti_noi + setCorrente.punti_avversario}-${centralePerLibero.posizione}`} titolareId={centralePerLibero.athlete_id} onEntra={faiEntrareLiberoRegola} />
         )}
 
         {puoScoutare && avvisiLibero && centralePerLibero && (
