@@ -163,6 +163,13 @@ export default function AnalisiPartita() {
     );
   }
 
+  /** Righe per zona (1-6) di un fondamentale, nell'ordine delle zone, per la scheda esportata. */
+  function zoneDi(fondamentale: string, dimensione: "arrivo" | "partenza", vista: string) {
+    return Object.entries(valoriPerZona(fondamentale, dimensione))
+      .map(([z, v]) => ({ fondamentale, vista, zona: Number(z), azioni: v.azioni, punti: v.punti, errori: v.errori }))
+      .sort((a, b) => a.zona - b.zona);
+  }
+
   function costruisciScheda(): SchedaPartita {
     const numeroSet = (setId: string) => setGiocati.find((x) => x.id === setId)?.numero_set ?? 0;
     return {
@@ -178,14 +185,35 @@ export default function AnalisiPartita() {
         : null,
       persone: persone.map((pp) => ({
         nome: pp.nome_completo, azioni: pp.azioni, punti: pp.punti, errori: pp.errori, saldo: pp.saldo,
-        fondamentali: (dettaglio[pp.athlete_id] ?? []).map((r) => ({ nome: r.fondamentale, azioni: r.azioni, punti: r.punti, neutri: r.neutri, errori: r.errori })),
+        fondamentali: (dettaglio[pp.athlete_id] ?? []).map((r) => {
+          const vf = voti[pp.athlete_id]?.fondamentali.find((x) => x.fondamentale === r.fondamentale);
+          const conQualita = (r.fondamentale === "Ricezione" || r.fondamentale === "Difesa") && !!vf;
+          return {
+            nome: r.fondamentale, azioni: r.azioni, punti: r.punti, neutri: r.neutri, errori: r.errori,
+            ...(conQualita ? { perfette: vf!.perfette, buone: vf!.buone, scarse: vf!.scarse } : {}),
+          };
+        }),
       })),
       timeouts: timeouts.map((t) => ({
         set: numeroSet(t.set_id),
         squadra: t.squadra === "noi" ? "Noi" : "Loro",
         punteggio: `${t.punti_noi}-${t.punti_avversario}`,
       })),
-      zone: attaccoPerZona.map((z) => ({ fondamentale: "Attacco", vista: "Partenza", zona: z.zona, azioni: z.azioni, punti: z.punti, errori: z.errori })),
+      qualita: (["Ricezione", "Difesa"] as const).map((fond) => {
+        const ev = eventiAndamento.filter((e) => e.skill === fond);
+        return {
+          fondamentale: fond,
+          perfette: ev.filter((e) => e.qualita === "ottima").length,
+          buone: ev.filter((e) => e.qualita === "buona").length,
+          scarse: ev.filter((e) => e.qualita === "scarsa").length,
+          errori: ev.filter((e) => e.esito === "errore").length,
+        };
+      }).filter((q) => q.perfette + q.buone + q.scarse + q.errori > 0),
+      zone: [
+        ...zoneDi("Servizio", "arrivo", "Arrivo"),
+        ...zoneDi("Attacco", "partenza", "Partenza"),
+        ...zoneDi("Attacco", "arrivo", "Arrivo"),
+      ],
       serie: setGiocati.map((x) => { const sr2 = seriePiuLunghe(andamentoPerSet[x.id] ?? []); return { set: x.numero_set, noi: sr2.noi, avversario: sr2.avversario }; }),
     };
   }

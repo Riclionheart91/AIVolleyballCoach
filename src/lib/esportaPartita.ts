@@ -7,13 +7,15 @@ export interface SchedaPartita {
   setGiocati: { numero: number; noi: number; avv: number }[];
   fondamentali: { nome: string; azioni: number; punti: number; errori: number; efficienza: number | null }[];
   sideOutBreakPoint: { breakPointPct: number | null; sideOutPct: number | null } | null;
+  /** Qualita' di ricezione e difesa (perfette / buone / scarse) della squadra. */
+  qualita: { fondamentale: string; perfette: number; buone: number; scarse: number; errori: number }[];
   persone: {
     nome: string;
     azioni: number;
     punti: number;
     errori: number;
     saldo: number;
-    fondamentali: { nome: string; azioni: number; punti: number; neutri: number; errori: number }[];
+    fondamentali: { nome: string; azioni: number; punti: number; neutri: number; errori: number; perfette?: number; buone?: number; scarse?: number }[];
   }[];
   timeouts: { set: number; squadra: string; punteggio: string }[];
   serie: { set: number; noi: number; avversario: number }[];
@@ -22,6 +24,18 @@ export interface SchedaPartita {
 
 function eff(punti: number, errori: number, azioni: number): string {
   return azioni > 0 ? ((punti - errori) / azioni).toFixed(2) : "";
+}
+
+function haQualita(f: { perfette?: number; buone?: number; scarse?: number }): boolean {
+  return (f.perfette ?? 0) + (f.buone ?? 0) + (f.scarse ?? 0) > 0;
+}
+
+function testoQualita(f: { perfette?: number; buone?: number; scarse?: number }): string {
+  return haQualita(f) ? `${f.perfette ?? 0} perf. · ${f.buone ?? 0} buone · ${f.scarse ?? 0} scarse` : "";
+}
+
+function percento(n: number, tot: number): string {
+  return tot > 0 ? `${Math.round((n / tot) * 100)}%` : "";
 }
 
 function nomeFile(scheda: SchedaPartita, estensione: string): string {
@@ -51,6 +65,16 @@ export function costruisciCsv(scheda: SchedaPartita): string {
   for (const f of scheda.fondamentali) righe.push([f.nome, f.azioni, f.punti, f.errori, f.efficienza === null ? "" : f.efficienza.toFixed(2)]);
   righe.push([]);
 
+  if (scheda.qualita.length > 0) {
+    righe.push(["QUALITA' DI RICEZIONE E DIFESA"]);
+    righe.push(["Fondamentale", "Perfette", "Buone", "Scarse", "Errori", "% perfette", "% buone", "% scarse"]);
+    for (const q of scheda.qualita) {
+      const tot = q.perfette + q.buone + q.scarse + q.errori;
+      righe.push([q.fondamentale, q.perfette, q.buone, q.scarse, q.errori, percento(q.perfette, tot), percento(q.buone, tot), percento(q.scarse, tot)]);
+    }
+    righe.push([]);
+  }
+
   if (scheda.sideOutBreakPoint) {
     righe.push(["SIDE-OUT E BREAK-POINT"]);
     righe.push(["Break-point %", scheda.sideOutBreakPoint.breakPointPct ?? ""]);
@@ -59,13 +83,13 @@ export function costruisciCsv(scheda: SchedaPartita): string {
   }
 
   righe.push(["CONTRIBUTO INDIVIDUALE"]);
-  righe.push(["Giocatrice", "Fondamentale", "Azioni", "Punti", "Neutri", "Errori", "Efficienza"]);
+  righe.push(["Giocatrice", "Fondamentale", "Azioni", "Punti", "Neutri", "Errori", "Efficienza", "Perfette", "Buone", "Scarse"]);
   for (const p of scheda.persone) {
     if (p.fondamentali.length === 0) {
       righe.push([p.nome, "Totale", p.azioni, p.punti, "", p.errori, eff(p.punti, p.errori, p.azioni)]);
       continue;
     }
-    for (const f of p.fondamentali) righe.push([p.nome, f.nome, f.azioni, f.punti, f.neutri, f.errori, eff(f.punti, f.errori, f.azioni)]);
+    for (const f of p.fondamentali) righe.push([p.nome, f.nome, f.azioni, f.punti, f.neutri, f.errori, eff(f.punti, f.errori, f.azioni), haQualita(f) ? (f.perfette ?? 0) : "", haQualita(f) ? (f.buone ?? 0) : "", haQualita(f) ? (f.scarse ?? 0) : ""]);
   }
   righe.push([]);
 
@@ -115,6 +139,16 @@ export function costruisciHtmlStampa(scheda: SchedaPartita): string {
         tabella(["Fondamentale", "Azioni", "Punti", "Errori", "Efficienza"], scheda.fondamentali.map((f) => [f.nome, f.azioni, f.punti, f.errori, f.efficienza === null ? "—" : f.efficienza.toFixed(2)])),
     );
   }
+  if (scheda.qualita.length > 0) {
+    parti.push(
+      "<h2>Qualità di ricezione e difesa</h2>" +
+        tabella(["Fondamentale", "Perfette", "Buone", "Scarse", "Errori"], scheda.qualita.map((q) => {
+          const tot = q.perfette + q.buone + q.scarse + q.errori;
+          return [q.fondamentale, `${q.perfette} (${percento(q.perfette, tot) || "—"})`, `${q.buone} (${percento(q.buone, tot) || "—"})`, `${q.scarse} (${percento(q.scarse, tot) || "—"})`, `${q.errori} (${percento(q.errori, tot) || "—"})`];
+        })) +
+        '<p class="sotto">Perfette = ottime, buone, scarse: la valutazione data a ogni ricezione e difesa. Le percentuali sono sul totale delle azioni di quel fondamentale.</p>',
+    );
+  }
   if (scheda.sideOutBreakPoint) {
     parti.push(
       "<h2>Side-out e break-point</h2>" +
@@ -127,10 +161,10 @@ export function costruisciHtmlStampa(scheda: SchedaPartita): string {
   if (scheda.persone.length > 0) {
     const righe: (string | number)[][] = [];
     for (const p of scheda.persone) {
-      if (p.fondamentali.length === 0) righe.push([p.nome, "Totale", p.azioni, p.punti, "", p.errori, eff(p.punti, p.errori, p.azioni) || "—"]);
-      else for (const f of p.fondamentali) righe.push([p.nome, f.nome, f.azioni, f.punti, f.neutri, f.errori, eff(f.punti, f.errori, f.azioni) || "—"]);
+      if (p.fondamentali.length === 0) righe.push([p.nome, "Totale", p.azioni, p.punti, "", p.errori, eff(p.punti, p.errori, p.azioni) || "—", "—"]);
+      else for (const f of p.fondamentali) righe.push([p.nome, f.nome, f.azioni, f.punti, f.neutri, f.errori, eff(f.punti, f.errori, f.azioni) || "—", testoQualita(f) || "—"]);
     }
-    parti.push("<h2>Contributo individuale</h2>" + tabella(["Giocatrice", "Fondamentale", "Az.", "Pt", "Neu", "Err", "Eff."], righe));
+    parti.push("<h2>Contributo individuale</h2>" + tabella(["Giocatrice", "Fondamentale", "Az.", "Pt", "Neu", "Err", "Eff.", "Qualità"], righe));
   }
   if (scheda.timeouts.length > 0) {
     parti.push("<h2>Time-out</h2>" + tabella(["Set", "Chi", "Punteggio"], scheda.timeouts.map((t) => [t.set, t.squadra, t.punteggio])));
@@ -139,6 +173,9 @@ export function costruisciHtmlStampa(scheda: SchedaPartita): string {
     parti.push(
       "<h2>Zone di battuta e attacco</h2>" +
         tabella(["Fondamentale", "Vista", "Zona", "Az.", "Pt", "Err", "Eff."], scheda.zone.map((z) => [z.fondamentale, z.vista, z.zona, z.azioni, z.punti, z.errori, eff(z.punti, z.errori, z.azioni) || "—"])),
+    );
+    parti.push(
+      '<p class="sotto">Arrivo = zona del campo avversario dove è caduta la palla; Partenza = zona del nostro campo da cui è partito l\'attacco.</p>',
     );
   }
   if (scheda.serie.length > 0) {
