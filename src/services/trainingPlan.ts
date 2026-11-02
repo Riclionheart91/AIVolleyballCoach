@@ -2,6 +2,7 @@ import { supabaseClient } from "@/src/lib/supabase";
 import { messaggioErroreRouter } from "@/src/services/aiProviders";
 import { supabase as cfg } from "@/src/config";
 import { istruzioniAggiuntive } from "@/src/services/pianoAnnuale";
+import { selezionaCatalogoPerArgomento } from "@/src/lib/selezioneCatalogo";
 import type { Exercise, TrainingExercise } from "@/src/types/database";
 
 export interface VoceRiepilogoPiano {
@@ -80,7 +81,9 @@ export async function generaPianoAllenamentoAI(teamId: string, argomento: string
     return { errore: true, messaggio: "Il catalogo esercizi è vuoto: aggiungi almeno qualche esercizio nella tab Esercizi prima di generare un piano con l'AI." };
   }
 
-  const elencoCatalogo = catalogo.map((e) => `- ${e.nome}${e.categoria ? ` (${e.categoria})` : ""}`).join("\n");
+  // All'AI si mostrano solo gli esercizi pertinenti all'argomento (piu' qualche esercizio per fase): l'intero catalogo
+  // allungava il prompt oltre il necessario. Il riconoscimento dei nomi in risposta usa invece il catalogo completo.
+  const elencoCatalogo = selezionaCatalogoPerArgomento(catalogo, argomento).map((e) => `- ${e.nome}${e.categoria ? ` (${e.categoria})` : ""}`).join("\n");
 
   // Se la seduta cade dentro un blocco del piano annuale, i suoi
   // obiettivi entrano nel prompt: è ciò che rende la pianificazione
