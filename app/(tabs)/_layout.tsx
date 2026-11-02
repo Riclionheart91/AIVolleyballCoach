@@ -23,7 +23,8 @@ function BottoneNotifiche() {
   const [conteggio, setConteggio] = useState(0);
 
   useEffect(() => {
-    if (!team || !puoScrivere) return;
+    // Anche chi non puo' scrivere (presidente, superuser) puo' avere richieste di reset da gestire.
+    if (!team) return;
     calcolaNotifiche(team.id, puoScrivere).then((n) => setConteggio(n.length)).catch(() => setConteggio(0));
   }, [team, puoScrivere]);
 

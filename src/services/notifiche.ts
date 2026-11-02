@@ -4,8 +4,11 @@ import { elencaInvitiPendenti } from "@/src/services/teamInvites";
 import { atleteDaValutare, elencaPropostePendenti as elencaPropostePendentiValutazioni } from "@/src/services/evaluations";
 import { leggiPianoAnnuale, serveProporreAggiornamento } from "@/src/services/pianoAnnuale";
 import { leggiRinvii, rinvioAttivo } from "@/src/services/promemoria";
+import { elencaRichiesteReset } from "@/src/services/accessi";
 
-export type TipoNotifica = "certificato_medico" | "invito" | "proposta_valutazione" | "piano_annuale" | "ciclo_valutazione";
+export type TipoNotifica = "certificato_medico" | "invito" | "proposta_valutazione" | "piano_annuale" | "ciclo_valutazione" | "reset_accesso";
+
+export type RichiestaResetNotifica = Awaited<ReturnType<typeof elencaRichiesteReset>>[number];
 
 export interface Notifica {
   id: string;
@@ -17,6 +20,8 @@ export interface Notifica {
   /** Solo certificato medico: l'atleta e la scadenza, per il promemoria WhatsApp. */
   atleta?: Athlete;
   scadenza?: string;
+  /** Solo reset accesso: la richiesta da confermare o rifiutare. */
+  richiesta?: RichiestaResetNotifica;
 }
 
 const GIORNI_PREAVVISO_CERTIFICATO = 30;
@@ -30,6 +35,18 @@ const GIORNI_PREAVVISO_CERTIFICATO = 30;
  */
 export async function calcolaNotifiche(teamId: string, puoScrivere: boolean): Promise<Notifica[]> {
   const notifiche: Notifica[] = [];
+
+  // Richieste di reset dell'accesso: l'elenco arriva gia' filtrato dal server (allenatori per le atlete,
+  // presidenti e superuser per lo staff), quindi si legge anche per chi non puo' scrivere. Stanno in cima.
+  const richiesteReset = await elencaRichiesteReset(teamId).catch(() => []);
+  for (const r of richiesteReset) {
+    notifiche.push({
+      id: `reset-${r.id}`, tipo: "reset_accesso", urgente: true,
+      titolo: "Richiesta di reset accesso",
+      descrizione: `${r.nome} (${r.email}) — ${r.ambito === "staff" ? "staff" : "atleta"}: chiede un nuovo accesso`,
+      richiesta: r,
+    });
+  }
 
   if (puoScrivere) {
     const atlete = await elencaAtlete(teamId);

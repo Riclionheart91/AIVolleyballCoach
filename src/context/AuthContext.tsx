@@ -73,6 +73,8 @@ interface AuthState {
   /** Questa squadra è stata confermata dal presidente per la stagione corrente (equivale a stagioneAttiva !== null, esposto a parte per leggibilità). */
   squadraAttivata: boolean;
   accediConGoogle: () => Promise<void>;
+  /** Accesso con email e password (per chi non usa Google). Lancia 'Email o password non corrette'. */
+  accediConPassword: (email: string, password: string) => Promise<void>;
   esci: () => Promise<void>;
   creaPrimaSquadra: (nome: string) => Promise<void>;
   ricaricaContesto: () => Promise<void>;
@@ -230,6 +232,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
   }
 
+  async function accediConPassword(email: string, password: string) {
+    const { error } = await supabaseClient.auth.signInWithPassword({ email: email.trim().toLowerCase(), password });
+    if (error) throw new Error("Email o password non corrette");
+  }
+
   /**
    * Chi ha aperto un link d'invito dello staff e ha poi fatto l'accesso con Google: qui l'invito
    * si abbina all'account e si chiude. Il link ricordato si toglie subito, cosi' un errore non si ripete a ogni caricamento.
@@ -292,7 +299,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       session, caricamento, team, ruolo, atletaId, puoScrivere, soloLettura, puoScoutare, puoUsareAI, puoGestireStagioni, puoVedereAnalisi, isSuperuser,
       societaPresidenza, caricamentoSocieta, squadreDisponibili, cambiaSquadra, squadraScelta, caricamentoContesto, erroreTeam, stagioneAttiva, stagioneSocietaEsiste,
       squadraAttivata: stagioneAttiva !== null,
-      accediConGoogle, esci, creaPrimaSquadra, ricaricaContesto,
+      accediConGoogle, accediConPassword, esci, creaPrimaSquadra, ricaricaContesto,
     }),
     [session, caricamento, team, ruolo, atletaId, isSuperuser, societaPresidenza, caricamentoSocieta, squadreDisponibili, squadraScelta, caricamentoContesto, caricamentoSocieta, erroreTeam, stagioneAttiva, stagioneSocietaEsiste],
   );

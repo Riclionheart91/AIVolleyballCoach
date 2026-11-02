@@ -12,6 +12,30 @@ export function invitoStaffLink(squadra: string, ruolo: string, link: string): s
   return `Ciao! Ti invito come ${ruolo} nella squadra ${squadra} sull'app.\nApri questo link e accedi con il tuo account Google (la tua email Google): ${link}\nIl link vale per una sola persona e scade tra 7 giorni.`;
 }
 
+const CONSIGLIO_PASSWORD = "Ti consiglio di salvare la password nel gestore password del telefono (Password di iCloud o Gestore password di Google).";
+
+/** Primo invito di un'atleta: con Google basta l'email in anagrafica, con email e password serve il link personale. */
+export function invitoAccessoAtleta(p: { squadra: string; metodo: "google" | "password"; email: string; link?: string | null }): string {
+  if (p.metodo === "google" || !p.link) {
+    return `Ciao {nome}! Ti invito nell'app della squadra ${p.squadra}: ${URL_APP}\nAccedi con Google usando l'email ${p.email}: non serve nessuna password.`;
+  }
+  return `Ciao {nome}! Ti invito nell'app della squadra ${p.squadra}. Apri questo link e scegli la tua password: ${p.link}\nEntra con l'email ${p.email}. Il link scade tra 7 giorni e vale una sola volta.\n${CONSIGLIO_PASSWORD}`;
+}
+
+/** Dopo la conferma di un reset: con Google si ricorda l'account, con password c'e' il nuovo link. */
+export function resetAccesso(p: { squadra: string; metodo: "google" | "password"; email: string; link?: string | null }): string {
+  if (p.metodo === "google" || !p.link) {
+    return `Ciao {nome}, per entrare nell'app della squadra ${p.squadra} accedi con Google usando l'email ${p.email}: non c'è nessuna password da reimpostare. ${URL_APP}`;
+  }
+  return `Ciao {nome}, ecco il nuovo link per scegliere la password dell'app della squadra ${p.squadra}: ${p.link}\nEntra con l'email ${p.email}. Il link scade tra 7 giorni e vale una sola volta.\n${CONSIGLIO_PASSWORD}`;
+}
+
+/** Invito dello staff con email e password: l'email e' facoltativa, se manca la sceglie la persona. */
+export function invitoStaffPassword(squadra: string, ruolo: string, link: string, email?: string | null): string {
+  const quale = email ? `Entra con l'email ${email}.` : "Quando apri il link scegli tu l'email e la password.";
+  return `Ciao! Ti invito come ${ruolo} nella squadra ${squadra} sull'app.\nApri questo link e scegli la tua password: ${link}\n${quale} Il link vale per una sola persona e scade tra 7 giorni.\n${CONSIGLIO_PASSWORD}`;
+}
+
 export function inviaLinkScout(squadra: string, avversario: string, link: string): string {
   return `Ciao! Sei scout per la partita ${squadra} vs ${avversario}. Apri questo link, scrivi il tuo nome e inizia a registrare (non serve nessun account): ${link}`;
 }

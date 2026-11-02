@@ -11,6 +11,7 @@ export default function RootLayout() {
         <Stack.Screen name="ospite" />
         <Stack.Screen name="scout/[token]" />
         <Stack.Screen name="invito/[token]" />
+        <Stack.Screen name="accesso/[token]" />
         <Stack.Screen name="seleziona-squadra" options={{ headerShown: true, title: "Cambia squadra", presentation: "modal" }} />
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="atleta/[id]" />
