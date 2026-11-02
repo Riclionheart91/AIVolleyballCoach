@@ -214,7 +214,7 @@ function SezioneValutazioneCoach({ teamId }: { teamId: string }) {
         multiline
         placeholder="Contesto per l'AI (facoltativo): es. rientra da infortunio, ha cambiato ruolo, ultime settimane con poche presenze"
         placeholderTextColor={brand.colors.muted}
-        value={istruzioniExtra}
+        maxLength={500} value={istruzioniExtra}
         onChangeText={setIstruzioniExtra}
       />
 

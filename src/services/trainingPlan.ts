@@ -102,7 +102,7 @@ export async function generaPianoAllenamentoAI(teamId: string, argomento: string
   const { data: sessione } = await supabaseClient.auth.getSession();
   if (!sessione.session) return { errore: true, messaggio: "Sessione scaduta, effettua di nuovo l'accesso." };
 
-  const { data, error } = await supabaseClient.functions.invoke(cfg.aiRouterFunction, { body: { team_id: teamId, prompt } });
+  const { data, error } = await supabaseClient.functions.invoke(cfg.aiRouterFunction, { body: { team_id: teamId, prompt, funzione: "piano_allenamento" } });
   if (error) return { errore: true, messaggio: error.message };
   if (data.errore) return { errore: true, messaggio: [data.messaggio, data.dettagli, (data.chiaviMancanti ?? []).length ? `Chiavi non configurate: ${(data.chiaviMancanti ?? []).join(", ")}` : ""].filter(Boolean).join("\n\n") };
 
@@ -113,9 +113,9 @@ export async function generaPianoAllenamentoAI(teamId: string, argomento: string
 
     const nuovi: EsercizioNuovoProposto[] = [];
 
-    for (const item of parsed.esercizi ?? []) {
+    for (const item of (parsed.esercizi ?? []).slice(0, 25)) {
       const trovato = catalogo.find((e) => e.nome.trim().toLowerCase() === String(item.nome).trim().toLowerCase());
-      const durata = Number(item.durata_minuti) || 15;
+      const durata = Math.min(120, Math.max(1, Number(item.durata_minuti) || 15));
       if (trovato) {
         eserciziProposti.push({ exerciseId: trovato.id, nome: trovato.nome, durataMinuti: durata, note: String(item.note ?? "") });
       } else if (item.nome) {

@@ -2,6 +2,7 @@ import { supabaseClient } from "@/src/lib/supabase";
 import { supabase as cfg } from "@/src/config";
 import { carenzeAtleta } from "@/src/services/exercises";
 import { istruzioniAggiuntive } from "@/src/services/pianoAnnuale";
+import { ATLETA_ANONIMA } from "@/src/lib/anonimizza";
 import type { Exercise } from "@/src/types/database";
 
 export interface PianoIndividuale {
@@ -141,7 +142,7 @@ export async function generaPianoIndividualeAI(
   }
 
   const prompt =
-    `Sei un allenatore di pallavolo. Costruisci un piano di lavoro INDIVIDUALE per ${nomePersona}` +
+    `Sei un allenatore di pallavolo. Costruisci un piano di lavoro INDIVIDUALE per ${ATLETA_ANONIMA}` +
     (ruolo ? ` (${ruolo})` : "") + ".\n" +
     `Carenze rilevate dalle valutazioni: ${carenze.map((c) => `${c.fondamentale} media ${c.media}/10`).join(", ")}.\n` +
     `Gli esercizi devono aggredire queste carenze, essere svolgibili da soli o in coppia, richiedere poco spazio e poca attrezzatura, ` +
@@ -150,9 +151,9 @@ export async function generaPianoIndividualeAI(
     `Rispondi SOLO con JSON:\n` +
     `{"titolo":"...","obiettivo":"una frase","esercizi":[{"nome":"...","indicazioni":"come si esegue e cosa curare","volte_a_settimana":2,"durata_minuti":10,"quando":"riscaldamento|autonomo"}]}\n` +
     `Massimo 5 esercizi: un piano individuale troppo lungo non viene seguito.` +
-    istruzioniAggiuntive(istruzioniExtra);
+    istruzioniAggiuntive(istruzioniExtra, [nomePersona]);
 
-  const { data, error } = await supabaseClient.functions.invoke(cfg.aiRouterFunction, { body: { team_id: teamId, prompt } });
+  const { data, error } = await supabaseClient.functions.invoke(cfg.aiRouterFunction, { body: { team_id: teamId, prompt, funzione: "piano_individuale" } });
   if (error) return { errore: true, messaggio: error.message };
   if (data.errore) return { errore: true, messaggio: [data.messaggio, data.dettagli].filter(Boolean).join("\n\n") };
 
@@ -161,13 +162,14 @@ export async function generaPianoIndividualeAI(
     const p = JSON.parse(pulito);
     return {
       errore: false,
-      titolo: String(p.titolo ?? `Piano individuale — ${nomePersona}`),
-      obiettivo: String(p.obiettivo ?? ""),
+      // Il nome non e' mai stato mandato all'AI: il titolo lo compone l'app.
+      titolo: `Piano individuale — ${nomePersona}`,
+      obiettivo: String(p.obiettivo ?? "").slice(0, 300),
       esercizi: (p.esercizi ?? []).slice(0, 5).map((e: Record<string, unknown>) => ({
-        nome: String(e.nome ?? "Esercizio"),
-        indicazioni: String(e.indicazioni ?? ""),
+        nome: String(e.nome ?? "Esercizio").slice(0, 120),
+        indicazioni: String(e.indicazioni ?? "").slice(0, 600),
         volte_a_settimana: Math.min(7, Math.max(1, Number(e.volte_a_settimana) || 2)),
-        durata_minuti: Number(e.durata_minuti) || 10,
+        durata_minuti: Math.min(60, Math.max(1, Number(e.durata_minuti) || 10)),
         quando: ["riscaldamento", "tecnico", "autonomo"].includes(String(e.quando)) ? String(e.quando) : "riscaldamento",
       })),
     };

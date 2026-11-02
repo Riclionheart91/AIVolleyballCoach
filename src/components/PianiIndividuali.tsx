@@ -359,6 +359,7 @@ export function PianiIndividuali({ teamId, athleteId, nomePersona, ruolo, modifi
               multiline
               placeholder="Indicazioni particolari (facoltativo): es. rientra da infortunio alla spalla, ha poco tempo"
               placeholderTextColor={brand.colors.muted}
+              maxLength={500}
               value={istruzioni}
               onChangeText={setIstruzioni}
             />

@@ -395,7 +395,7 @@ export default function PianoAllenamento() {
             multiline
             placeholder="Indicazioni per questa seduta (facoltativo): es. pochi disponibili, lavorare sul muro, niente salti per infortuni"
             placeholderTextColor={brand.colors.muted}
-            value={istruzioniExtra}
+            maxLength={500} value={istruzioniExtra}
             onChangeText={setIstruzioniExtra}
           />
           <Text style={styles.nota}>La proposta AI usa solo esercizi già nel tuo catalogo, e resta modificabile prima di salvare — se non risponde, costruisci il piano scegliendo qui sotto.</Text>

@@ -1,6 +1,7 @@
 import { supabaseClient } from "@/src/lib/supabase";
 import { supabase as cfg } from "@/src/config";
 import { istruzioniAggiuntive } from "@/src/services/pianoAnnuale";
+import { ATLETA_ANONIMA } from "@/src/lib/anonimizza";
 import type { Exercise } from "@/src/types/database";
 
 export async function elencaEsercizi(teamId: string): Promise<Exercise[]> {
@@ -88,7 +89,7 @@ export async function generaEserciziAI(
     : "";
 
   const bloccoAtleta = contesto?.atleta
-    ? `Esercizi CORRETTIVI INDIVIDUALI per ${contesto.atleta.nome}` +
+    ? `Esercizi CORRETTIVI INDIVIDUALI per ${ATLETA_ANONIMA}` +
       (contesto.atleta.ruolo ? ` (${contesto.atleta.ruolo})` : "") + ". " +
       `Punti deboli rilevati dalle valutazioni: ${contesto.atleta.carenze.map((c) => `${c.fondamentale} (media ${c.media}/10)`).join(", ")}. ` +
       `Gli esercizi devono aggredire proprio queste carenze, essere svolgibili individualmente o in coppia, e richiedere poco spazio e poca attrezzatura.\n`
@@ -118,12 +119,12 @@ export async function generaEserciziAI(
       : "") +
     `Rispondi SOLO con JSON, senza altro testo:\n` +
     `{"esercizi":[{"nome":"...","categoria":"${categoria}","fase":"riscaldamento|tecnico|situazionale|defaticamento","descrizione":"come si svolge, in 2-3 frasi: disposizione, obiettivo, criterio di riuscita"}]}` +
-    istruzioniAggiuntive(istruzioniExtra);
+    istruzioniAggiuntive(istruzioniExtra, contesto?.atleta ? [contesto.atleta.nome] : []);
 
   const { data: sessione } = await supabaseClient.auth.getSession();
   if (!sessione.session) return { errore: true, messaggio: "Sessione scaduta, effettua di nuovo l'accesso." };
 
-  const { data, error } = await supabaseClient.functions.invoke(cfg.aiRouterFunction, { body: { team_id: teamId, prompt } });
+  const { data, error } = await supabaseClient.functions.invoke(cfg.aiRouterFunction, { body: { team_id: teamId, prompt, funzione: "esercizi" } });
   if (error) return { errore: true, messaggio: error.message };
   if (data.errore) {
     return { errore: true, messaggio: [data.messaggio, data.dettagli, (data.chiaviMancanti ?? []).length ? `Chiavi non configurate: ${(data.chiaviMancanti ?? []).join(", ")}` : ""].filter(Boolean).join("\n\n") };
@@ -136,11 +137,12 @@ export async function generaEserciziAI(
     const giaPresenti = new Set(nomiEsistenti.map(normalizza));
 
     const esercizi: EsercizioProposto[] = (parsed.esercizi ?? [])
+      .slice(0, Math.max(1, Math.min(quanti, 12)) + 3)
       .filter((e: Record<string, unknown>) => e.nome)
       .map((e: Record<string, unknown>) => ({
-        nome: String(e.nome).trim(),
-        categoria: String(e.categoria ?? categoria).trim() || categoria,
-        descrizione: String(e.descrizione ?? "").trim(),
+        nome: String(e.nome).trim().slice(0, 120),
+        categoria: String(e.categoria ?? categoria).trim().slice(0, 60) || categoria,
+        descrizione: String(e.descrizione ?? "").trim().slice(0, 800),
         fase: ["riscaldamento", "tecnico", "situazionale", "defaticamento"].includes(String(e.fase))
           ? String(e.fase)
           : (contesto?.fase && contesto.fase !== "qualsiasi" ? contesto.fase : "tecnico"),

@@ -1,22 +1,10 @@
 // supabase/functions/ai-router/index.ts
 //
-// Equivalente di AI.gs (chiamaProviderAI_ + RateLimiter.gs) nel mondo GAS.
-// Gira come Edge Function Deno: le chiavi dei provider sono secret di
-// progetto (supabase secrets set GEMINI_API_KEY=... ecc.), MAI esposte al
-// client — stessa garanzia di leggiSegreto_() in Config.gs, qui è
-// impossibile per costruzione perché il client non ha alcuna via per
-// leggere le variabili d'ambiente della function.
+// Router provider AI. Le chiavi sono secret di progetto, mai esposte al client.
+// Secret attesi: GEMINI_API_KEY, GEMINI_API_KEY_2, GROQ_API_KEY, OPENROUTER_API_KEY.
 //
-// Deploy:   supabase functions deploy ai-router
-// Secrets:  supabase secrets set GEMINI_API_KEY=xxx GROQ_API_KEY=xxx OPENROUTER_API_KEY=xxx
-//
-// Contratto: il client manda il proprio JWT (Supabase Auth) + team_id +
-// prompt. La function verifica che l'utente sia membro del team (stessa
-// verificaPermesso_ di Auth.gs, qui via query a team_members con la
-// service_role key), controlla la quota giornaliera, e prova i provider
-// in cascata secondo ai_providers_config. Se tutti falliscono, risponde
-// con errore chiaro invece di un errore tecnico — il client mostra
-// comunque il percorso manuale, che non passa mai da qui.
+// Ogni chiamata viene tracciata in ai_call_log: esito, durata, funzione dell'app che l'ha chiesta, provider provati
+// ed eventuale errore. Del prompt si salva solo la lunghezza, mai il testo (puo' contenere dati delle atlete).
 
 import { createClient } from "npm:@supabase/supabase-js@2";
 
@@ -25,29 +13,28 @@ const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
-  // Lista ampia: le versioni recenti della libreria Supabase inviano
-  // intestazioni aggiuntive (x-supabase-api-version, x-region...). Se
-  // anche una sola non è dichiarata qui, il browser blocca la
-  // richiesta PRIMA che parta, e l'app riceve solo un generico
-  // "Failed to send a request to the Edge Function" senza altri
-  // dettagli.
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-api-version, x-region, accept, accept-profile, content-profile, prefer",
   "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
   "Access-Control-Max-Age": "86400",
 };
 
-/** Risposta al preflight CORS: rimanda indietro esattamente le intestazioni che il browser ha chiesto, così nessuna resta fuori qualunque versione di libreria le invii. */
 function rispostaPreflight(req: Request): Response {
   const richieste = req.headers.get("Access-Control-Request-Headers");
   return new Response("ok", {
-    headers: {
-      ...CORS_HEADERS,
-      ...(richieste ? { "Access-Control-Allow-Headers": richieste } : {}),
-    },
+    headers: { ...CORS_HEADERS, ...(richieste ? { "Access-Control-Allow-Headers": richieste } : {}) },
   });
 }
 
-type Provider = "GEMINI" | "GROQ" | "OPENROUTER";
+type Provider = "GEMINI" | "GEMINI2" | "GROQ" | "OPENROUTER";
+
+/** Ogni provider dichiara da quale secret legge la chiave: GEMINI2 è lo stesso servizio di GEMINI ma con una seconda chiave, usata come
+ *  riserva quando la prima esaurisce la quota giornaliera del piano gratuito. */
+const SECRET_PER_PROVIDER: Record<Provider, string> = {
+  GEMINI: "GEMINI_API_KEY",
+  GEMINI2: "GEMINI_API_KEY_2",
+  GROQ: "GROQ_API_KEY",
+  OPENROUTER: "OPENROUTER_API_KEY",
+};
 
 interface ProviderConfig {
   provider_code: Provider;
@@ -59,6 +46,22 @@ interface ProviderConfig {
 interface RichiestaAI {
   team_id: string;
   prompt: string;
+  /** Etichetta della funzione dell'app che chiede (es. "esercizi", "voti"): serve solo alle tracce. */
+  funzione?: string;
+}
+
+/** Oltre questa lunghezza il prompt viene rifiutato: i prompt veri dell'app restano molto sotto. */
+const MAX_PROMPT_CARATTERI = 12000;
+
+interface TracciaChiamata {
+  team_id: string;
+  provider_usato: string | null;
+  esito: "ok" | "errore";
+  durata_ms: number;
+  funzione: string | null;
+  tentativi: number;
+  errore: string | null;
+  prompt_caratteri: number;
 }
 
 Deno.serve(async (req) => {
@@ -66,28 +69,24 @@ Deno.serve(async (req) => {
 
   try {
     const authHeader = req.headers.get("Authorization") ?? "";
-    const userClient = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
-      global: { headers: { Authorization: authHeader } },
-    });
+    const userClient = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, { global: { headers: { Authorization: authHeader } } });
     const { data: userData, error: userErr } = await userClient.auth.getUser();
     if (userErr || !userData.user) {
       return jsonResponse({ errore: true, messaggio: "Sessione non valida. Effettua di nuovo l'accesso." }, 401);
     }
 
-    const { team_id, prompt } = (await req.json()) as RichiestaAI;
+    const inizio = Date.now();
+    const { team_id, prompt, funzione } = (await req.json()) as RichiestaAI;
     if (!team_id || !prompt) {
       return jsonResponse({ errore: true, messaggio: "Richiesta incompleta (team_id/prompt mancanti)." }, 400);
     }
+    if (prompt.length > MAX_PROMPT_CARATTERI) {
+      return jsonResponse({ errore: true, messaggio: `La richiesta è troppo lunga (${prompt.length} caratteri, massimo ${MAX_PROMPT_CARATTERI}). Accorcia le istruzioni aggiuntive.` }, 400);
+    }
+    const etichetta = typeof funzione === "string" ? funzione.slice(0, 40) : null;
 
-    // service_role: bypassa la RLS solo qui, dopo aver verificato a mano
-    // l'appartenenza al team — equivalente esatto di verificaPermesso_().
     const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
-    const { data: membro } = await admin
-      .from("team_members")
-      .select("ruolo")
-      .eq("team_id", team_id)
-      .eq("user_id", userData.user.id)
-      .maybeSingle();
+    const { data: membro } = await admin.from("team_members").select("ruolo").eq("team_id", team_id).eq("user_id", userData.user.id).maybeSingle();
     if (!membro || !["allenatore", "vice_allenatore"].includes(membro.ruolo)) {
       return jsonResponse({ errore: true, messaggio: "Utente non autorizzato su questo team." }, 403);
     }
@@ -104,90 +103,117 @@ Deno.serve(async (req) => {
       .sort((a: ProviderConfig, b: ProviderConfig) => a.priority - b.priority);
 
     const erroriPerProvider: string[] = [];
+    let tentativi = 0;
     for (const cfg of configurazioni) {
+      tentativi++;
       try {
         const testo = await chiamaProvider(cfg, prompt);
-        await admin.from("ai_call_log").insert({ team_id, provider_usato: cfg.provider_code });
-        return jsonResponse({
-          errore: false,
-          testo,
-          providerUsato: cfg.provider_code,
-          chiamateResidue: (residue ?? 1) - 1,
-          limite: 20,
+        await registraTraccia(admin, {
+          team_id, provider_usato: cfg.provider_code, esito: "ok", durata_ms: Date.now() - inizio,
+          funzione: etichetta, tentativi,
+          errore: erroriPerProvider.length ? erroriPerProvider.join(" | ").slice(0, 500) : null,
+          prompt_caratteri: prompt.length,
         });
+        return jsonResponse({ errore: false, testo, providerUsato: cfg.provider_code, chiamateResidue: (residue ?? 1) - 1, limite: 20 });
       } catch (e) {
-        erroriPerProvider.push(`${cfg.provider_code}: ${(e as Error).message}`);
+        const dettaglio = `${cfg.provider_code} (modello ${cfg.modello ?? "default"}): ${(e as Error).message}`;
+        console.error("Provider AI fallito:", dettaglio);
+        erroriPerProvider.push(dettaglio);
       }
     }
 
+    await registraTraccia(admin, {
+      team_id, provider_usato: null, esito: "errore", durata_ms: Date.now() - inizio,
+      funzione: etichetta, tentativi,
+      errore: (erroriPerProvider.join(" | ") || "nessun provider abilitato").slice(0, 500),
+      prompt_caratteri: prompt.length,
+    });
+
+    const chiaviMancanti = configurazioni
+      .map((c) => SECRET_PER_PROVIDER[c.provider_code])
+      .filter((nome) => nome && !Deno.env.get(nome));
+
     return jsonResponse({
       errore: true,
-      messaggio: "AI Disabled Mode: tutti i provider disponibili hanno fallito. Il percorso manuale resta sempre disponibile.",
+      messaggio: "Tutti i provider AI disponibili hanno fallito. Il percorso manuale resta sempre disponibile.",
       dettagli: erroriPerProvider.join(" | "),
+      chiaviMancanti,
     }, 200);
   } catch (e) {
+    console.error("Errore interno router AI:", (e as Error).message);
     return jsonResponse({ errore: true, messaggio: "Errore interno del router AI: " + (e as Error).message }, 500);
   }
 });
 
+/**
+ * Scrive la traccia della chiamata. Un errore qui non deve mai rompere la risposta all'utente:
+ * al massimo la traccia manca. Del prompt si salva solo la lunghezza, mai il testo.
+ */
+async function registraTraccia(admin: ReturnType<typeof createClient>, traccia: TracciaChiamata): Promise<void> {
+  try {
+    const { error } = await admin.from("ai_call_log").insert(traccia);
+    if (error) console.error("ai_call_log:", error.message);
+  } catch (e) {
+    console.error("ai_call_log:", (e as Error).message);
+  }
+}
+
 async function chiamaProvider(cfg: ProviderConfig, prompt: string): Promise<string> {
+  const nomeSecret = SECRET_PER_PROVIDER[cfg.provider_code];
+  const apiKey = nomeSecret ? Deno.env.get(nomeSecret) : undefined;
+  if (!apiKey) throw new Error(`chiave ${nomeSecret} non configurata nei secret del progetto`);
+
   switch (cfg.provider_code) {
     case "GEMINI":
-      return chiamaGemini(prompt, cfg.modello ?? "gemini-2.0-flash");
+    case "GEMINI2":
+      return chiamaGemini(prompt, cfg.modello ?? "gemini-3.6-flash", apiKey);
     case "GROQ":
-      return chiamaGroq(prompt, cfg.modello ?? "llama-3.3-70b-versatile");
+      return chiamaGroq(prompt, cfg.modello ?? "llama-3.3-70b-versatile", apiKey);
     case "OPENROUTER":
-      return chiamaOpenRouter(prompt, cfg.modello ?? "openrouter/free");
+      return chiamaOpenRouter(prompt, cfg.modello ?? "openrouter/free", apiKey);
     default:
       throw new Error("provider non implementato");
   }
 }
 
-async function chiamaGemini(prompt: string, modello: string): Promise<string> {
-  const apiKey = Deno.env.get("GEMINI_API_KEY");
-  if (!apiKey) throw new Error("chiave API non configurata");
+/** Include sempre un estratto del corpo della risposta: senza, un 400/404 non dice se il problema è il modello, la chiave o la quota. */
+async function erroreDettagliato(resp: Response): Promise<string> {
+  const corpo = await resp.text().catch(() => "");
+  return `HTTP ${resp.status}${corpo ? ` — ${corpo.slice(0, 300)}` : ""}`;
+}
+
+async function chiamaGemini(prompt: string, modello: string, apiKey: string): Promise<string> {
   const resp = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${modello}:generateContent?key=${apiKey}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
-    },
+    { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }) },
   );
-  if (!resp.ok) throw new Error(`HTTP ${resp.status} (${resp.status === 503 ? "modello sovraccarico, riprovare" : "errore"})`);
+  if (!resp.ok) throw new Error(await erroreDettagliato(resp));
   const data = await resp.json();
   const testo = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-  if (!testo) throw new Error("risposta vuota");
+  if (!testo) throw new Error("risposta vuota o bloccata dai filtri di sicurezza");
   return testo;
 }
 
-async function chiamaGroq(prompt: string, modello: string): Promise<string> {
-  const apiKey = Deno.env.get("GROQ_API_KEY");
-  if (!apiKey) throw new Error("chiave API non configurata");
+async function chiamaGroq(prompt: string, modello: string, apiKey: string): Promise<string> {
   const resp = await fetch("https://api.groq.com/openai/v1/chat/completions", {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
     body: JSON.stringify({ model: modello, messages: [{ role: "user", content: prompt }] }),
   });
-  if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+  if (!resp.ok) throw new Error(await erroreDettagliato(resp));
   const data = await resp.json();
   const testo = data?.choices?.[0]?.message?.content;
   if (!testo) throw new Error("risposta vuota");
   return testo;
 }
 
-async function chiamaOpenRouter(prompt: string, modello: string): Promise<string> {
-  const apiKey = Deno.env.get("OPENROUTER_API_KEY");
-  if (!apiKey) throw new Error("chiave API non configurata");
+async function chiamaOpenRouter(prompt: string, modello: string, apiKey: string): Promise<string> {
   const resp = await fetch("https://openrouter.ai/api/v1/chat/completions", {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
     body: JSON.stringify({ model: modello, messages: [{ role: "user", content: prompt }] }),
   });
-  if (!resp.ok) {
-    if (resp.status === 404) throw new Error("modello non più nel free tier, impostare 'openrouter/free' come modello");
-    throw new Error(`HTTP ${resp.status}`);
-  }
+  if (!resp.ok) throw new Error(await erroreDettagliato(resp));
   const data = await resp.json();
   const testo = data?.choices?.[0]?.message?.content;
   if (!testo) throw new Error("risposta vuota");
@@ -195,8 +221,5 @@ async function chiamaOpenRouter(prompt: string, modello: string): Promise<string
 }
 
 function jsonResponse(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
-  });
+  return new Response(JSON.stringify(body), { status, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } });
 }

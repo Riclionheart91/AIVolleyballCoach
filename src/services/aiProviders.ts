@@ -32,3 +32,18 @@ export async function salvaProvider(config: Pick<AiProviderConfig, "team_id" | "
     if (error) throw error;
   }
 }
+
+export interface RigaRiepilogoAI {
+  provider: string;
+  funzione: string;
+  chiamate: number;
+  errori: number;
+  durata_media_ms: number | null;
+}
+
+/** Chiamate AI della squadra negli ultimi giorni, per provider e funzione: chi fallisce, quanto ci mette, quanto si usa. */
+export async function riepilogoChiamateAI(teamId: string, giorni = 7): Promise<RigaRiepilogoAI[]> {
+  const { data, error } = await supabaseClient.rpc("ai_riepilogo_chiamate", { p_team_id: teamId, p_giorni: giorni });
+  if (error) throw error;
+  return (data ?? []) as RigaRiepilogoAI[];
+}

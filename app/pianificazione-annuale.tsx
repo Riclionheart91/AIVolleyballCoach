@@ -363,7 +363,7 @@ export default function PianificazioneAnnuale() {
               ))}
             </View>
             <TextInput style={styles.input} placeholder="Obiettivo principale della stagione" placeholderTextColor={brand.colors.muted} value={obiettivoStagione} onChangeText={setObiettivoStagione} />
-            <TextInput style={[styles.input, { minHeight: 60 }]} multiline placeholder="Altro da tenere presente (facoltativo)" placeholderTextColor={brand.colors.muted} value={istruzioniExtra} onChangeText={setIstruzioniExtra} />
+            <TextInput style={[styles.input, { minHeight: 60 }]} multiline placeholder="Altro da tenere presente (facoltativo)" placeholderTextColor={brand.colors.muted} maxLength={500} value={istruzioniExtra} onChangeText={setIstruzioniExtra} />
 
             <View style={{ flexDirection: "row", gap: 8 }}>
               <Pressable style={styles.bottoneAnnulla} onPress={() => setPerformanceUiAperta(false)}><Text style={styles.bottoneAnnullaTesto}>Annulla</Text></Pressable>
@@ -466,7 +466,7 @@ export default function PianificazioneAnnuale() {
               multiline
               placeholder="Es. due atlete rientrano da infortunio al ginocchio; a dicembre la palestra è indisponibile per due settimane; vogliamo lavorare molto sulla ricezione"
               placeholderTextColor={brand.colors.muted}
-              value={istruzioniExtra}
+              maxLength={500} value={istruzioniExtra}
               onChangeText={setIstruzioniExtra}
             />
 

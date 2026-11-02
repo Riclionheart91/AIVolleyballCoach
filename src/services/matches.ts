@@ -536,7 +536,7 @@ export async function generaCommentoPartitaAI(teamId: string, match: Match, sets
 
   const { data: sessione } = await supabaseClient.auth.getSession();
   if (!sessione.session) return { errore: true, messaggio: "Sessione scaduta, effettua di nuovo l'accesso." };
-  const { data, error } = await supabaseClient.functions.invoke(cfg.aiRouterFunction, { body: { team_id: teamId, prompt } });
+  const { data, error } = await supabaseClient.functions.invoke(cfg.aiRouterFunction, { body: { team_id: teamId, prompt, funzione: "commento_partita" } });
   if (error) return { errore: true, messaggio: error.message };
   if (data?.errore) return { errore: true, messaggio: [data.messaggio, data.dettagli].filter(Boolean).join("\n\n") };
   const testo = String(data?.testo ?? "").trim();

@@ -3,7 +3,7 @@ import { View, Text, TextInput, Pressable, StyleSheet, ScrollView, Switch } from
 import { router, useFocusEffect } from "expo-router";
 import { useAuth } from "@/src/context/AuthContext";
 import { impostaLinkSporteasy, leggiIntegrazione } from "@/src/services/sporteasy";
-import { elencaProvider, salvaProvider, type AiProviderConfig } from "@/src/services/aiProviders";
+import { elencaProvider, riepilogoChiamateAI, salvaProvider, type AiProviderConfig, type RigaRiepilogoAI } from "@/src/services/aiProviders";
 import { brand } from "@/src/config";
 import { avvisa } from "@/src/lib/confermaAzione";
 import { leggiImpostazioniNotifiche, salvaImpostazioniNotifiche, IMPOSTAZIONI_NOTIFICHE_DEFAULT, type ImpostazioniNotificheEsercizio } from "@/src/lib/impostazioniEsercizio";
@@ -21,6 +21,7 @@ export default function Impostazioni() {
   const [linkSporteasy, setLinkSporteasy] = useState("");
   const [providerSquadra, setProviderSquadra] = useState<AiProviderConfig[]>([]);
   const [providerGlobali, setProviderGlobali] = useState<AiProviderConfig[]>([]);
+  const [riepilogoAI, setRiepilogoAI] = useState<RigaRiepilogoAI[]>([]);
   const [notificheEsercizio, setNotificheEsercizio] = useState<ImpostazioniNotificheEsercizio>(IMPOSTAZIONI_NOTIFICHE_DEFAULT);
   const [intervalloTesto, setIntervalloTesto] = useState(String(IMPOSTAZIONI_NOTIFICHE_DEFAULT.intervalloMinuti));
   const [pushCertificatiAttivo, setPushCertificatiAttivo] = useState(false);
@@ -30,7 +31,10 @@ export default function Impostazioni() {
     if (!team) return;
     const integ = await leggiIntegrazione(team.id).catch(() => null);
     if (integ?.sporteasy_ical_url) setLinkSporteasy(integ.sporteasy_ical_url);
-    if (puoScrivere) setProviderSquadra(await elencaProvider(team.id).catch(() => []));
+    if (puoScrivere) {
+      setProviderSquadra(await elencaProvider(team.id).catch(() => []));
+      setRiepilogoAI(await riepilogoChiamateAI(team.id).catch(() => []));
+    }
     if (isSuperuser) setProviderGlobali(await elencaProvider(null).catch(() => []));
     const imp = await leggiImpostazioniNotifiche();
     setNotificheEsercizio(imp);
@@ -154,6 +158,22 @@ export default function Impostazioni() {
         </View>
       )}
 
+      {puoScrivere && (
+        <View style={styles.card}>
+          <Text style={styles.sezioneTitolo}>Chiamate AI — ultimi 7 giorni</Text>
+          <Text style={styles.nota}>Per ogni servizio e funzione: quante richieste, quante non sono andate a buon fine e quanto ci ha messo in media.</Text>
+          {riepilogoAI.length === 0 ? (
+            <Text style={styles.nota}>Nessuna chiamata registrata in questi giorni.</Text>
+          ) : (
+            riepilogoAI.map((r) => (
+              <Text key={`${r.provider}-${r.funzione}`} style={styles.rigaRiepilogo}>
+                {`${r.provider} · ${r.funzione}: ${r.chiamate} chiamate, ${r.errori} errori${r.durata_media_ms != null ? `, ${(r.durata_media_ms / 1000).toFixed(1)} s` : ""}`}
+              </Text>
+            ))
+          )}
+        </View>
+      )}
+
       {isSuperuser && (
         <View style={styles.card}>
           <Text style={styles.sezioneTitolo}>Provider AI — default globali (superuser)</Text>
@@ -175,6 +195,7 @@ const styles = StyleSheet.create({
   bottoneTesto: { color: "#000", fontWeight: "700" },
   rigaProvider: { flexDirection: "row", alignItems: "center", gap: 8 },
   rigaNotifiche: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  rigaRiepilogo: { color: brand.colors.onSurface, fontSize: 14 },
   rigaProviderNome: { color: brand.colors.onSurface, fontWeight: "600", width: 90 },
   inputPriorita: { backgroundColor: brand.colors.surfaceTertiary, color: brand.colors.onSurface, borderRadius: 6, padding: 6, width: 40, textAlign: "center" },
   inputModello: { flex: 1, backgroundColor: brand.colors.surfaceTertiary, color: brand.colors.onSurface, borderRadius: 6, padding: 6, fontSize: 12 },

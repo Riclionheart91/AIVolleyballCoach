@@ -535,7 +535,8 @@ export default function PartitaLive() {
     if (!match || !team || !setCorrente) return;
     setChiedendoAI(true);
     try {
-      const riassunto = riassuntoPerAI(eventi, (aid) => etichettaAtleta(aid), `${setCorrente.punti_noi}-${setCorrente.punti_avversario}`);
+      // Ai servizi AI esterni va solo il numero di maglia, mai il cognome.
+      const riassunto = riassuntoPerAI(eventi, (aid) => { const a = nomeAtleta(aid); return a ? `#${a.numero_maglia ?? "-"}` : "—"; }, `${setCorrente.punti_noi}-${setCorrente.punti_avversario}`);
       const r = await chiediParerePartitaAI(team.id, riassunto);
       if (r.errore) { avvisa("Parere non disponibile", r.messaggio ?? "Errore"); return; }
       setParereAI(r.testo ?? null);

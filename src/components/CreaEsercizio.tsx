@@ -233,7 +233,7 @@ export function CreaEsercizio({
             multiline
             placeholder="Indicazioni particolari (facoltativo): es. per under 14, con poco spazio, senza salti"
             placeholderTextColor={brand.colors.muted}
-            value={istruzioniAi}
+            maxLength={500} value={istruzioniAi}
             onChangeText={setIstruzioniAi}
           />
           <Pressable style={styles.bottone} onPress={onGeneraAi} disabled={generando || !categoriaAi.trim()}>

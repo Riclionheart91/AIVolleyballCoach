@@ -1,6 +1,7 @@
 import { supabaseClient } from "@/src/lib/supabase";
 import { supabase as cfg } from "@/src/config";
 import { istruzioniAggiuntive } from "@/src/services/pianoAnnuale";
+import { ATLETA_ANONIMA } from "@/src/lib/anonimizza";
 import type { Evaluation, EvaluationProposal, Fondamentale } from "@/src/types/database";
 
 /** Percorso manuale puro — identico indipendentemente dallo stato dell'AI. */
@@ -80,13 +81,13 @@ export async function generaPropostaValutazioneAI(
   storicoRecente: { punteggio: number; data: string }[],
   istruzioniExtra?: string,
 ): Promise<RisultatoSuggerimentoAI> {
-  const prompt = costruisciPromptValutazione(atletaNomeCompleto, fondamentale, storicoRecente) + istruzioniAggiuntive(istruzioniExtra);
+  const prompt = costruisciPromptValutazione(fondamentale, storicoRecente) + istruzioniAggiuntive(istruzioniExtra, [atletaNomeCompleto]);
 
   const { data: sessione } = await supabaseClient.auth.getSession();
   if (!sessione.session) return { errore: true, messaggio: "Sessione scaduta, effettua di nuovo l'accesso." };
 
   const { data, error } = await supabaseClient.functions.invoke(cfg.aiRouterFunction, {
-    body: { team_id: teamId, prompt },
+    body: { team_id: teamId, prompt, funzione: "voti" },
   });
   if (error) return { errore: true, messaggio: error.message };
   if (data.errore) return { errore: true, messaggio: [data.messaggio, data.dettagli, (data.chiaviMancanti ?? []).length ? `Chiavi non configurate: ${(data.chiaviMancanti ?? []).join(", ")}` : ""].filter(Boolean).join("\n\n") };
@@ -129,13 +130,13 @@ export async function rigettaProposta(propostaId: string): Promise<void> {
   if (error) throw error;
 }
 
-function costruisciPromptValutazione(nomeAtleta: string, fondamentale: Fondamentale, storico: { punteggio: number; data: string }[]): string {
+function costruisciPromptValutazione(fondamentale: Fondamentale, storico: { punteggio: number; data: string }[]): string {
   const storicoTesto = storico.length
     ? storico.map((s) => `${s.data.slice(0, 10)}: ${s.punteggio}`).join(", ")
     : "nessuna valutazione precedente";
   return (
     `Sei un assistente per un allenatore di pallavolo. Proponi un punteggio da 1 a 10 per il fondamentale "${fondamentale}" ` +
-    `dell'atleta ${nomeAtleta}, in base allo storico recente (${storicoTesto}). ` +
+    `di ${ATLETA_ANONIMA}, in base allo storico recente (${storicoTesto}). ` +
     `Rispondi SOLO in formato JSON: {"valore": numero, "confidenza": "bassa"|"media"|"alta", "motivazione": "una frase breve"}.`
   );
 }
@@ -148,7 +149,7 @@ function interpretaRispostaAI(testo: string): { valore: number; confidenza: "bas
     return {
       valore: Math.round(valore * 2) / 2, // arrotonda a 0.5, come i punteggi manuali
       confidenza: ["bassa", "media", "alta"].includes(parsed.confidenza) ? parsed.confidenza : "media",
-      motivazione: String(parsed.motivazione ?? ""),
+      motivazione: String(parsed.motivazione ?? "").slice(0, 300),
     };
   } catch {
     // Se il modello non ha rispettato il formato JSON richiesto, meglio
@@ -183,14 +184,14 @@ export async function impostaCadenzaValutazione(teamId: string, giorni: number):
 export async function chiediParerePartitaAI(teamId: string, riassunto: string, domanda?: string): Promise<{ errore: boolean; messaggio?: string; testo?: string }> {
   const prompt =
     `Sei un allenatore di pallavolo esperto, a bordo campo durante una partita. Ecco la situazione:\n\n${riassunto}\n\n` +
-    (domanda?.trim() ? `Domanda specifica dell'allenatore: ${domanda.trim()}\n\n` : "") +
+    (domanda?.trim() ? `Domanda specifica dell'allenatore: ${domanda.trim().slice(0, 500)}\n\n` : "") +
     `Dai 2-3 indicazioni pratiche e immediate su cosa bilanciare o cambiare, in italiano, molto concise. ` +
     `Niente premesse, niente elenco di ciò che già so: vai diretto ai consigli.`;
 
   const { data: sessione } = await supabaseClient.auth.getSession();
   if (!sessione.session) return { errore: true, messaggio: "Sessione scaduta." };
 
-  const { data, error } = await supabaseClient.functions.invoke(cfg.aiRouterFunction, { body: { team_id: teamId, prompt } });
+  const { data, error } = await supabaseClient.functions.invoke(cfg.aiRouterFunction, { body: { team_id: teamId, prompt, funzione: "parere_partita" } });
   if (error) return { errore: true, messaggio: error.message };
   if (data.errore) return { errore: true, messaggio: [data.messaggio, data.dettagli].filter(Boolean).join("\n\n") };
   return { errore: false, testo: data.testo };
