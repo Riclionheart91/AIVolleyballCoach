@@ -1,4 +1,5 @@
 import { supabaseClient } from "@/src/lib/supabase";
+import { messaggioErroreRouter } from "@/src/services/aiProviders";
 import { supabase as cfg } from "@/src/config";
 import { istruzioniAggiuntive } from "@/src/services/pianoAnnuale";
 import { ATLETA_ANONIMA } from "@/src/lib/anonimizza";
@@ -125,7 +126,7 @@ export async function generaEserciziAI(
   if (!sessione.session) return { errore: true, messaggio: "Sessione scaduta, effettua di nuovo l'accesso." };
 
   const { data, error } = await supabaseClient.functions.invoke(cfg.aiRouterFunction, { body: { team_id: teamId, prompt, funzione: "esercizi" } });
-  if (error) return { errore: true, messaggio: error.message };
+  if (error) return { errore: true, messaggio: await messaggioErroreRouter(error) };
   if (data.errore) {
     return { errore: true, messaggio: [data.messaggio, data.dettagli, (data.chiaviMancanti ?? []).length ? `Chiavi non configurate: ${(data.chiaviMancanti ?? []).join(", ")}` : ""].filter(Boolean).join("\n\n") };
   }

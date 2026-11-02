@@ -1,4 +1,5 @@
 import { supabaseClient } from "@/src/lib/supabase";
+import { messaggioErroreRouter } from "@/src/services/aiProviders";
 import { supabase as cfg } from "@/src/config";
 import { istruzioniAggiuntive } from "@/src/services/pianoAnnuale";
 import { ATLETA_ANONIMA } from "@/src/lib/anonimizza";
@@ -89,7 +90,7 @@ export async function generaPropostaValutazioneAI(
   const { data, error } = await supabaseClient.functions.invoke(cfg.aiRouterFunction, {
     body: { team_id: teamId, prompt, funzione: "voti" },
   });
-  if (error) return { errore: true, messaggio: error.message };
+  if (error) return { errore: true, messaggio: await messaggioErroreRouter(error) };
   if (data.errore) return { errore: true, messaggio: [data.messaggio, data.dettagli, (data.chiaviMancanti ?? []).length ? `Chiavi non configurate: ${(data.chiaviMancanti ?? []).join(", ")}` : ""].filter(Boolean).join("\n\n") };
 
   const suggerimento = interpretaRispostaAI(data.testo);
@@ -191,7 +192,7 @@ export async function chiediParerePartitaAI(teamId: string, riassunto: string, d
   if (!sessione.session) return { errore: true, messaggio: "Sessione scaduta." };
 
   const { data, error } = await supabaseClient.functions.invoke(cfg.aiRouterFunction, { body: { team_id: teamId, prompt, funzione: "parere_partita" } });
-  if (error) return { errore: true, messaggio: error.message };
+  if (error) return { errore: true, messaggio: await messaggioErroreRouter(error) };
   if (data.errore) return { errore: true, messaggio: [data.messaggio, data.dettagli].filter(Boolean).join("\n\n") };
   return { errore: false, testo: data.testo };
 }

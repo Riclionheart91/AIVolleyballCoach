@@ -1,4 +1,5 @@
 import { supabaseClient } from "@/src/lib/supabase";
+import { messaggioErroreRouter } from "@/src/services/aiProviders";
 import { supabase as cfg } from "@/src/config";
 import { carenzeAtleta } from "@/src/services/exercises";
 import { istruzioniAggiuntive } from "@/src/services/pianoAnnuale";
@@ -154,7 +155,7 @@ export async function generaPianoIndividualeAI(
     istruzioniAggiuntive(istruzioniExtra, [nomePersona]);
 
   const { data, error } = await supabaseClient.functions.invoke(cfg.aiRouterFunction, { body: { team_id: teamId, prompt, funzione: "piano_individuale" } });
-  if (error) return { errore: true, messaggio: error.message };
+  if (error) return { errore: true, messaggio: await messaggioErroreRouter(error) };
   if (data.errore) return { errore: true, messaggio: [data.messaggio, data.dettagli].filter(Boolean).join("\n\n") };
 
   try {

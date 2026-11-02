@@ -47,3 +47,21 @@ export async function riepilogoChiamateAI(teamId: string, giorni = 7): Promise<R
   if (error) throw error;
   return (data ?? []) as RigaRiepilogoAI[];
 }
+
+/**
+ * Messaggio da mostrare quando il router risponde con un errore HTTP (400, 403, 429, 500...).
+ * supabase-js in quel caso dice solo "Edge Function returned a non-2xx status code": il motivo vero
+ * (richiesta troppo lunga, limite giornaliero, utente non autorizzato) e' nel corpo della risposta.
+ */
+export async function messaggioErroreRouter(error: { message: string; context?: unknown }): Promise<string> {
+  try {
+    const risposta = error.context as Response | undefined;
+    if (risposta && typeof risposta.json === "function") {
+      const corpo = await risposta.json();
+      if (corpo?.messaggio) return String(corpo.messaggio);
+    }
+  } catch {
+    // corpo non leggibile: si ricade sul messaggio generico
+  }
+  return error.message;
+}

@@ -1,4 +1,5 @@
 import { supabaseClient } from "@/src/lib/supabase";
+import { messaggioErroreRouter } from "@/src/services/aiProviders";
 import { supabase as cfg } from "@/src/config";
 import { istruzioniAggiuntive } from "@/src/services/pianoAnnuale";
 import type { Exercise, TrainingExercise } from "@/src/types/database";
@@ -103,7 +104,7 @@ export async function generaPianoAllenamentoAI(teamId: string, argomento: string
   if (!sessione.session) return { errore: true, messaggio: "Sessione scaduta, effettua di nuovo l'accesso." };
 
   const { data, error } = await supabaseClient.functions.invoke(cfg.aiRouterFunction, { body: { team_id: teamId, prompt, funzione: "piano_allenamento" } });
-  if (error) return { errore: true, messaggio: error.message };
+  if (error) return { errore: true, messaggio: await messaggioErroreRouter(error) };
   if (data.errore) return { errore: true, messaggio: [data.messaggio, data.dettagli, (data.chiaviMancanti ?? []).length ? `Chiavi non configurate: ${(data.chiaviMancanti ?? []).join(", ")}` : ""].filter(Boolean).join("\n\n") };
 
   try {

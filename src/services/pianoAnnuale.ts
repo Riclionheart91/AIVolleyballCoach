@@ -1,4 +1,5 @@
 import { supabaseClient } from "@/src/lib/supabase";
+import { messaggioErroreRouter } from "@/src/services/aiProviders";
 import { supabase as cfg, obiettiviFisici, obiettiviTattici, obiettiviTecnici } from "@/src/config";
 import { andamentoSquadra } from "@/src/services/evaluations";
 import { togliNomi } from "@/src/lib/anonimizza";
@@ -127,7 +128,7 @@ export async function generaPianoAnnualeAI(teamId: string, contestoStagione: str
   if (!sessione.session) return { errore: true, messaggio: "Sessione scaduta, effettua di nuovo l'accesso." };
 
   const { data, error } = await supabaseClient.functions.invoke(cfg.aiRouterFunction, { body: { team_id: teamId, prompt, funzione: "piano_annuale" } });
-  if (error) return { errore: true, messaggio: error.message };
+  if (error) return { errore: true, messaggio: await messaggioErroreRouter(error) };
   if (data.errore) return { errore: true, messaggio: [data.messaggio, data.dettagli, (data.chiaviMancanti ?? []).length ? `Chiavi non configurate: ${(data.chiaviMancanti ?? []).join(", ")}` : ""].filter(Boolean).join("\n\n") };
 
   return { errore: false, contenuto: data.testo };
@@ -217,7 +218,7 @@ export async function generaBlocchiAI(
   if (!sessione.session) return { errore: true, messaggio: "Sessione scaduta, effettua di nuovo l'accesso." };
 
   const { data, error } = await supabaseClient.functions.invoke(cfg.aiRouterFunction, { body: { team_id: teamId, prompt, funzione: "blocchi" } });
-  if (error) return { errore: true, messaggio: error.message };
+  if (error) return { errore: true, messaggio: await messaggioErroreRouter(error) };
   if (data.errore) return { errore: true, messaggio: [data.messaggio, data.dettagli, (data.chiaviMancanti ?? []).length ? `Chiavi non configurate: ${(data.chiaviMancanti ?? []).join(", ")}` : ""].filter(Boolean).join("\n\n") };
 
   try {
@@ -295,7 +296,7 @@ export async function generaBlocchiGuidatoAI(
   if (!sessione.session) return { errore: true, messaggio: "Sessione scaduta, effettua di nuovo l'accesso." };
 
   const { data, error } = await supabaseClient.functions.invoke(cfg.aiRouterFunction, { body: { team_id: teamId, prompt, funzione: "blocchi_guidati" } });
-  if (error) return { errore: true, messaggio: error.message };
+  if (error) return { errore: true, messaggio: await messaggioErroreRouter(error) };
   if (data.errore) return { errore: true, messaggio: [data.messaggio, data.dettagli, (data.chiaviMancanti ?? []).length ? `Chiavi non configurate: ${(data.chiaviMancanti ?? []).join(", ")}` : ""].filter(Boolean).join("\n\n") };
 
   try {
@@ -406,7 +407,7 @@ export async function generaAggiornamentoPianoAI(
   if (!sessione.session) return { errore: true, messaggio: "Sessione scaduta, effettua di nuovo l'accesso." };
 
   const { data, error } = await supabaseClient.functions.invoke(cfg.aiRouterFunction, { body: { team_id: teamId, prompt, funzione: "aggiorna_piano" } });
-  if (error) return { errore: true, messaggio: error.message };
+  if (error) return { errore: true, messaggio: await messaggioErroreRouter(error) };
   if (data.errore) return { errore: true, messaggio: [data.messaggio, data.dettagli].filter(Boolean).join("\n\n") };
 
   try {

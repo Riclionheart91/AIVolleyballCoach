@@ -50,8 +50,8 @@ interface RichiestaAI {
   funzione?: string;
 }
 
-/** Oltre questa lunghezza il prompt viene rifiutato: i prompt veri dell'app restano molto sotto. */
-const MAX_PROMPT_CARATTERI = 12000;
+/** Oltre questa lunghezza il prompt viene rifiutato. Il piano allenamento include l'intero catalogo esercizi (170 esercizi = circa 11.000 caratteri) e il catalogo cresce: il limite protegge da abusi, non dall'uso normale. */
+const MAX_PROMPT_CARATTERI = 40000;
 
 interface TracciaChiamata {
   team_id: string;

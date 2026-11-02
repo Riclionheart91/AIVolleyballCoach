@@ -1,4 +1,5 @@
 import { supabaseClient } from "@/src/lib/supabase";
+import { messaggioErroreRouter } from "@/src/services/aiProviders";
 import { supabase as cfg } from "@/src/config";
 import { calcolaVoti } from "@/src/lib/votiPartita";
 import type { CausaPunto, Esito, Match, MatchConvocato, MatchEvent, MatchSet, MatchSetLineup, QualitaRicezione, Skill } from "@/src/types/database";
@@ -534,7 +535,7 @@ export async function generaCommentoPartitaAI(teamId: string, match: Match, sets
   const { data: sessione } = await supabaseClient.auth.getSession();
   if (!sessione.session) return { errore: true, messaggio: "Sessione scaduta, effettua di nuovo l'accesso." };
   const { data, error } = await supabaseClient.functions.invoke(cfg.aiRouterFunction, { body: { team_id: teamId, prompt, funzione: "commento_partita" } });
-  if (error) return { errore: true, messaggio: error.message };
+  if (error) return { errore: true, messaggio: await messaggioErroreRouter(error) };
   if (data?.errore) return { errore: true, messaggio: [data.messaggio, data.dettagli].filter(Boolean).join("\n\n") };
   const testo = String(data?.testo ?? "").trim();
   return testo ? { errore: false, testo } : { errore: true, messaggio: "L'AI non ha restituito nessun testo." };
