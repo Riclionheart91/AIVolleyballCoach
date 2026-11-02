@@ -27,7 +27,8 @@ let problemi = 0;
 for (const f of trova("app", []).concat(trova("src", []))) {
   const s = fs.readFileSync(f, "utf8");
 
-  const usati = new Set([...s.matchAll(/\b(set[A-Z][A-Za-z0-9_]*)\s*\(/g)].map((m) => m[1]));
+  // Le chiamate di metodo ("oggetto.setNome(...)") non sono setter di stato: appartengono all'oggetto, non vanno dichiarate nel file.
+  const usati = new Set([...s.matchAll(/(?<![.\w])(set[A-Z][A-Za-z0-9_]*)\s*\(/g)].map((m) => m[1]));
   // Copre sia "const [x, setX]" sia "const [, setX]"
   const dichiarati = new Set([...s.matchAll(/const\s*\[[^\]]*,\s*(set[A-Z][A-Za-z0-9_]*)\s*\]/g)].map((m) => m[1]));
   const daProps = new Set([...s.matchAll(/(set[A-Z][A-Za-z0-9_]*)\s*[:,}]/g)].map((m) => m[1]));

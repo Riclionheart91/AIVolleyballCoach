@@ -117,10 +117,10 @@ export interface RisultatoGenerazionePiano {
  */
 export async function generaPianoAnnualeAI(teamId: string, contestoStagione: string, pianoAttuale?: string): Promise<RisultatoGenerazionePiano> {
   const prompt = pianoAttuale
-    ? `Sei un assistente per un allenatore di pallavolo. Ecco il piano annuale (periodizzazione: macrocicli/mesocicli/microcicli, obiettivi per periodo) attualmente in uso:\n\n${pianoAttuale}\n\n` +
+    ? `Ecco il piano annuale (periodizzazione: macrocicli/mesocicli/microcicli, obiettivi per periodo) attualmente in uso:\n\n${pianoAttuale}\n\n` +
       `Contesto aggiornato della squadra: ${contestoStagione}\n\n` +
       `Proponi le variazioni che ritieni utili per adattare il piano a questo contesto aggiornato. Rispondi con il testo COMPLETO del piano aggiornato (non solo le differenze), in italiano, strutturato per periodi con obiettivi tecnici/fisici/tattici.`
-    : `Sei un assistente per un allenatore di pallavolo. Contesto della squadra: ${contestoStagione}\n\n` +
+    : `Contesto della squadra: ${contestoStagione}\n\n` +
       `Genera una proposta di piano annuale (periodizzazione: macrocicli/mesocicli/microcicli) in italiano, strutturato per periodi con obiettivi tecnici/fisici/tattici per ciascuno.`;
 
   const { data: sessione } = await supabaseClient.auth.getSession();
@@ -205,7 +205,7 @@ export async function generaBlocchiAI(
   istruzioniExtra?: string,
 ): Promise<RisultatoGenerazioneBlocchi> {
   const prompt =
-    `Sei un preparatore di pallavolo. Costruisci la periodizzazione annuale dal ${dataInizioStagione} al ${dataFineStagione}.\n` +
+    `Costruisci la periodizzazione annuale dal ${dataInizioStagione} al ${dataFineStagione}.\n` +
     `Contesto squadra: ${contesto}\n\n` +
     `Rispondi SOLO con JSON, nessun altro testo, in questo formato:\n` +
     `{"blocchi":[{"nome":"...","tipo":"preparazione_generale","data_inizio":"AAAA-MM-GG","data_fine":"AAAA-MM-GG","obiettivi_tecnici":"...","obiettivi_fisici":"...","obiettivi_tattici":"..."}]}\n` +
@@ -278,7 +278,7 @@ export async function generaBlocchiGuidatoAI(
   const listaTattici = elenchiObiettivi?.tattici ?? obiettiviTattici;
 
   const prompt =
-    `Sei un preparatore di pallavolo. Costruisci la periodizzazione dal ${dataInizio} al ${dataFine}.\n` +
+    `Costruisci la periodizzazione dal ${dataInizio} al ${dataFine}.\n` +
     `Squadra: ${numeroRosa} atlete, livello "${risposte.livello}", ${risposte.seduteSettimana} sedute a settimana. ` +
     `Obiettivo principale della stagione: "${risposte.obiettivoStagione}".\n\n` +
     `Gli obiettivi di ogni blocco devono essere scelti ESCLUSIVAMENTE da questi elenchi, copiati alla lettera:\n` +
@@ -387,7 +387,7 @@ export async function generaAggiornamentoPianoAI(
   elenchiObiettivi: { tecnici: readonly string[]; fisici: readonly string[]; tattici: readonly string[] },
 ): Promise<RisultatoGenerazioneBlocchi> {
   const prompt =
-    `Sei un preparatore di pallavolo. Devi AGGIORNARE una pianificazione già in corso, non crearne una nuova da zero.\n\n` +
+    `Devi AGGIORNARE una pianificazione già in corso, non crearne una nuova da zero.\n\n` +
     `Ricostruisci la periodizzazione SOLO dal ${dataDaOggi} al ${dataFineStagione}: tutto ciò che precede questa data è già stato allenato e non va toccato né descritto di nuovo.\n` +
     `Le ipotesi di base della stagione NON cambiano: squadra livello "${risposte.livello}", ${risposte.seduteSettimana} sedute a settimana, obiettivo principale "${risposte.obiettivoStagione}".\n\n` +
     `Questo però è il rendimento reale della squadra fin qui, da usare per correggere l'enfasi dei blocchi futuri (più lavoro dove serve, meno dove la squadra rende già bene):\n` +

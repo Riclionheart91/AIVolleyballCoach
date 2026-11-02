@@ -112,7 +112,7 @@ export async function generaEserciziAI(
       `Non usare "tecnico" come ripiego: un esercizio con opposizione o punteggio è situazionale, uno di mobilità o attivazione è riscaldamento.\n`;
 
   const prompt =
-    `Sei un allenatore di pallavolo. Proponi ${quanti} esercizi nuovi per la categoria "${categoria}".\n` +
+    `Proponi ${quanti} esercizi nuovi per la categoria "${categoria}".\n` +
     bloccoPeriodo + bloccoRuolo + bloccoAtleta + bloccoFase +
     (nomiEsistenti.length > 0
       ? `Il catalogo contiene già questi esercizi, NON riproporli né proporne varianti quasi identiche:\n${nomiEsistenti.join(" | ")}\n\n`

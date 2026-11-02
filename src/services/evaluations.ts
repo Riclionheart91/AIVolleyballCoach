@@ -135,7 +135,7 @@ function costruisciPromptValutazione(fondamentale: Fondamentale, storico: { punt
     ? storico.map((s) => `${s.data.slice(0, 10)}: ${s.punteggio}`).join(", ")
     : "nessuna valutazione precedente";
   return (
-    `Sei un assistente per un allenatore di pallavolo. Proponi un punteggio da 1 a 10 per il fondamentale "${fondamentale}" ` +
+    `Proponi un punteggio da 1 a 10 per il fondamentale "${fondamentale}" ` +
     `di ${ATLETA_ANONIMA}, in base allo storico recente (${storicoTesto}). ` +
     `Rispondi SOLO in formato JSON: {"valore": numero, "confidenza": "bassa"|"media"|"alta", "motivazione": "una frase breve"}.`
   );
@@ -183,10 +183,9 @@ export async function impostaCadenzaValutazione(teamId: string, giorni: number):
 /** Parere discorsivo dell'AI sull'andamento della partita, su richiesta esplicita (non automatico). */
 export async function chiediParerePartitaAI(teamId: string, riassunto: string, domanda?: string): Promise<{ errore: boolean; messaggio?: string; testo?: string }> {
   const prompt =
-    `Sei un allenatore di pallavolo esperto, a bordo campo durante una partita. Ecco la situazione:\n\n${riassunto}\n\n` +
+    `Situazione della partita in corso:\n\n${riassunto}\n\n` +
     (domanda?.trim() ? `Domanda specifica dell'allenatore: ${domanda.trim().slice(0, 500)}\n\n` : "") +
-    `Dai 2-3 indicazioni pratiche e immediate su cosa bilanciare o cambiare, in italiano, molto concise. ` +
-    `Niente premesse, niente elenco di ciò che già so: vai diretto ai consigli.`;
+    `Indica cosa bilanciare o cambiare.`;
 
   const { data: sessione } = await supabaseClient.auth.getSession();
   if (!sessione.session) return { errore: true, messaggio: "Sessione scaduta." };

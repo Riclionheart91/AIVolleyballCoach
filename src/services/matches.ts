@@ -528,11 +528,8 @@ export async function generaCommentoPartitaAI(teamId: string, match: Match, sets
     (voti.length ? `Migliori della partita: ${voti.join("; ")}.\n` : "");
 
   const prompt =
-    `Sei l'allenatore di una squadra di pallavolo e scrivi il commento sulla partita da mandare nel gruppo WhatsApp della squadra. Ecco i dati:\n\n${riassunto}\n` +
-    `Scrivi in italiano, 4-6 righe, tono diretto e caldo da allenatore (dai del "voi"). Riconosci quello che è andato bene e dai merito a chi ha giocato meglio, ` +
-    `nominando solo giocatrici che si sono distinte e solo col nome di battesimo. Non criticare nessuna per nome: se c'è da migliorare qualcosa, ` +
-    `parlane come squadra e indica una cosa su cui lavoreremo in settimana. Non elencare tutti i numeri, usane al massimo due o tre se aiutano. ` +
-    `Al massimo due emoji. Niente titolo, niente firma, niente virgolette: solo il testo del messaggio.`;
+    `Scrivi il commento sulla partita da mandare nel gruppo WhatsApp della squadra. Ecco i dati:\n\n${riassunto}\n` +
+    `Rispondi con il solo testo del messaggio.`;
 
   const { data: sessione } = await supabaseClient.auth.getSession();
   if (!sessione.session) return { errore: true, messaggio: "Sessione scaduta, effettua di nuovo l'accesso." };

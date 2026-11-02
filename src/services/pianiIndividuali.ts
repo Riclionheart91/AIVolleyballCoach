@@ -142,7 +142,7 @@ export async function generaPianoIndividualeAI(
   }
 
   const prompt =
-    `Sei un allenatore di pallavolo. Costruisci un piano di lavoro INDIVIDUALE per ${ATLETA_ANONIMA}` +
+    `Costruisci un piano di lavoro INDIVIDUALE per ${ATLETA_ANONIMA}` +
     (ruolo ? ` (${ruolo})` : "") + ".\n" +
     `Carenze rilevate dalle valutazioni: ${carenze.map((c) => `${c.fondamentale} media ${c.media}/10`).join(", ")}.\n` +
     `Gli esercizi devono aggredire queste carenze, essere svolgibili da soli o in coppia, richiedere poco spazio e poca attrezzatura, ` +

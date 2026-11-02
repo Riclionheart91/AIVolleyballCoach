@@ -93,7 +93,7 @@ export async function generaPianoAllenamentoAI(teamId: string, argomento: string
     : "";
 
   const prompt = contestoPeriodo + vincoloFasi +
-    `Sei un assistente per un allenatore di pallavolo. Proponi un piano per una sessione di allenamento sul tema "${argomento}", ` +
+    `Proponi un piano per una sessione di allenamento sul tema "${argomento}", ` +
     `della durata totale di circa ${durataTotaleMinuti} minuti. USA SOLO esercizi da questo catalogo (mai inventarne altri, scrivi il nome esattamente come qui):\n${elencoCatalogo}\n\n` +
     `Puoi proporre anche esercizi NON presenti in catalogo se utili: in quel caso indica "nuovo": true e una descrizione completa.\n` +
     `Rispondi SOLO in formato JSON: {"esercizi": [{"nome": "...", "fase": "riscaldamento|tecnico|situazionale|defaticamento", "ruolo_target": "", "durata_minuti": numero, "note": "breve indicazione", "nuovo": false, "categoria": "...", "descrizione": "..."}], "argomento_suggerito": "..."}. ` +
