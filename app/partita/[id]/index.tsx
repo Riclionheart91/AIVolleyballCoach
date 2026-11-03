@@ -325,7 +325,8 @@ export default function PartitaLive() {
       setStoricoFormazione(storico);
       setLibero(await liberoInCampo(attivo.id));
     }
-    if (attivo && m && !modoOspite) verificaFineSet(attivo, m, set, regoleFresche);
+    // La domanda "Set concluso! Passare al prossimo set?" riguarda solo chi registra la partita, non chi la guarda.
+    if (attivo && m && !modoOspite && puoScoutareDaRuolo) verificaFineSet(attivo, m, set, regoleFresche);
   }, [id, modoOspite, puoScoutareDaRuolo]);
 
   useFocusEffect(useCallback(() => { carica(); }, [carica]));
