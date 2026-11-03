@@ -18,7 +18,7 @@ export function SelettorePersone({ atlete, selezionate, onChange }: { atlete: At
     <View style={{ gap: 8 }}>
       <View style={styles.riga}>
         <Pressable style={[styles.chip, tutteSelezionate(atlete.map((a) => a.id)) && styles.chipAttivo]} onPress={() => alterna(atlete.map((a) => a.id))}>
-          <Text style={[styles.chipTesto, tutteSelezionate(atlete.map((a) => a.id)) && styles.chipTestoAttivo]}>Tutte ({atlete.length})</Text>
+          <Text style={[styles.chipTesto, tutteSelezionate(atlete.map((a) => a.id)) && styles.chipTestoAttivo]}>Tutti ({atlete.length})</Text>
         </Pressable>
         {ruoli.map((r) => {
           const ids = atlete.filter((a) => a.ruolo_campo === r).map((a) => a.id);
@@ -30,7 +30,7 @@ export function SelettorePersone({ atlete, selezionate, onChange }: { atlete: At
           );
         })}
         {selezionate.size > 0 && (
-          <Pressable style={styles.chip} onPress={() => onChange(new Set())}><Text style={styles.chipTesto}>Nessuna</Text></Pressable>
+          <Pressable style={styles.chip} onPress={() => onChange(new Set())}><Text style={styles.chipTesto}>Nessuno</Text></Pressable>
         )}
       </View>
       {atlete.map((a) => {

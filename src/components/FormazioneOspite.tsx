@@ -44,7 +44,7 @@ export function FormazioneOspite({ setId, numeroSet, atlete, precedente, risulta
   };
 
   function assegna(athleteId: string) {
-    if (scelta === null) { avvisa("Scegli prima la posizione", "Tocca una posizione sul campo e poi la giocatrice."); return; }
+    if (scelta === null) { avvisa("Scegli prima la posizione", "Tocca una posizione sul campo e poi l'atleta."); return; }
     setPosizioni((p) => ({ ...p, [scelta]: athleteId }));
     // Passa alla prossima posizione ancora vuota.
     const prossima = [1, 2, 3, 4, 5, 6].find((n) => n !== scelta && !posizioni[n]);
@@ -77,7 +77,7 @@ export function FormazioneOspite({ setId, numeroSet, atlete, precedente, risulta
         </View>
       )}
       <Text style={styles.nota}>
-        {Object.keys(iniziale).length === 6 ? "Proposta la formazione di partenza del set precedente: correggila se serve." : "Tocca una posizione e poi la giocatrice."}
+        {Object.keys(iniziale).length === 6 ? "Proposta la formazione di partenza del set precedente: correggila se serve." : "Tocca una posizione e poi l'atleta."}
       </Text>
 
       <View style={styles.campo}>
@@ -105,7 +105,7 @@ export function FormazioneOspite({ setId, numeroSet, atlete, precedente, risulta
 
       {haTurno && libere.length > 0 && (
         <>
-          <Text style={styles.sezione}>Giocatrici disponibili</Text>
+          <Text style={styles.sezione}>Atleti disponibili</Text>
           <View style={styles.rigaChip}>
             {libere.map((a) => (
               <Pressable key={a.id} onPress={() => assegna(a.id)} style={styles.chip}>

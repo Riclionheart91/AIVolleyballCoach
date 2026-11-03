@@ -73,14 +73,14 @@ export default function IngressoInvito() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.titolo}>Sei stato invitato</Text>
+      <Text style={styles.titolo}>Hai ricevuto un invito</Text>
       <Text style={styles.testo}>
         Entrerai nella squadra <Text style={styles.evidenza}>{anteprima.team_nome}</Text> come <Text style={styles.evidenza}>{ruolo}</Text>.
       </Text>
 
       {haAccountVero ? (
         <>
-          <Text style={styles.testo}>Su questo dispositivo sei collegato come {session?.user.email}.</Text>
+          <Text style={styles.testo}>Su questo dispositivo l'accesso è con {session?.user.email}.</Text>
           <Pressable style={styles.bottone} onPress={entraConQuestoAccount} disabled={inCorso}>
             <Text style={styles.bottoneTesto}>{inCorso ? "Un attimo…" : `Entra come ${session?.user.email}`}</Text>
           </Pressable>

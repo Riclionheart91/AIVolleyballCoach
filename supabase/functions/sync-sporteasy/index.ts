@@ -88,7 +88,7 @@ Deno.serve(async (req) => {
 
     const { data: membro } = await admin.from("team_members").select("ruolo").eq("team_id", team_id).eq("user_id", userData.user.id).maybeSingle();
     if (!membro || !["allenatore", "vice_allenatore"].includes(membro.ruolo)) {
-      return jsonResponse({ errore: true, messaggio: "Utente non autorizzato su questo team." }, 403);
+      return jsonResponse({ errore: true, messaggio: "Accesso non autorizzato su questo team." }, 403);
     }
 
     const { data: squadra } = await admin.from("teams").select("nome").eq("id", team_id).maybeSingle();

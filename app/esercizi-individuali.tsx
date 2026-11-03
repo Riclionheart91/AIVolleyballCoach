@@ -62,7 +62,7 @@ export default function EserciziIndividuali() {
               teamId={team.id}
               atlete={righe.map((r) => r.atleta)}
               onAnnulla={() => setNuovo(false)}
-              onCreato={(n) => { setNuovo(false); setVersione((v) => v + 1); carica(); avvisa("Piano assegnato", `Creato per ${n} ${n === 1 ? "persona" : "persone"}. Ognuna spunta le sue sedute.`); }}
+              onCreato={(n) => { setNuovo(false); setVersione((v) => v + 1); carica(); avvisa("Piano assegnato", `Creato per ${n} ${n === 1 ? "persona" : "persone"}. Ogni atleta spunta le proprie sedute.`); }}
             />
           ) : (
             <Pressable style={styles.bottone} onPress={() => setNuovo(true)}>
@@ -71,7 +71,7 @@ export default function EserciziIndividuali() {
           )}
 
           <Text style={styles.nota}>
-            Un piano si assegna a più persone insieme: ognuna spunta le sue sedute, ma le copie restano collegate. Tocca una persona per vedere i suoi piani: quando modifichi, sostituisci, togli o aggiungi un esercizio scegli se vale solo per lei o per tutto il gruppo. Sul piano condiviso vedi chi c'è e a che punto è ognuno.
+            Un piano si assegna a più persone insieme: ogni atleta spunta le proprie sedute, ma le copie restano collegate. Tocca una persona per vedere i suoi piani: quando modifichi, sostituisci, togli o aggiungi un esercizio scegli se vale solo per lei o per tutto il gruppo. Sul piano condiviso vedi chi c'è e a che punto è ognuno.
           </Text>
 
           {caricamento && righe.length === 0 ? <ActivityIndicator color={brand.colors.brand} style={{ marginTop: 20 }} /> : righe.map(({ atleta, piani }) => {

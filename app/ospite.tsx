@@ -36,7 +36,7 @@ export default function Ospite() {
     <View style={styles.container}>
       <Text style={styles.titolo}>Scout ospite</Text>
       <Text style={styles.sottotitolo}>
-        Sei stato invitato a registrare una partita. Puoi vedere e scoutare solo la partita indicata, e solo mentre è in corso.
+        Hai ricevuto un invito a registrare una partita. Puoi vedere e scoutare solo la partita indicata, e solo mentre è in corso.
       </Text>
       {session?.user.email && <Text style={styles.account}>Connesso come: {session.user.email}</Text>}
 

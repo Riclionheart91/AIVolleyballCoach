@@ -124,13 +124,13 @@ export default function SchemiGioco() {
       <ScrollView style={{ flex: 1 }} scrollEnabled={!trascinando} contentContainerStyle={{ padding: 16, gap: 14 }}>
         <Text style={styles.nota}>
           {modificabile
-            ? "Scegli dove sta ciascuna giocatrice in ricezione, difesa e copertura. Nello scouting le giocatrici sono disegnate come pallini nei punti dello schema, così le tocchi dove stanno davvero. Quello che non imposti resta nella disposizione di base."
-            : "Gli schemi di gioco della squadra: dove si dispongono le giocatrici in ricezione, difesa e copertura. Sola lettura: li modifica l'allenatore."}
+            ? "Scegli dove sta ogni atleta in ricezione, difesa e copertura. Nello scouting ogni atleta è disegnato come pallino nei punti dello schema, così lo tocchi dove sta davvero. Quello che non imposti resta nella disposizione di base."
+            : "Gli schemi di gioco della squadra: come si dispone la squadra in ricezione, difesa e copertura. Sola lettura: li modifica l'allenatore."}
         </Text>
         <Text style={styles.nota}>
           {perZona
-            ? "Ruoli: P/O palleggiatrice e opposto, S schiacciatrice, C centrale. Il libero prende il punto della centrale in seconda linea. Disposizione di base: S in 4 e 6, P/O in 1 e 2, C in 3 e 5."
-            : "Ruoli: P palleggiatrice, S1 e S2 schiacciatrici, C1 e C2 centrali, O opposto. Rotazione n = palleggiatrice in posizione n (Rot. 1: P in 1, Rot. 2: P in 2, e così via)."}
+            ? "Ruoli: P/O palleggio e opposto, S schiacciatore, C centrale. Il libero prende il punto della centrale in seconda linea. Disposizione di base: S in 4 e 6, P/O in 1 e 2, C in 3 e 5."
+            : "Ruoli: P palleggio, S1 e S2 schiacciatori, C1 e C2 centrali, O opposto. Rotazione n = palleggio in posizione n (Rot. 1: P in 1, Rot. 2: P in 2, e così via)."}
         </Text>
 
         <View style={styles.selettoreRiga}>
@@ -178,8 +178,8 @@ export default function SchemiGioco() {
         />
         <Text style={styles.nota}>
           {perZona
-            ? "Vale per tutte le rotazioni: ogni giocatrice va nel punto del suo ruolo e della sua linea (prima o seconda)."
-            : `Rotazione ${rotazione}: palleggiatrice in posizione ${rotazione}. ${[1, 2, 3, 4, 5, 6].map((s) => `${ruoloInPosizione(s, rotazione)} in ${s}`).join(" · ")}.`}
+            ? "Vale per tutte le rotazioni: ogni atleta va nel punto del proprio ruolo e della propria linea (prima o seconda)."
+            : `Rotazione ${rotazione}: palleggio in posizione ${rotazione}. ${[1, 2, 3, 4, 5, 6].map((s) => `${ruoloInPosizione(s, rotazione)} in ${s}`).join(" · ")}.`}
           {modificabile ? " Trascina i pallini dove stanno in questa fase, oppure tocca un pallino e poi il punto del campo." : ""}
         </Text>
         <Text style={styles.nota}>

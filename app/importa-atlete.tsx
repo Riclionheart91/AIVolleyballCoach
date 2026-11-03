@@ -116,7 +116,7 @@ export default function ImportaAtlete() {
       {passo === "scelta_file" && (
         <View style={styles.card}>
           <Text style={styles.titolo}>1. Scegli il file</Text>
-          <Text style={styles.nota}>Excel (.xlsx) o CSV con un'atleta per riga e le intestazioni di colonna nella prima riga.</Text>
+          <Text style={styles.nota}>Excel (.xlsx) o CSV con una persona per riga e le intestazioni di colonna nella prima riga.</Text>
           <Pressable style={styles.bottone} onPress={scegliFile} disabled={caricamento}>
             {caricamento ? <ActivityIndicator color="#000" /> : <Text style={styles.bottoneTesto}>Scegli file</Text>}
           </Pressable>
@@ -126,7 +126,7 @@ export default function ImportaAtlete() {
       {passo === "abbinamento" && fileLetto && mappatura && (
         <View style={styles.card}>
           <Text style={styles.titolo}>2. Abbina le colonne</Text>
-          <Text style={styles.nota}>Ho provato ad abbinare da solo quello che riconoscevo. Controlla e correggi dove serve — "Nessuna corrispondenza" salta quel campo per tutte le righe.</Text>
+          <Text style={styles.nota}>Ho provato ad abbinare in automatico quello che riconoscevo. Controlla e correggi dove serve — "Nessuna corrispondenza" salta quel campo per tutte le righe.</Text>
 
           {CAMPI_IMPORTABILI.map(({ campo, etichetta, obbligatorio }) => (
             <View key={campo} style={styles.rigaMappatura}>
@@ -159,7 +159,7 @@ export default function ImportaAtlete() {
           <View style={styles.card}>
             <Text style={styles.titolo}>3. Rivedi e conferma</Text>
             <Text style={styles.nota}>
-              {nuove.length} nuove · {daAggiornare.length} da aggiornare (deselezionabili) · {invariate.length} già identiche (nessuna azione) · {saltate.length} non giocatrici (saltate) · {errori.length} scartate per errore
+              {nuove.length} nuove · {daAggiornare.length} da aggiornare (deselezionabili) · {invariate.length} già identiche (nessuna azione) · {saltate.length} non in rosa (saltate) · {errori.length} scartate per errore
             </Text>
           </View>
 
@@ -189,7 +189,7 @@ export default function ImportaAtlete() {
 
           {nuove.length > 0 && (
             <View style={styles.card}>
-              <Text style={styles.sottotitolo}>Nuove atlete da creare</Text>
+              <Text style={styles.sottotitolo}>Nuovi inserimenti da creare</Text>
               {nuove.map((riga) => (
                 <Text key={riga.chiave} style={styles.rigaAtletaNome}>+ {riga.datiFile.nome} {riga.datiFile.cognome}</Text>
               ))}
@@ -198,7 +198,7 @@ export default function ImportaAtlete() {
 
           {saltate.length > 0 && (
             <View style={styles.card}>
-              <Text style={styles.sottotitolo}>Righe non importate (non sembrano giocatrici)</Text>
+              <Text style={styles.sottotitolo}>Righe non importate (non sembrano far parte della rosa)</Text>
               {saltate.map((riga, i) => (
                 <Text key={i} style={styles.nota}>{riga.datiFile.nome} {riga.datiFile.cognome} — {riga.errore}</Text>
               ))}
@@ -223,7 +223,7 @@ export default function ImportaAtlete() {
       {passo === "completato" && esito && (
         <View style={styles.card}>
           <Text style={styles.titolo}>Importazione completata</Text>
-          <Text style={styles.nota}>{esito.create} atlete create, {esito.aggiornate} aggiornate{esito.errori > 0 ? `, ${esito.errori} con errori` : ""}.</Text>
+          <Text style={styles.nota}>{esito.create} schede create, {esito.aggiornate} aggiornate{esito.errori > 0 ? `, ${esito.errori} con errori` : ""}.</Text>
           <Pressable style={styles.bottone} onPress={() => router.back()}>
             <Text style={styles.bottoneTesto}>Torna alla rosa</Text>
           </Pressable>

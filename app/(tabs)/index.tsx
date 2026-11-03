@@ -55,7 +55,7 @@ export default function Atlete() {
           <>
             {puoScrivere && (
               <Pressable style={styles.rigaEspandi} onPress={() => setMostraArchiviate(!mostraArchiviate)}>
-                <Text style={styles.rigaEspandiTesto}>{mostraArchiviate ? "▾" : "▸"} Rosa archiviate ({archiviate.length})</Text>
+                <Text style={styles.rigaEspandiTesto}>{mostraArchiviate ? "▾" : "▸"} Archivio rosa ({archiviate.length})</Text>
               </Pressable>
             )}
             {mostraArchiviate && archiviate.map((a) => (
@@ -66,7 +66,7 @@ export default function Atlete() {
             ))}
           </>
         }
-        ListEmptyComponent={!caricamento ? <Text style={styles.vuoto}>Nessuna atleta ancora. Usa il pulsante + qui sotto.</Text> : null}
+        ListEmptyComponent={!caricamento ? <Text style={styles.vuoto}>Nessun atleta ancora. Usa il pulsante + qui sotto.</Text> : null}
         renderItem={({ item }) => (
           <Pressable style={styles.riga} onPress={() => router.push(`/atleta/${item.id}`)}>
             <Text style={styles.rigaNome}>{item.nome} {item.cognome}</Text>
@@ -79,13 +79,13 @@ export default function Atlete() {
         <FabMenu
           titolo="Aggiungi alla rosa"
           voci={[
-            { icona: "✍️", etichetta: "Una atleta a mano", descrizione: "Scrivi nome, cognome e ruolo", onPress: () => setPopupAperto(true) },
-            { icona: "📄", etichetta: "Importa la rosa da un file", descrizione: "Carichi l'elenco e le atlete entrano tutte insieme", onPress: () => router.push("/importa-atlete") },
+            { icona: "✍️", etichetta: "Inserimento a mano", descrizione: "Scrivi nome, cognome e ruolo", onPress: () => setPopupAperto(true) },
+            { icona: "📄", etichetta: "Importa la rosa da un file", descrizione: "Carichi l'elenco e la rosa entra tutta insieme", onPress: () => router.push("/importa-atlete") },
           ]}
         />
       )}
 
-      <PopupForm visibile={popupAperto} titolo="Nuova atleta" haModifiche={!!(nome.trim() || cognome.trim())} onChiudi={() => { setPopupAperto(false); setNome(""); setCognome(""); setRuoloCampo(null); }}>
+      <PopupForm visibile={popupAperto} titolo="Nuovo atleta" haModifiche={!!(nome.trim() || cognome.trim())} onChiudi={() => { setPopupAperto(false); setNome(""); setCognome(""); setRuoloCampo(null); }}>
         <TextInput style={styles.input} placeholder="Nome" placeholderTextColor={brand.colors.muted} value={nome} onChangeText={setNome} autoFocus />
         <TextInput style={styles.input} placeholder="Cognome" placeholderTextColor={brand.colors.muted} value={cognome} onChangeText={setCognome} />
         <Text style={styles.etichettaCampo}>Ruolo in campo</Text>

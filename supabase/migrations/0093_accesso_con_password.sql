@@ -192,7 +192,7 @@ begin
     into v_team, v_email, v_societa
   from athletes a join teams t on t.id = a.team_id
   where a.id = p_atleta_id;
-  if v_team is null then raise exception 'Atleta non trovata'; end if;
+  if v_team is null then raise exception 'Scheda atleta non trovata'; end if;
   if not puo_gestire_inviti_staff(v_team) then raise exception 'Permesso negato'; end if;
   if v_email = '' or position('@' in v_email) = 0 then
     raise exception 'Scrivi prima l''email nella scheda dell''atleta';

@@ -248,7 +248,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const teamId = await accettaInvitoLink(token);
       await AsyncStorage.setItem(CHIAVE_ULTIMO_TEAM, teamId);
-      avvisa("Benvenuto in squadra", "L'invito è stato abbinato al tuo account.");
+      avvisa("Sei in squadra", "L'invito è stato abbinato al tuo account.");
     } catch (e) {
       avvisa("Invito non utilizzabile", (e as Error).message);
     }

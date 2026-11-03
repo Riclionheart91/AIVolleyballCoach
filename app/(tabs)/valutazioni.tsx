@@ -97,7 +97,7 @@ function SezioneCicloValutazione({ teamId }: { teamId: string }) {
           ))}
           {daValutare.length > 5 && (
             <Pressable onPress={() => setMostraTutte(!mostraTutte)}>
-              <Text style={styles.linkCadenza}>{mostraTutte ? "Mostra meno" : `Mostra tutte (${daValutare.length})`}</Text>
+              <Text style={styles.linkCadenza}>{mostraTutte ? "Mostra meno" : `Mostra tutti (${daValutare.length})`}</Text>
             </Pressable>
           )}
         </>

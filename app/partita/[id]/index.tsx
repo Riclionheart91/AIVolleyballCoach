@@ -1147,7 +1147,7 @@ export default function PartitaLive() {
           <>
           <ScrollView style={{ flex: 1, minHeight: 0 }} contentContainerStyle={{ gap: 6, paddingBottom: 4 }}>
             <Text style={styles.indicazionePasso}>
-              {passo === "giocatrice" && (skillAuto === "Ricezione" ? "Chi ha ricevuto? Tocca la giocatrice" : skillAuto === "Attacco" ? "Chi ha attaccato? Tocca la giocatrice" : skillAuto === "Servizio" ? "Chi ha servito? Tocca la giocatrice" : "1. Tocca chi è in campo")}
+              {passo === "giocatrice" && (skillAuto === "Ricezione" ? "Chi ha ricevuto? Tocca l'atleta" : skillAuto === "Attacco" ? "Chi ha attaccato? Tocca l'atleta" : skillAuto === "Servizio" ? "Chi ha servito? Tocca l'atleta" : "1. Tocca chi è in campo")}
               {passo === "fondamentale" && `2. ${nomeEff} — quale fondamentale?`}
               {passo === "esito" && `${skillEff} · ${nomeEff} — com'è andata?`}
               {passo === "zona" && "4. Dove è caduta la palla? (campo avversario)"}
@@ -1168,7 +1168,7 @@ export default function PartitaLive() {
                   </Pressable>
                 )}
                 <Pressable onPress={() => { setAtletaSelId(null); setSkillSel(null); }} style={styles.tastoAnnullaPasso}>
-                  <Text style={styles.nota}>← cambia giocatrice</Text>
+                  <Text style={styles.nota}>← cambia atleta</Text>
                 </Pressable>
               </View>
             )}
@@ -1388,7 +1388,7 @@ export default function PartitaLive() {
               <Pressable onPress={() => setPopupCambio(false)} hitSlop={12}><Text style={styles.chiudiPopup}>✕</Text></Pressable>
             </View>
             {uscenteGiaRientrata && (
-              <Text style={styles.nota}>{selezionata?.cognome} è rientrata dopo un cambio: per regolamento non può più uscire in questo set. Se hai sbagliato, correggi dal tasto ✏️ Formazione.</Text>
+              <Text style={styles.nota}>{selezionata?.cognome} è un rientro dopo un cambio: per regolamento non può più uscire in questo set. Se hai sbagliato, correggi dal tasto ✏️ Formazione.</Text>
             )}
             {sostituitaDaUscente && !uscenteGiaRientrata && (
               <Text style={styles.nota}>Per regolamento {selezionata?.cognome} può uscire solo per chi ha sostituito.</Text>
@@ -1396,7 +1396,7 @@ export default function PartitaLive() {
             <FlatList
               data={candidatiCambio}
               keyExtractor={(a) => a.id}
-              ListEmptyComponent={<Text style={styles.nota}>Nessuna convocata disponibile.</Text>}
+              ListEmptyComponent={<Text style={styles.nota}>Nessuno disponibile tra i convocati.</Text>}
               renderItem={({ item }) => (
                 <Pressable
                   style={styles.rigaScelta}

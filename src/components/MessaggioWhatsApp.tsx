@@ -33,7 +33,7 @@ export function MessaggioWhatsApp({ visibile, titolo, atleta, nota, modelli, onC
   /** Senza atleta si sceglie la chat in WhatsApp: questa e' la spiegazione sotto il pulsante. */
   nota?: string; modelli: ModelloMessaggio[]; onChiudi: () => void;
 }) {
-  const { session } = useAuth();
+  const { session, team } = useAuth();
   const [testo, setTesto] = useState("");
 
   // Il messaggio e' firmato con il nome di battesimo di chi lo sta mandando (account Google, altrimenti l'inizio dell'email).
@@ -49,7 +49,7 @@ export function MessaggioWhatsApp({ visibile, titolo, atleta, nota, modelli, onC
   }, [visibile]);
 
   const numero = atleta ? numeroWhatsApp(atleta.telefono) : null;
-  const testoFinale = testo.replace(/\{nome\}/g, atleta?.nome ?? "ragazze");
+  const testoFinale = testo.replace(/\{nome\}/g, atleta?.nome ?? team?.nome ?? "squadra");
 
   return (
     <Modal visible={visibile} animationType="slide" transparent onRequestClose={onChiudi}>

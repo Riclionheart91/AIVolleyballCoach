@@ -409,7 +409,7 @@ export default function AnalisiPartita() {
               <Text style={styles.rigaAndamentoTesto}>Errori nostri / punti diretti avversari</Text>
               <Text style={styles.valoreScheda}>{erroriNostri} / {puntiDirettiLoro}</Text>
             </View>
-            <Text style={styles.dettaglioFondamentale}>"Errori nostri" sono quelli attribuiti a una giocatrice; "punti diretti avversari" sono i punti loro registrati senza un nostro errore specifico.</Text>
+            <Text style={styles.dettaglioFondamentale}>"Errori nostri" sono quelli attribuiti a un atleta; "punti diretti avversari" sono i punti loro registrati senza un nostro errore specifico.</Text>
           </View>
         )}
 
@@ -563,7 +563,7 @@ export default function AnalisiPartita() {
 
         <View>
           <Text style={styles.sezione}>Contributo individuale</Text>
-          <Text style={styles.nota}>Ordinate dal saldo migliore. Il voto è da 0 a 10 (n.c. sotto le {MIN_AZIONI_VOTO} azioni).{Object.keys(dettaglio).length > 0 ? " Tocca una giocatrice per vedere voto e numeri fondamentale per fondamentale." : ""}</Text>
+          <Text style={styles.nota}>In ordine dal saldo migliore. Il voto è da 0 a 10 (n.c. sotto le {MIN_AZIONI_VOTO} azioni).{Object.keys(dettaglio).length > 0 ? " Tocca un nome per vedere voto e numeri fondamentale per fondamentale." : ""}</Text>
           {migliore && (
             <View>
               <Pressable onPress={() => alternaDettaglio(migliore.athlete_id)}>

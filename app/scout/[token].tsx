@@ -53,7 +53,7 @@ export default function IngressoScout() {
       <View style={styles.container}>
         <Text style={styles.titolo}>Sei già collegato</Text>
         <Text style={styles.testo}>
-          Su questo dispositivo sei entrato con l'account {session?.user.email ?? ""}. Per fare lo scout senza account devi uscire,
+          Su questo dispositivo l'accesso è attivo con l'account {session?.user.email ?? ""}. Per fare lo scout senza account devi uscire,
           oppure aprire il link in una finestra privata.
         </Text>
         <Pressable style={styles.bottone} onPress={esci}>
@@ -68,7 +68,7 @@ export default function IngressoScout() {
     <View style={styles.container}>
       <Text style={styles.titolo}>Scout della partita</Text>
       <Text style={styles.testo}>
-        Sei stato invitato a registrare una partita. Scrivi il tuo nome: lo staff vedrà chi sta registrando. Non serve nessun account.
+        Hai ricevuto un invito a registrare una partita. Scrivi il tuo nome: lo staff vedrà chi sta registrando. Non serve nessun account.
       </Text>
       <TextInput
         style={styles.input}

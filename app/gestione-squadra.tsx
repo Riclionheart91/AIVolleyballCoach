@@ -195,7 +195,7 @@ export default function GestioneSquadra() {
           <Text style={styles.nota}>
             {metodoStaff === "google"
               ? "Scegli il ruolo e crea il link: si apre WhatsApp e scegli tu a chi mandarlo. Chi lo apre accede con il suo account Google ed entra in squadra con quel ruolo. Il link vale per una persona e scade dopo 7 giorni."
-              : "Scegli il ruolo e crea il link: si apre WhatsApp e scegli tu a chi mandarlo. Chi lo apre sceglie la password e entra con l'email indicata (se l'hai lasciata vuota, la sceglie lui). Il link vale per una persona e scade dopo 7 giorni."}
+              : "Scegli il ruolo e crea il link: si apre WhatsApp e scegli tu a chi mandarlo. Chi lo apre sceglie la password e entra con l'email indicata (se l'hai lasciata vuota, la sceglie chi riceve il link). Il link vale per una persona e scade dopo 7 giorni."}
             {" "}Il permesso di registrare lo scouting si assegna dopo, toccando la persona nell'elenco qui sopra.
           </Text>
           <Pressable style={styles.bottone} onPress={creaLinkStaff}>

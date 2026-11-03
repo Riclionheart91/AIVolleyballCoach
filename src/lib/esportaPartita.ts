@@ -83,7 +83,7 @@ export function costruisciCsv(scheda: SchedaPartita): string {
   }
 
   righe.push(["CONTRIBUTO INDIVIDUALE"]);
-  righe.push(["Giocatrice", "Fondamentale", "Azioni", "Punti", "Neutri", "Errori", "Efficienza", "Perfette", "Buone", "Scarse"]);
+  righe.push(["Atleta", "Fondamentale", "Azioni", "Punti", "Neutri", "Errori", "Efficienza", "Perfette", "Buone", "Scarse"]);
   for (const p of scheda.persone) {
     if (p.fondamentali.length === 0) {
       righe.push([p.nome, "Totale", p.azioni, p.punti, "", p.errori, eff(p.punti, p.errori, p.azioni)]);
@@ -164,7 +164,7 @@ export function costruisciHtmlStampa(scheda: SchedaPartita): string {
       if (p.fondamentali.length === 0) righe.push([p.nome, "Totale", p.azioni, p.punti, "", p.errori, eff(p.punti, p.errori, p.azioni) || "—", "—"]);
       else for (const f of p.fondamentali) righe.push([p.nome, f.nome, f.azioni, f.punti, f.neutri, f.errori, eff(f.punti, f.errori, f.azioni) || "—", testoQualita(f) || "—"]);
     }
-    parti.push("<h2>Contributo individuale</h2>" + tabella(["Giocatrice", "Fondamentale", "Az.", "Pt", "Neu", "Err", "Eff.", "Qualità"], righe));
+    parti.push("<h2>Contributo individuale</h2>" + tabella(["Atleta", "Fondamentale", "Az.", "Pt", "Neu", "Err", "Eff.", "Qualità"], righe));
   }
   if (scheda.timeouts.length > 0) {
     parti.push("<h2>Time-out</h2>" + tabella(["Set", "Chi", "Punteggio"], scheda.timeouts.map((t) => [t.set, t.squadra, t.punteggio])));

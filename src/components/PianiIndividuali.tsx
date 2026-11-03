@@ -202,7 +202,7 @@ export function PianiIndividuali({ teamId, athleteId, nomePersona, ruolo, modifi
       const n = await copiaPianoSuPersone(assegna, Array.from(selAssegna));
       setAssegna(null);
       carica();
-      avvisa("Piano assegnato", `${n} ${n === 1 ? "persona entra" : "persone entrano"} nel gruppo: le modifiche di gruppo valgono anche per ${n === 1 ? "lei" : "loro"}. Ognuna spunta le sue sedute.`);
+      avvisa("Piano assegnato", `${n} ${n === 1 ? "persona entra" : "persone entrano"} nel gruppo: le modifiche di gruppo valgono anche per ${n === 1 ? "questo atleta" : "questi atleti"}. Ogni atleta spunta le proprie sedute.`);
     } catch (e) { avvisa("Errore", (e as Error).message); }
   }
 
@@ -452,7 +452,7 @@ export function PianiIndividuali({ teamId, athleteId, nomePersona, ruolo, modifi
         <View style={styles.sfondoModale}>
           <View style={styles.cartaModale}>
             <Text style={styles.titolo}>Assegna "{assegna?.titolo}" ad altre persone</Text>
-            <Text style={styles.nota}>Ognuna riceve una copia con gli stessi esercizi e spunta le sue sedute. Le copie restano collegate: potrai cambiarle tutte insieme.</Text>
+            <Text style={styles.nota}>Ogni atleta riceve una copia con gli stessi esercizi e spunta le proprie sedute. Le copie restano collegate: potrai cambiarle tutte insieme.</Text>
             <ScrollView style={{ maxHeight: 380 }}>
               <SelettorePersone atlete={squadra.filter((a) => a.id !== athleteId && !personeNelGruppo.has(a.id))} selezionate={selAssegna} onChange={setSelAssegna} />
             </ScrollView>
