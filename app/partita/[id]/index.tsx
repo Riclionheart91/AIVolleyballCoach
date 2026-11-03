@@ -57,6 +57,7 @@ import { FASI_SCHEMA, VARIANTI_SCHEMA, SCHEMA_TRANSIZIONE, ZONA_PREDEFINITA, chi
 import { elencaSchemiGioco } from "@/src/services/schemiGioco";
 import { SOGLIA_SERIE_AVVERSARIA, chiHaSegnato, serieAvversariaInCorso } from "@/src/lib/andamentoPunti";
 import { costruisciCronaca } from "@/src/lib/cronacaLive";
+import { VistaLiveLettura } from "@/src/components/VistaLiveLettura";
 
 type Passo = "giocatrice" | "fondamentale" | "esito" | "zona";
 
@@ -968,6 +969,34 @@ export default function PartitaLive() {
     );
   }
 
+  // Chi guarda senza registrare (atlete, presidente): schermata dedicata, senza comandi e con il pulsante per uscire.
+  if (!puoScoutare && !modoOspite) {
+    return (
+      <VistaLiveLettura
+        nomeNoi={team?.nome ?? "Noi"}
+        nomeAvversario={match.avversario}
+        partitaInCorso={match.stato === "in_corso"}
+        setLista={setConclusi.map((x) => ({ id: x.id, numero: x.numero_set, noi: x.punti_noi, avv: x.punti_avversario, concluso: x.concluso, inCorso: x.id === setCorrente.id && !x.concluso }))}
+        setVintiNoi={setVintiNoi}
+        setVintiLoro={setVintiLoro}
+        numeroSetCorrente={setCorrente.numero_set}
+        puntiNoi={setCorrente.punti_noi}
+        puntiAvv={setCorrente.punti_avversario}
+        timeoutNoi={timeoutNoi}
+        timeoutLoro={timeoutLoro}
+        serviamoNoi={noiAlServizio}
+        campo={<CampoPallini pallini={pallini} />}
+        righe={cronaca}
+        etichettaAtleta={etichettaAtleta}
+        nota={!puoVedereAnalisi && match.stato !== "in_corso" ? "A partita finita vedi solo le tue azioni." : undefined}
+        mostraAnalisi={puoVedereAnalisi}
+        onAnalisi={() => router.push(`/analisi-partita/${match.id}`)}
+        onRicarica={ricaricaPagina}
+        onEsci={() => { if (router.canGoBack()) router.back(); else router.replace("/"); }}
+      />
+    );
+  }
+
   const tabelloneJsx = (
     <View style={[styles.tabellone, !orizzontale && styles.tabelloneCompatto]}>
       {/* Le due squadre una sopra l'altra: la palla indica chi serve. */}
@@ -1370,32 +1399,7 @@ export default function PartitaLive() {
                 </Pressable>
               </View>
             ) : (
-              <View style={{ flex: 1, minHeight: 0, gap: 6 }}>
-                {/* Chi guarda senza registrare (atlete, presidente) segue la partita: punteggio di ogni set e azioni punto per punto, dalla piu' recente. */}
-                <View style={styles.rigaRisultatiSet}>
-                  {setConclusi.map((x) => (
-                    <View key={x.id} style={[styles.chipRisultatoSet, x.id === setCorrente.id && !x.concluso && styles.chipRisultatoSetAttivo]}>
-                      <Text style={styles.chipRisultatoSetEtichetta}>Set {x.numero_set}{x.id === setCorrente.id && !x.concluso ? " · in corso" : ""}</Text>
-                      <Text style={styles.chipRisultatoSetPunti}>{x.punti_noi}-{x.punti_avversario}</Text>
-                    </View>
-                  ))}
-                </View>
-                {!puoVedereAnalisi && match.stato !== "in_corso" && (
-                  <Text style={styles.nota}>A partita finita vedi solo le tue azioni.</Text>
-                )}
-                <FlatList
-                  style={{ flex: 1, minHeight: 0 }}
-                  data={cronaca}
-                  keyExtractor={(r) => r.id}
-                  ListEmptyComponent={<Text style={styles.nota}>Nessuna azione registrata finora.</Text>}
-                  renderItem={({ item }) => (
-                    <Text style={[styles.rigaLog, item.segnato === "noi" && styles.rigaLogNostro, item.segnato === "avversario" && styles.rigaLogLoro]}>
-                      {new Date(item.creatoIl).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })} · Set {item.numeroSet}{item.segnato ? ` · ${item.noi}-${item.avv}` : ""} · {item.testo}
-                      {item.athleteId ? ` · ${etichettaAtleta(item.athleteId)}` : ""}{item.zone}
-                    </Text>
-                  )}
-                />
-              </View>
+              <Text style={styles.nota}>Consultazione in sola lettura.</Text>
             )}
             <View style={styles.rigaComandiFissi}>
               {/* Presidente e superuser vedono tutto: andamento punto a punto, resoconto e analisi della partita. */}
@@ -1733,13 +1737,6 @@ const styles = StyleSheet.create({
   tastoFase: { paddingVertical: 4, paddingHorizontal: 4, borderRadius: 6, backgroundColor: "rgba(255,255,255,0.06)", minHeight: 28, justifyContent: "center" },
   etichettaFase: { color: brand.colors.brandSecondary, fontSize: 11, fontWeight: "700", textAlign: "center" },
   etichettaLog: { color: brand.colors.muted, fontSize: 10, textTransform: "uppercase", marginTop: 4 },
-  rigaRisultatiSet: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
-  chipRisultatoSet: { backgroundColor: brand.colors.surfaceSecondary, borderRadius: 8, paddingVertical: 4, paddingHorizontal: 10, alignItems: "center", borderWidth: 1, borderColor: "transparent" },
-  chipRisultatoSetAttivo: { borderColor: brand.colors.brand },
-  chipRisultatoSetEtichetta: { color: brand.colors.muted, fontSize: 10 },
-  chipRisultatoSetPunti: { color: brand.colors.onSurface, fontSize: 15, fontWeight: "700" },
-  rigaLogNostro: { color: brand.colors.brand, fontWeight: "700" },
-  rigaLogLoro: { fontWeight: "700" },
   rigaLog: { color: brand.colors.onSurfaceSecondary, fontSize: 11, paddingVertical: 2 },
   bannerLibero: { backgroundColor: "rgba(0,200,120,0.14)", borderColor: brand.colors.success, borderWidth: 1, borderRadius: 8, padding: 8, gap: 6 },
   bannerLiberoTesto: { color: brand.colors.onSurface, fontSize: 13, fontWeight: "700" },
