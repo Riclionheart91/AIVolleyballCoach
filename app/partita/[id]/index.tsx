@@ -717,7 +717,11 @@ export default function PartitaLive() {
   const setVintiNoi = setConclusi.filter((x) => x.id !== setCorrente.id && x.concluso && x.punti_noi > x.punti_avversario).length + (setFinitoPerPunteggio && setCorrente.punti_noi > setCorrente.punti_avversario ? 1 : 0);
   const setVintiLoro = setConclusi.filter((x) => x.id !== setCorrente.id && x.concluso && x.punti_avversario > x.punti_noi).length + (setFinitoPerPunteggio && setCorrente.punti_avversario > setCorrente.punti_noi ? 1 : 0);
   const cronaca = !puoScoutare && !modoOspite
-    ? costruisciCronaca(azioniCronaca, (setId) => setConclusi.find((x) => x.id === setId)?.numero_set ?? 0)
+    ? costruisciCronaca(
+        azioniCronaca,
+        (setId) => setConclusi.find((x) => x.id === setId)?.numero_set ?? 0,
+        (aid) => { const a = nomeAtleta(aid); return a ? `${a.cognome} #${a.numero_maglia ?? "-"}` : "—"; },
+      )
     : [];
   const timeoutSet = timeouts.filter((t) => t.set_id === setCorrente.id);
   const timeoutNoi = timeoutSet.filter((t) => t.squadra === "noi").length;
@@ -987,7 +991,6 @@ export default function PartitaLive() {
         serviamoNoi={noiAlServizio}
         campo={<CampoPallini pallini={pallini} />}
         righe={cronaca}
-        etichettaAtleta={etichettaAtleta}
         nota={!puoVedereAnalisi && match.stato !== "in_corso" ? "A partita finita vedi solo le tue azioni." : undefined}
         mostraAnalisi={puoVedereAnalisi}
         onAnalisi={() => router.push(`/analisi-partita/${match.id}`)}

@@ -29,7 +29,6 @@ interface Props {
   /** Il campo con le giocatrici in campo (mostrato solo a schermo largo). */
   campo: ReactNode;
   righe: RigaCronaca[];
-  etichettaAtleta: (athleteId: string) => string;
   nota?: string;
   mostraAnalisi: boolean;
   onAnalisi: () => void;
@@ -89,19 +88,29 @@ export function VistaLiveLettura(p: Props) {
             );
           }
           const r = item.riga;
-          const punto = r.segnato !== null;
-          return (
-            <View style={[s.riga, r.segnato === "noi" && s.rigaNostra, r.segnato === "avversario" && s.rigaLoro]}>
-              <Text style={s.ora}>{new Date(r.creatoIl).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })}</Text>
-              <View style={{ flex: 1 }}>
-                <Text style={[s.testoAzione, punto && s.testoAzionePunto]}>{r.testo}{r.zone}</Text>
-                {r.athleteId ? <Text style={s.giocatrice}>{p.etichettaAtleta(r.athleteId)}</Text> : null}
+          const nostro = r.segnato === "noi";
+          const loro = r.segnato === "avversario";
+          if (!r.segnato) {
+            return (
+              <View style={s.rigaNeutra}>
+                <Text style={s.ora}>{new Date(r.creatoIl).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })}</Text>
+                <Text style={s.testoNeutro}>{r.frase}{r.zone}</Text>
               </View>
-              {punto && (
-                <View style={[s.pillolaPunto, r.segnato === "avversario" && s.pillolaPuntoLoro]}>
-                  <Text style={[s.pillolaPuntoTesto, r.segnato === "avversario" && { color: brand.colors.onSurface }]}>{r.noi}-{r.avv}</Text>
+            );
+          }
+          return (
+            <View style={[s.rigaPunto, nostro && s.rigaNostra, loro && s.rigaLoro]}>
+              <View style={{ flex: 1, gap: 2 }}>
+                <View style={s.rigaEtichetta}>
+                  <Text style={[s.etichettaPunto, { color: nostro ? brand.colors.success : brand.colors.error }]}>{nostro ? "PUNTO NOSTRO" : "PUNTO AVVERSARIO"}</Text>
+                  <Text style={s.ora}>{new Date(r.creatoIl).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })}</Text>
+                  {r.serie >= 3 && <Text style={[s.serie, { color: nostro ? brand.colors.success : brand.colors.error }]}>serie di {r.serie}</Text>}
                 </View>
-              )}
+                <Text style={s.fraseTitolo}>{r.frase}{r.zone}</Text>
+              </View>
+              <View style={[s.pillolaPunto, nostro ? s.pillolaNostra : s.pillolaLoro]}>
+                <Text style={[s.pillolaPuntoTesto, loro && { color: "#fff" }]}>{r.noi}-{r.avv}</Text>
+              </View>
             </View>
           );
         }}
@@ -109,37 +118,53 @@ export function VistaLiveLettura(p: Props) {
     </View>
   );
 
+  const inTesta = p.setVintiNoi === p.setVintiLoro ? null : p.setVintiNoi > p.setVintiLoro ? "noi" : "loro";
+  const setConclusi = p.setLista.filter((x) => !x.inCorso);
+
   const tabellone = (
     <View style={s.tabellone}>
-      <View style={{ flex: 1, gap: 6 }}>
+      <View style={s.cardSquadre}>
+        <Text style={s.etichettaSezione}>SET VINTI</Text>
         <View style={s.rigaSquadra}>
           <Text style={s.palla}>{p.serviamoNoi ? "🏐" : ""}</Text>
           <Text style={s.nomeSquadra} numberOfLines={1}>{p.nomeNoi}</Text>
-          <Text style={s.setVinti}>{p.setVintiNoi}</Text>
+          <View style={[s.setVintiBox, inTesta === "noi" && s.setVintiBoxTesta]}>
+            <Text style={[s.setVinti, inTesta === "noi" && { color: "#000" }]}>{p.setVintiNoi}</Text>
+          </View>
         </View>
         <View style={s.rigaSquadra}>
           <Text style={s.palla}>{p.serviamoNoi ? "" : "🏐"}</Text>
           <Text style={s.nomeSquadra} numberOfLines={1}>{p.nomeAvversario}</Text>
-          <Text style={s.setVinti}>{p.setVintiLoro}</Text>
+          <View style={[s.setVintiBox, inTesta === "loro" && s.setVintiBoxTesta]}>
+            <Text style={[s.setVinti, inTesta === "loro" && { color: "#000" }]}>{p.setVintiLoro}</Text>
+          </View>
         </View>
       </View>
-      <View style={{ alignItems: "flex-end" }}>
-        <Text style={s.etichettaSet}>Set {p.numeroSetCorrente} · TO {p.timeoutNoi}-{p.timeoutLoro}</Text>
+
+      <View style={s.boxSetInCorso}>
+        <Text style={s.etichettaSetCorso}>SET {p.numeroSetCorrente}{p.partitaInCorso ? " · IN CORSO" : ""}</Text>
         <Text style={s.punteggio}>{p.puntiNoi}-{p.puntiAvv}</Text>
+        <View style={s.separatore} />
+        <Text style={s.etichettaSezione}>TIME-OUT</Text>
+        <Text style={s.rigaTO}>Noi <Text style={s.numeroTO}>{p.timeoutNoi}</Text></Text>
+        <Text style={s.rigaTO}>Loro <Text style={s.numeroTO}>{p.timeoutLoro}</Text></Text>
       </View>
     </View>
   );
 
-  const chipSet = (
+  const chipSet = setConclusi.length > 0 ? (
     <View style={s.rigaChip}>
-      {p.setLista.map((x) => (
-        <View key={x.id} style={[s.chip, x.inCorso && s.chipAttivo]}>
-          <Text style={s.chipEtichetta}>Set {x.numero}{x.inCorso ? " · in corso" : ""}</Text>
-          <Text style={s.chipPunti}>{x.noi}-{x.avv}</Text>
-        </View>
-      ))}
+      {setConclusi.map((x) => {
+        const vinto = x.noi > x.avv;
+        return (
+          <View key={x.id} style={[s.chip, { borderColor: vinto ? brand.colors.success : brand.colors.error }]}>
+            <Text style={s.chipEtichetta}>Set {x.numero} · <Text style={{ color: vinto ? brand.colors.success : brand.colors.error, fontWeight: "800" }}>{vinto ? "vinto" : "perso"}</Text></Text>
+            <Text style={s.chipPunti}>{x.noi}-{x.avv}</Text>
+          </View>
+        );
+      })}
     </View>
-  );
+  ) : null;
 
   return (
     <View style={s.contenitore}>
@@ -194,16 +219,23 @@ const s = StyleSheet.create({
   statoFinita: { backgroundColor: brand.colors.surfaceSecondary },
   statoTesto: { color: brand.colors.muted, fontSize: 12, fontWeight: "800" },
   corpo: { flex: 1, minHeight: 0, padding: 10, gap: 12 },
-  tabellone: { flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: brand.colors.surfaceSecondary, borderRadius: 12, padding: 14 },
-  rigaSquadra: { flexDirection: "row", alignItems: "center", gap: 6 },
+  tabellone: { flexDirection: "row", alignItems: "stretch", gap: 10 },
+  cardSquadre: { flex: 1, backgroundColor: brand.colors.surfaceSecondary, borderRadius: 12, padding: 12, gap: 10, justifyContent: "center" },
+  etichettaSezione: { color: brand.colors.muted, fontSize: 10, fontWeight: "800", letterSpacing: 0.8 },
+  rigaSquadra: { flexDirection: "row", alignItems: "center", gap: 8 },
   palla: { width: 20, fontSize: 14 },
-  nomeSquadra: { flex: 1, color: brand.colors.onSurface, fontSize: 16, fontWeight: "700" },
-  setVinti: { color: brand.colors.muted, fontSize: 16, fontWeight: "800", minWidth: 20, textAlign: "right" },
-  etichettaSet: { color: brand.colors.muted, fontSize: 12 },
-  punteggio: { color: brand.colors.brand, fontSize: 40, fontWeight: "800", lineHeight: 46 },
+  nomeSquadra: { flex: 1, color: brand.colors.onSurface, fontSize: 17, fontWeight: "700" },
+  setVintiBox: { minWidth: 44, height: 44, borderRadius: 10, backgroundColor: brand.colors.surfaceTertiary, alignItems: "center", justifyContent: "center" },
+  setVintiBoxTesta: { backgroundColor: brand.colors.success },
+  setVinti: { color: brand.colors.onSurface, fontSize: 26, fontWeight: "800" },
+  boxSetInCorso: { minWidth: 130, backgroundColor: brand.colors.surfaceSecondary, borderRadius: 12, borderWidth: 2, borderColor: brand.colors.brand, paddingVertical: 10, paddingHorizontal: 14, alignItems: "center", gap: 2 },
+  etichettaSetCorso: { color: brand.colors.brand, fontSize: 11, fontWeight: "800", letterSpacing: 0.8 },
+  punteggio: { color: brand.colors.onSurface, fontSize: 44, fontWeight: "800", lineHeight: 52 },
+  separatore: { alignSelf: "stretch", height: 1, backgroundColor: brand.colors.border, marginVertical: 6 },
+  rigaTO: { color: brand.colors.onSurfaceSecondary, fontSize: 14 },
+  numeroTO: { color: brand.colors.onSurface, fontWeight: "800" },
   rigaChip: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  chip: { backgroundColor: brand.colors.surfaceSecondary, borderRadius: 10, paddingVertical: 6, paddingHorizontal: 14, alignItems: "center", borderWidth: 1, borderColor: "transparent" },
-  chipAttivo: { borderColor: brand.colors.brand },
+  chip: { backgroundColor: brand.colors.surfaceSecondary, borderRadius: 10, paddingVertical: 6, paddingHorizontal: 14, alignItems: "center", borderWidth: 1.5 },
   chipEtichetta: { color: brand.colors.muted, fontSize: 11 },
   chipPunti: { color: brand.colors.onSurface, fontSize: 18, fontWeight: "800" },
   cardElenco: { flex: 1, minHeight: 0, backgroundColor: brand.colors.surfaceSecondary, borderRadius: 12, padding: 10, gap: 6 },
@@ -211,19 +243,23 @@ const s = StyleSheet.create({
   titoloElenco: { color: brand.colors.muted, fontSize: 12, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.5 },
   nota: { color: brand.colors.muted, fontSize: 12 },
   vuoto: { color: brand.colors.muted, fontSize: 14, paddingVertical: 20, textAlign: "center" },
-  testataSet: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingTop: 10, paddingBottom: 4, borderBottomWidth: 1, borderBottomColor: brand.colors.border },
-  testataSetTesto: { color: brand.colors.onSurface, fontSize: 14, fontWeight: "800" },
+  testataSet: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingTop: 12, paddingBottom: 4, borderBottomWidth: 1, borderBottomColor: brand.colors.border },
+  testataSetTesto: { color: brand.colors.onSurface, fontSize: 15, fontWeight: "800" },
   testataSetPunti: { color: brand.colors.muted, fontSize: 13, fontWeight: "600" },
-  riga: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 7, paddingHorizontal: 10, borderRadius: 8, borderLeftWidth: 3, borderLeftColor: "transparent" },
-  rigaNostra: { backgroundColor: "rgba(255,255,255,0.05)", borderLeftColor: brand.colors.brand },
-  rigaLoro: { backgroundColor: "rgba(255,255,255,0.03)", borderLeftColor: brand.colors.error },
-  ora: { color: brand.colors.muted, fontSize: 12, width: 40 },
-  testoAzione: { color: brand.colors.onSurfaceSecondary, fontSize: 14 },
-  testoAzionePunto: { color: brand.colors.onSurface, fontWeight: "700" },
-  giocatrice: { color: brand.colors.muted, fontSize: 12, marginTop: 1 },
-  pillolaPunto: { backgroundColor: brand.colors.brand, borderRadius: 999, paddingVertical: 3, paddingHorizontal: 10 },
-  pillolaPuntoLoro: { backgroundColor: brand.colors.surfaceTertiary },
-  pillolaPuntoTesto: { color: "#000", fontSize: 13, fontWeight: "800" },
+  rigaPunto: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 9, paddingHorizontal: 12, borderRadius: 10, borderLeftWidth: 4 },
+  rigaNostra: { backgroundColor: "rgba(52,199,89,0.12)", borderLeftColor: brand.colors.success },
+  rigaLoro: { backgroundColor: "rgba(255,59,48,0.12)", borderLeftColor: brand.colors.error },
+  rigaEtichetta: { flexDirection: "row", alignItems: "center", gap: 8 },
+  etichettaPunto: { fontSize: 11, fontWeight: "800", letterSpacing: 0.6 },
+  serie: { fontSize: 11, fontWeight: "700" },
+  fraseTitolo: { color: brand.colors.onSurface, fontSize: 15, fontWeight: "700" },
+  rigaNeutra: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 3, paddingHorizontal: 12 },
+  ora: { color: brand.colors.muted, fontSize: 11 },
+  testoNeutro: { flex: 1, color: brand.colors.onSurfaceSecondary, fontSize: 13 },
+  pillolaPunto: { borderRadius: 999, paddingVertical: 4, paddingHorizontal: 12 },
+  pillolaNostra: { backgroundColor: brand.colors.success },
+  pillolaLoro: { backgroundColor: brand.colors.error },
+  pillolaPuntoTesto: { color: "#000", fontSize: 15, fontWeight: "800" },
   piede: { flexDirection: "row", gap: 8, padding: 10, borderTopWidth: 1, borderTopColor: brand.colors.border },
   tastoPiede: { flex: 1, backgroundColor: brand.colors.surfaceSecondary, borderRadius: 10, paddingVertical: 12, alignItems: "center" },
   tastoPiedeTesto: { color: brand.colors.onSurface, fontWeight: "700", fontSize: 14 },
