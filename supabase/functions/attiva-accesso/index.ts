@@ -101,6 +101,15 @@ async function contaTentativo(admin: Admin, link: LinkAccesso) {
   await admin.from("link_accesso").update({ tentativi: link.tentativi + 1 }).eq("id", link.id);
 }
 
+/** Chiude tutte le sessioni di un account la cui password è appena cambiata. Un errore non deve bloccare l'attivazione. */
+async function revocaSessioni(admin: Admin, userId: string) {
+  try {
+    await admin.rpc("revoca_sessioni_utente", { p_user_id: userId });
+  } catch {
+    /* volutamente muto: nessun dato sensibile nei log */
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS_HEADERS });
   if (req.method !== "POST") return errore("Metodo non consentito.", 405);
@@ -139,14 +148,20 @@ Deno.serve(async (req) => {
     if (errUtente || !utente?.email) return fallisci("Non riesco a trovare il tuo account. Chiedi un nuovo link.");
     if (soloGoogle(utente)) return fallisci("Questo account entra con Google: usa il pulsante «Accedi con Google».");
 
-    const { error: errAgg } = await admin.auth.admin.updateUserById(utente.id, { password, email_confirm: true });
-    if (errAgg) return fallisci("Non sono riuscito a salvare la nuova password. Riprova tra poco.", 500);
-
+    // Prima si consuma il link (monouso, atomico nel database), poi si cambia la password: così due usi quasi
+    // simultanei dello stesso link non possono cambiare la password due volte.
     const { data: teamId, error: errCollega } = await admin.rpc("collega_accesso_da_link", {
       p_token: token, p_user_id: utente.id, p_email: utente.email.toLowerCase(),
     });
     if (errCollega) return fallisci("Non sono riuscito a completare l'accesso. Chiedi un nuovo link.", 500);
-    return jsonResponse({ ok: true, email: utente.email.toLowerCase(), team_id: teamId ?? link.team_id });
+    // NULL = link non valido, già usato o non coincidente: niente password cambiata, niente "ok".
+    if (!teamId) return errore(MSG_LINK_NON_VALIDO);
+
+    const { error: errAgg } = await admin.auth.admin.updateUserById(utente.id, { password, email_confirm: true });
+    if (errAgg) return errore("Non sono riuscito a salvare la nuova password. Chiedi un nuovo link.", 500);
+
+    await revocaSessioni(admin, utente.id);
+    return jsonResponse({ ok: true, email: utente.email.toLowerCase(), team_id: teamId });
   }
 
   // ── Primo invito (o reset senza account associato): serve un'email. ──
@@ -171,20 +186,28 @@ Deno.serve(async (req) => {
     if (emailLibera) return fallisci("Questa email è già in uso: scrivine un'altra.");
     if (soloGoogle(esistente)) return fallisci("Per questa email si entra con Google: usa il pulsante «Accedi con Google».");
 
-    // Email di anagrafica con account già presente (password o mai confermato): la password si imposta di nuovo.
-    const { error: errAgg } = await admin.auth.admin.updateUserById(esistente.id, { password, email_confirm: true });
-    if (errAgg) return fallisci("Non sono riuscito a salvare la password. Riprova tra poco.", 500);
+    // Email di anagrafica con account già presente (password o mai confermato): la password si imposta di
+    // nuovo, ma solo dopo aver consumato il link (vedi sotto).
     utente = esistente;
   }
 
   const { data: teamId, error: errCollega } = await admin.rpc("collega_accesso_da_link", {
     p_token: token, p_user_id: utente.id, p_email: email,
   });
-  if (errCollega) {
+  if (errCollega || !teamId) {
     // Non si lascia un account orfano appena creato.
     if (creatoOra) await admin.auth.admin.deleteUser(utente.id).catch(() => {});
-    return fallisci("Non sono riuscito a completare l'accesso. Chiedi un nuovo link.", 500);
+    if (errCollega) return fallisci("Non sono riuscito a completare l'accesso. Chiedi un nuovo link.", 500);
+    // NULL = link non valido, già usato o non coincidente: niente "ok" e nessuna password cambiata.
+    return errore(MSG_LINK_NON_VALIDO);
   }
 
-  return jsonResponse({ ok: true, email, team_id: teamId ?? link.team_id });
+  if (!creatoOra) {
+    // Account già esistente: la nuova password si imposta dopo aver consumato il link e si chiudono le vecchie sessioni.
+    const { error: errAgg } = await admin.auth.admin.updateUserById(utente.id, { password, email_confirm: true });
+    if (errAgg) return errore("Non sono riuscito a salvare la password. Chiedi un nuovo link.", 500);
+    await revocaSessioni(admin, utente.id);
+  }
+
+  return jsonResponse({ ok: true, email, team_id: teamId });
 });
