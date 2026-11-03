@@ -5,7 +5,7 @@
  */
 
 /** Come ci si riferisce a un'atleta nei prompt, al posto del nome. */
-export const ATLETA_ANONIMA = "un'atleta";
+export const ATLETA_ANONIMA = "una persona della squadra";
 
 function escapeRegExp(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");

@@ -49,7 +49,7 @@ export function MessaggioWhatsApp({ visibile, titolo, atleta, nota, modelli, onC
   }, [visibile]);
 
   const numero = atleta ? numeroWhatsApp(atleta.telefono) : null;
-  const testoFinale = testo.replace(/\{nome\}/g, atleta?.nome ?? "ragazze");
+  const testoFinale = testo.replace(/\{nome\}/g, atleta?.nome ?? "squadra");
 
   return (
     <Modal visible={visibile} animationType="slide" transparent onRequestClose={onChiudi}>

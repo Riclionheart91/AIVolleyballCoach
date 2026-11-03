@@ -101,7 +101,7 @@ export function riassuntoPerAI(eventi: MatchEvent[], nomePerAtleta: (id: string)
   return (
     `Punteggio: ${punteggio}. Azioni registrate: ${eventi.length} (${punti.length} punti, ${errori.length} errori).\n` +
     `Per fondamentale: ${Object.entries(perSkill).map(([k, v]) => `${k} ${v.punti}+/${v.errori}-`).join(", ")}.\n` +
-    `Per giocatrice: ${Object.entries(perAtleta).map(([k, v]) => `${k} ${v.punti}+/${v.errori}-`).join(", ")}.`
+    `Per atleta: ${Object.entries(perAtleta).map(([k, v]) => `${k} ${v.punti}+/${v.errori}-`).join(", ")}.`
   );
 }
 

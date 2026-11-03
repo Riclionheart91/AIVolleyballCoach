@@ -145,7 +145,7 @@ export function PannelloSporteasy({ teamId, onSincronizzato }: { teamId: string;
 
       {aperto && (
         <View style={{ gap: 8, marginTop: 8 }}>
-          <Text style={styles.nota}>Link iCal della squadra (SportEasy → Impostazioni squadra → Esporta calendario). Importa solo allenamenti e partite, mai l'anagrafica atlete.</Text>
+          <Text style={styles.nota}>Link iCal della squadra (SportEasy → Impostazioni squadra → Esporta calendario). Importa solo allenamenti e partite, mai l'anagrafica della rosa.</Text>
           <TextInput style={styles.input} placeholder="webcal://calendar.sporteasy.net/..." placeholderTextColor={brand.colors.muted} autoCapitalize="none" value={link} onChangeText={setLink} />
           <Pressable style={styles.bottoneSecondario} onPress={salvaLink}><Text style={styles.bottoneSecondarioTesto}>Salva link</Text></Pressable>
 

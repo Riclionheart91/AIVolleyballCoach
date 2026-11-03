@@ -205,7 +205,7 @@ export function analizzaRighe(
         return {
           chiave: "", datiFile: { nome: riga[mappatura.nome ?? ""], cognome: riga[mappatura.cognome ?? ""] },
           atletaEsistente: null, campiDiversi: [], tipo: "saltata",
-          errore: `Non è una giocatrice (${colonnaFiltroTipoPersona}: "${valoreTipo}")`, selezionata: false,
+          errore: `Non risulta tra chi gioca (${colonnaFiltroTipoPersona}: "${valoreTipo}")`, selezionata: false,
         };
       }
     }

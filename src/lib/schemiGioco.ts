@@ -71,7 +71,7 @@ export function schemaDiPartenza(fase: FaseSchema): Assegnazioni {
 export const RUOLI_SCHEMA = ["P", "S1", "C2", "O", "S2", "C1"] as const;
 
 export const NOMI_RUOLI_SCHEMA: Record<string, string> = {
-  P: "Palleggiatrice", S1: "Schiacciatrice 1", C2: "Centrale 2", O: "Opposto", S2: "Schiacciatrice 2", C1: "Centrale 1",
+  P: "Palleggio", S1: "Banda 1", C2: "Centrale 2", O: "Opposto", S2: "Banda 2", C1: "Centrale 1",
 };
 
 /** Ruolo che sta nella posizione di rotazione indicata, quando la palleggiatrice e' nella posizione "rotazione". */

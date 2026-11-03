@@ -132,7 +132,7 @@ export default function Impostazioni() {
           <Text style={styles.nota}>
             {ruolo === "atleta"
               ? "Ogni venerdì mattina, se il tuo certificato medico è scaduto o in scadenza entro 30 giorni, ricevi una notifica su questo dispositivo — anche ad app chiusa."
-              : "Ogni venerdì mattina ricevi su questo dispositivo, anche ad app chiusa, l'elenco delle atlete della squadra con certificato medico scaduto o in scadenza entro 30 giorni."}
+              : "Ogni venerdì mattina ricevi su questo dispositivo, anche ad app chiusa, l'elenco di chi, in squadra, ha il certificato medico scaduto o in scadenza entro 30 giorni."}
           </Text>
           <View style={styles.rigaNotifiche}>
             <Text style={styles.rigaProviderNome}>Attive su questo dispositivo</Text>

@@ -251,7 +251,7 @@ export default function GlobaleAllenamento() {
                   </Pressable>
                 ))}
                 <Pressable style={styles.tastoAnnullaPasso} onPress={() => setSelezione(null)}>
-                  <Text style={styles.nota}>← cambia giocatrice</Text>
+                  <Text style={styles.nota}>← cambia atleta</Text>
                 </Pressable>
               </View>
             )}
@@ -313,7 +313,7 @@ export default function GlobaleAllenamento() {
                 </Pressable>
               ))}
               {atlete.filter((a) => !giaSchierate.has(a.id)).length === 0 && (
-                <Text style={styles.nota}>Tutte la rosa sono già schierate.</Text>
+                <Text style={styles.nota}>Tutta la rosa è già schierata.</Text>
               )}
             </ScrollView>
             <Pressable onPress={() => setSceltaPosizione(null)}><Text style={styles.chiudi}>Annulla</Text></Pressable>

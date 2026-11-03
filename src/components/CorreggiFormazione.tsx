@@ -65,7 +65,7 @@ export function CorreggiFormazione({ visibile, setId, matchId, numeroSet, atlete
   const idInCampo = new Set(inCampo.map((r) => r.athlete_id));
 
   function assegna(athleteId: string) {
-    if (scelta === null) { avvisa("Scegli prima la posizione", "Tocca una posizione sul campo e poi la giocatrice."); return; }
+    if (scelta === null) { avvisa("Scegli prima la posizione", "Tocca una posizione sul campo e poi l'atleta."); return; }
     setPosizioni((p) => ({ ...p, [scelta]: athleteId }));
     const prossima = [1, 2, 3, 4, 5, 6].find((n) => n !== scelta && !posizioni[n]);
     setScelta(prossima ?? null);
@@ -141,7 +141,7 @@ export function CorreggiFormazione({ visibile, setId, matchId, numeroSet, atlete
 
             {disponibili.length > 0 && (
               <>
-                <Text style={styles.sezione}>{scelta ? `Chi va in posizione ${scelta}?` : "Giocatrici disponibili (tocca prima una posizione)"}</Text>
+                <Text style={styles.sezione}>{scelta ? `Chi va in posizione ${scelta}?` : "Disponibili (tocca prima una posizione)"}</Text>
                 <View style={styles.rigaChip}>
                   {disponibili.map((a) => (
                     <Pressable key={a.id} onPress={() => assegna(a.id)} style={styles.chip}>
@@ -160,7 +160,7 @@ export function CorreggiFormazione({ visibile, setId, matchId, numeroSet, atlete
               <>
                 <Text style={styles.sezione}>Distinta della partita</Text>
                 <Text style={styles.nota}>
-                  Libero: {nLiberi} su {MAX_LIBERI}{nLiberi >= MAX_LIBERI ? " (completo)" : ""}. Il Libero si può aggiungere per tutta la partita; una convocata dimenticata solo durante il primo set.
+                  Libero: {nLiberi} su {MAX_LIBERI}{nLiberi >= MAX_LIBERI ? " (completo)" : ""}. Il Libero si può aggiungere per tutta la partita; una dimenticanza nei convocati si corregge solo durante il primo set.
                 </Text>
                 <View style={styles.rigaChip}>
                   {nLiberi < MAX_LIBERI && (
@@ -170,7 +170,7 @@ export function CorreggiFormazione({ visibile, setId, matchId, numeroSet, atlete
                   )}
                   {primoSet ? (
                     <Pressable onPress={() => setElencoAggiunta(elencoAggiunta === "convocato" ? null : "convocato")} style={[styles.chipAzione, elencoAggiunta === "convocato" && styles.chipAttivo]}>
-                      <Text style={[styles.chipAzioneTesto, elencoAggiunta === "convocato" && styles.chipTestoAttivo]}>+ Aggiungi convocata</Text>
+                      <Text style={[styles.chipAzioneTesto, elencoAggiunta === "convocato" && styles.chipTestoAttivo]}>+ Aggiungi ai convocati</Text>
                     </Pressable>
                   ) : (
                     <Text style={styles.nota}>Dal secondo set i convocati non si cambiano più.</Text>
