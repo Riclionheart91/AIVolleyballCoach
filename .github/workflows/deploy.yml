@@ -20,6 +20,8 @@ jobs:
           EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
           EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
           EXPO_PUBLIC_AUTH_REDIRECT_URL: ${{ secrets.EXPO_PUBLIC_AUTH_REDIRECT_URL }}
+          # Chiave PUBBLICA di Cloudflare Turnstile (la chiave segreta sta solo in Supabase).
+          EXPO_PUBLIC_TURNSTILE_SITE_KEY: "0x4AAAAAAFxpS3jvGe_WQjWW"
       # GitHub Pages non conosce le pagine interne dell'app (es. /partita/<id>): ricaricandole darebbe 404.
       # Con 404.html uguale alla home, l'app si riapre e mostra la pagina giusta.
       - run: cp dist/index.html dist/404.html
