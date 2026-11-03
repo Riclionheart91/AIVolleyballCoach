@@ -50,6 +50,8 @@ interface AuthState {
   puoGestireStagioni: boolean;
   /** Analisi, andamento punto a punto e resoconto delle partite: staff, presidente e superuser (sola lettura per gli ultimi due). */
   puoVedereAnalisi: boolean;
+  /** Il presidente gioca in questa squadra: qui e' un'atleta come le altre (vede solo le proprie azioni nelle analisi). */
+  presidenteGiocaQui: boolean;
   isSuperuser: boolean;
   /** Se si è presidente di una società, questa: null altrimenti. Va controllata anche senza squadre (società appena fondata). */
   societaPresidenza: MiaSocieta | null;
@@ -91,6 +93,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [atletaId, setAtletaId] = useState<string | null>(null);
   const [squadreDisponibili, setSquadreDisponibili] = useState<SquadraDisponibile[]>([]);
   const [isSuperuser, setIsSuperuser] = useState(false);
+  // Solo per il presidente che gioca nella squadra: l'amministratore gli ha concesso la visione completa delle analisi?
+  const [visioneCompletaConcessa, setVisioneCompletaConcessa] = useState(false);
   const [societaPresidenza, setSocietaPresidenza] = useState<MiaSocieta | null>(null);
   const [caricamentoSocietaRaw, setCaricamentoSocieta] = useState(true);
   const [caricamentoContestoRaw, setCaricamentoContesto] = useState(true);
@@ -226,6 +230,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.user.id]);
 
+  // Presidente che gioca nella squadra: chiede al database se ha la visione completa delle analisi (concessa dall'amministratore).
+  useEffect(() => {
+    const giocaQui = ruolo === "atleta" && !!societaPresidenza && !!team?.societaId && team.societaId === societaPresidenza.societa_id;
+    if (!session || !team || !giocaQui) { setVisioneCompletaConcessa(false); return; }
+    let annullato = false;
+    supabaseClient.rpc("is_team_staff_visione_piena", { p_team_id: team.id }).then(({ data, error }) => {
+      if (!annullato) setVisioneCompletaConcessa(!error && Boolean(data));
+    });
+    return () => { annullato = true; };
+  }, [session?.user.id, team?.id, ruolo, societaPresidenza?.societa_id, team?.societaId]);
+
   async function accediConGoogle() {
     await supabaseClient.auth.signInWithOAuth({
       provider: "google",
@@ -293,22 +308,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const ePresidenteDiQuestaSquadra =
     ruolo === "presidente" || (!!societaPresidenza && !!team?.societaId && team.societaId === societaPresidenza.societa_id);
 
+  /**
+   * Presidente che e' anche atleta della squadra che sta guardando: in questa squadra e' un'atleta come le altre
+   * per partite e analisi (le funzioni di gestione e l'AI restano suoi). La visione completa delle analisi la
+   * concede e la toglie l'amministratore di sistema; la regola vera e' nel database, qui serve solo per mostrare
+   * o nascondere i pulsanti giusti.
+   */
+  const presidenteGiocaQui = ruolo === "atleta" && ePresidenteDiQuestaSquadra;
+
   const puoScrivere = ruolo === "allenatore" || ruolo === "vice_allenatore";
   const puoScoutare = puoScrivere;
   const puoUsareAI = puoScrivere || ePresidenteDiQuestaSquadra;
   const soloLettura = ruolo === "presidente";
   /** Aprire, attivare e chiudere una stagione: riservato al presidente, non più all'allenatore. */
   const puoGestireStagioni = ePresidenteDiQuestaSquadra;
-  const puoVedereAnalisi = puoScrivere || ePresidenteDiQuestaSquadra || isSuperuser;
+  const puoVedereAnalisi = puoScrivere || isSuperuser || (ePresidenteDiQuestaSquadra && (!presidenteGiocaQui || visioneCompletaConcessa));
 
   const value = useMemo<AuthState>(
     () => ({
-      session, caricamento, team, ruolo, atletaId, puoScrivere, soloLettura, puoScoutare, puoUsareAI, puoGestireStagioni, puoVedereAnalisi, isSuperuser,
+      session, caricamento, team, ruolo, atletaId, puoScrivere, soloLettura, puoScoutare, puoUsareAI, puoGestireStagioni, puoVedereAnalisi, presidenteGiocaQui, isSuperuser,
       societaPresidenza, caricamentoSocieta, squadreDisponibili, cambiaSquadra, squadraScelta, caricamentoContesto, erroreTeam, stagioneAttiva, stagioneSocietaEsiste,
       squadraAttivata: stagioneAttiva !== null,
       accediConGoogle, accediConPassword, esci, creaPrimaSquadra, ricaricaContesto,
     }),
-    [session, caricamento, team, ruolo, atletaId, isSuperuser, societaPresidenza, caricamentoSocieta, squadreDisponibili, squadraScelta, caricamentoContesto, caricamentoSocieta, erroreTeam, stagioneAttiva, stagioneSocietaEsiste],
+    [session, caricamento, team, ruolo, atletaId, isSuperuser, visioneCompletaConcessa, societaPresidenza, caricamentoSocieta, squadreDisponibili, squadraScelta, caricamentoContesto, caricamentoSocieta, erroreTeam, stagioneAttiva, stagioneSocietaEsiste],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

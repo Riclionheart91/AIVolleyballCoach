@@ -100,3 +100,27 @@ export async function creaSocieta(nome: string, emailPresidente: string): Promis
   if (error) throw error;
   return data as string;
 }
+
+export interface PresidenteAtleta {
+  team_id: string;
+  team_nome: string;
+  societa_nome: string;
+  user_id: string;
+  atleta_nome: string;
+  email: string | null;
+  /** L'amministratore ha concesso la visione completa delle analisi di questa squadra. */
+  visione_analisi: boolean;
+}
+
+/** Solo amministratore: i presidenti che giocano come atleti in una squadra della propria società. */
+export async function elencaPresidentiAtleti(): Promise<PresidenteAtleta[]> {
+  const { data, error } = await supabaseClient.rpc("elenca_presidenti_atleti");
+  if (error) throw error;
+  return data ?? [];
+}
+
+/** Solo amministratore: concede o toglie al presidente-atleta la visione completa delle analisi della sua squadra. */
+export async function impostaVisioneAnalisiPresidente(teamId: string, userId: string, concessa: boolean): Promise<void> {
+  const { error } = await supabaseClient.rpc("imposta_visione_analisi_presidente", { p_team_id: teamId, p_user_id: userId, p_concessa: concessa });
+  if (error) throw error;
+}

@@ -127,6 +127,9 @@ export default function Profilo() {
           <Pressable style={styles.bottoneSecondario} onPress={() => router.push("/crea-societa")}>
             <Text style={styles.bottoneSecondarioTesto}>➕ Crea società</Text>
           </Pressable>
+          <Pressable style={styles.bottoneSecondario} onPress={() => router.push("/visione-analisi-presidenti")}>
+            <Text style={styles.bottoneSecondarioTesto}>👁️ Presidenti che giocano: visione analisi</Text>
+          </Pressable>
         </View>
       )}
 

@@ -166,6 +166,20 @@ export async function elencaEventiPartita(matchId: string, limite = 20): Promise
   return data ?? [];
 }
 
+/** TUTTE le azioni della partita, dalla piu' vecchia alla piu' recente (per la cronaca di chi guarda). Legge a pagine da 1000. */
+export async function elencaTutteLeAzioniPartita(matchId: string): Promise<MatchEvent[]> {
+  const tutte: MatchEvent[] = [];
+  const DIMENSIONE = 1000;
+  for (let da = 0; da < 20000; da += DIMENSIONE) {
+    const { data, error } = await supabaseClient.from("match_events").select("*").eq("match_id", matchId)
+      .order("creato_il", { ascending: true }).order("id", { ascending: true }).range(da, da + DIMENSIONE - 1);
+    if (error) throw error;
+    tutte.push(...(data ?? []));
+    if (!data || data.length < DIMENSIONE) break;
+  }
+  return tutte;
+}
+
 /** Formazione attuale del set, CON posizione (1-6) — sostituisce la vecchia elencaFormazioneSet che dava solo la lista senza posizione. */
 export async function elencaFormazioneConPosizioni(setId: string): Promise<MatchSetLineup[]> {
   const { data, error } = await supabaseClient.from("match_set_lineups").select("*").eq("set_id", setId).eq("in_campo", true).order("posizione");

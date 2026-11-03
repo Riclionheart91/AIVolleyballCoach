@@ -12,6 +12,7 @@ import {
   chiudiMatch,
   elencaConvocati,
   elencaEventiPartita,
+  elencaTutteLeAzioniPartita,
   elencaEventiPerRotazione,
   type EventoPerRotazione,
   elencaFormazioneConPosizioni,
@@ -55,6 +56,7 @@ import { SelettoreZona } from "@/src/components/ZoneCampo";
 import { FASI_SCHEMA, VARIANTI_SCHEMA, SCHEMA_TRANSIZIONE, ZONA_PREDEFINITA, chiaveSchema, faseDelloScambio, indiceSchema, puntoDiPosizione, puntoRuoloLinea, rotazioneDaFormazione, type Assegnazioni, type FaseSchema } from "@/src/lib/schemiGioco";
 import { elencaSchemiGioco } from "@/src/services/schemiGioco";
 import { SOGLIA_SERIE_AVVERSARIA, chiHaSegnato, serieAvversariaInCorso } from "@/src/lib/andamentoPunti";
+import { costruisciCronaca } from "@/src/lib/cronacaLive";
 
 type Passo = "giocatrice" | "fondamentale" | "esito" | "zona";
 
@@ -145,6 +147,8 @@ export default function PartitaLive() {
   const [match, setMatch] = useState<Match | null>(null);
   const [setCorrente, setSetCorrente] = useState<MatchSet | null>(null);
   const [eventi, setEventi] = useState<MatchEvent[]>([]);
+  // Solo per chi guarda senza registrare (atlete, presidente): tutte le azioni della partita, per la cronaca punto per punto.
+  const [azioniCronaca, setAzioniCronaca] = useState<MatchEvent[]>([]);
   const [atlete, setAtlete] = useState<Athlete[]>([]);
   const [convocateIds, setConvocateIds] = useState<string[]>([]);
   const [liberiIds, setLiberiIds] = useState<Set<string>>(new Set());
@@ -301,6 +305,9 @@ export default function PartitaLive() {
     const attivo = set.find((s) => !s.concluso) ?? set[set.length - 1] ?? null;
     setSetCorrente(attivo);
     setEventi(await elencaEventiPartita(id));
+    if (!puoScoutareDaRuolo) {
+      try { setAzioniCronaca(await elencaTutteLeAzioniPartita(id)); } catch { /* resta la cronaca di prima */ }
+    }
     if (m) {
       const [lista, convocati] = await Promise.all([elencaAtlete(m.team_id), elencaConvocati(id)]);
       setAtlete(lista);
@@ -318,7 +325,7 @@ export default function PartitaLive() {
       setLibero(await liberoInCampo(attivo.id));
     }
     if (attivo && m && !modoOspite) verificaFineSet(attivo, m, set, regoleFresche);
-  }, [id, modoOspite]);
+  }, [id, modoOspite, puoScoutareDaRuolo]);
 
   useFocusEffect(useCallback(() => { carica(); }, [carica]));
 
@@ -708,6 +715,9 @@ export default function PartitaLive() {
     && Math.abs(setCorrente.punti_noi - setCorrente.punti_avversario) >= 2;
   const setVintiNoi = setConclusi.filter((x) => x.id !== setCorrente.id && x.concluso && x.punti_noi > x.punti_avversario).length + (setFinitoPerPunteggio && setCorrente.punti_noi > setCorrente.punti_avversario ? 1 : 0);
   const setVintiLoro = setConclusi.filter((x) => x.id !== setCorrente.id && x.concluso && x.punti_avversario > x.punti_noi).length + (setFinitoPerPunteggio && setCorrente.punti_avversario > setCorrente.punti_noi ? 1 : 0);
+  const cronaca = !puoScoutare && !modoOspite
+    ? costruisciCronaca(azioniCronaca, (setId) => setConclusi.find((x) => x.id === setId)?.numero_set ?? 0)
+    : [];
   const timeoutSet = timeouts.filter((t) => t.set_id === setCorrente.id);
   const timeoutNoi = timeoutSet.filter((t) => t.squadra === "noi").length;
   const timeoutLoro = timeoutSet.filter((t) => t.squadra === "avversario").length;
@@ -1360,13 +1370,40 @@ export default function PartitaLive() {
                 </Pressable>
               </View>
             ) : (
-              <Text style={styles.nota}>Consultazione in sola lettura.</Text>
+              <View style={{ flex: 1, minHeight: 0, gap: 6 }}>
+                {/* Chi guarda senza registrare (atlete, presidente) segue la partita: punteggio di ogni set e azioni punto per punto, dalla piu' recente. */}
+                <View style={styles.rigaRisultatiSet}>
+                  {setConclusi.map((x) => (
+                    <View key={x.id} style={[styles.chipRisultatoSet, x.id === setCorrente.id && !x.concluso && styles.chipRisultatoSetAttivo]}>
+                      <Text style={styles.chipRisultatoSetEtichetta}>Set {x.numero_set}{x.id === setCorrente.id && !x.concluso ? " · in corso" : ""}</Text>
+                      <Text style={styles.chipRisultatoSetPunti}>{x.punti_noi}-{x.punti_avversario}</Text>
+                    </View>
+                  ))}
+                </View>
+                {!puoVedereAnalisi && match.stato !== "in_corso" && (
+                  <Text style={styles.nota}>A partita finita vedi solo le tue azioni.</Text>
+                )}
+                <FlatList
+                  style={{ flex: 1, minHeight: 0 }}
+                  data={cronaca}
+                  keyExtractor={(r) => r.id}
+                  ListEmptyComponent={<Text style={styles.nota}>Nessuna azione registrata finora.</Text>}
+                  renderItem={({ item }) => (
+                    <Text style={[styles.rigaLog, item.segnato === "noi" && styles.rigaLogNostro, item.segnato === "avversario" && styles.rigaLogLoro]}>
+                      {new Date(item.creatoIl).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })} · Set {item.numeroSet}{item.segnato ? ` · ${item.noi}-${item.avv}` : ""} · {item.testo}
+                      {item.athleteId ? ` · ${etichettaAtleta(item.athleteId)}` : ""}{item.zone}
+                    </Text>
+                  )}
+                />
+              </View>
             )}
             <View style={styles.rigaComandiFissi}>
               {/* Presidente e superuser vedono tutto: andamento punto a punto, resoconto e analisi della partita. */}
-              <Pressable onPress={() => setPopupEventi(true)} style={styles.tastoPiccolo}>
-                <Text style={styles.tastoPiccoloTesto}>🕑 Ultime azioni</Text>
-              </Pressable>
+              {modoOspite && (
+                <Pressable onPress={() => setPopupEventi(true)} style={styles.tastoPiccolo}>
+                  <Text style={styles.tastoPiccoloTesto}>🕑 Ultime azioni</Text>
+                </Pressable>
+              )}
               {!modoOspite && puoVedereAnalisi && (
                 <Pressable onPress={() => router.push(`/analisi-partita/${match.id}`)} style={styles.tastoPiccolo}>
                   <Text style={styles.tastoPiccoloTesto}>📈 Analisi e andamento</Text>
@@ -1471,9 +1508,11 @@ export default function PartitaLive() {
                 </Text>
               )}
             />
-            <Pressable style={styles.bottoneSecondario} onPress={() => { setPopupEventi(false); onAnnulla(); }} disabled={eventi.length === 0}>
-              <Text style={styles.bottoneSecondarioTesto}>↺ Annulla l'ultimo</Text>
-            </Pressable>
+            {puoScoutare && (
+              <Pressable style={styles.bottoneSecondario} onPress={() => { setPopupEventi(false); onAnnulla(); }} disabled={eventi.length === 0}>
+                <Text style={styles.bottoneSecondarioTesto}>↺ Annulla l'ultimo</Text>
+              </Pressable>
+            )}
           </View>
         </View>
       </Modal>
@@ -1694,6 +1733,13 @@ const styles = StyleSheet.create({
   tastoFase: { paddingVertical: 4, paddingHorizontal: 4, borderRadius: 6, backgroundColor: "rgba(255,255,255,0.06)", minHeight: 28, justifyContent: "center" },
   etichettaFase: { color: brand.colors.brandSecondary, fontSize: 11, fontWeight: "700", textAlign: "center" },
   etichettaLog: { color: brand.colors.muted, fontSize: 10, textTransform: "uppercase", marginTop: 4 },
+  rigaRisultatiSet: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
+  chipRisultatoSet: { backgroundColor: brand.colors.surfaceSecondary, borderRadius: 8, paddingVertical: 4, paddingHorizontal: 10, alignItems: "center", borderWidth: 1, borderColor: "transparent" },
+  chipRisultatoSetAttivo: { borderColor: brand.colors.brand },
+  chipRisultatoSetEtichetta: { color: brand.colors.muted, fontSize: 10 },
+  chipRisultatoSetPunti: { color: brand.colors.onSurface, fontSize: 15, fontWeight: "700" },
+  rigaLogNostro: { color: brand.colors.brand, fontWeight: "700" },
+  rigaLogLoro: { fontWeight: "700" },
   rigaLog: { color: brand.colors.onSurfaceSecondary, fontSize: 11, paddingVertical: 2 },
   bannerLibero: { backgroundColor: "rgba(0,200,120,0.14)", borderColor: brand.colors.success, borderWidth: 1, borderRadius: 8, padding: 8, gap: 6 },
   bannerLiberoTesto: { color: brand.colors.onSurface, fontSize: 13, fontWeight: "700" },
