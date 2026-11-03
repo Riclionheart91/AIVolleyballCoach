@@ -141,7 +141,7 @@ export function CorreggiFormazione({ visibile, setId, matchId, numeroSet, atlete
 
             {disponibili.length > 0 && (
               <>
-                <Text style={styles.sezione}>{scelta ? `Chi va in posizione ${scelta}?` : "Disponibili (tocca prima una posizione)"}</Text>
+                <Text style={styles.sezione}>{scelta ? `Chi va in posizione ${scelta}?` : "Giocatori Disponibili (tocca prima una posizione)"}</Text>
                 <View style={styles.rigaChip}>
                   {disponibili.map((a) => (
                     <Pressable key={a.id} onPress={() => assegna(a.id)} style={styles.chip}>

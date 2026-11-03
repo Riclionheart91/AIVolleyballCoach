@@ -85,7 +85,7 @@ export default function Atlete() {
         />
       )}
 
-      <PopupForm visibile={popupAperto} titolo="Nuovo inserimento in rosa" haModifiche={!!(nome.trim() || cognome.trim())} onChiudi={() => { setPopupAperto(false); setNome(""); setCognome(""); setRuoloCampo(null); }}>
+      <PopupForm visibile={popupAperto} titolo="Nuovo atleta" haModifiche={!!(nome.trim() || cognome.trim())} onChiudi={() => { setPopupAperto(false); setNome(""); setCognome(""); setRuoloCampo(null); }}>
         <TextInput style={styles.input} placeholder="Nome" placeholderTextColor={brand.colors.muted} value={nome} onChangeText={setNome} autoFocus />
         <TextInput style={styles.input} placeholder="Cognome" placeholderTextColor={brand.colors.muted} value={cognome} onChangeText={setCognome} />
         <Text style={styles.etichettaCampo}>Ruolo in campo</Text>

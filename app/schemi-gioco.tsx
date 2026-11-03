@@ -129,8 +129,8 @@ export default function SchemiGioco() {
         </Text>
         <Text style={styles.nota}>
           {perZona
-            ? "Ruoli: P/O palleggio e opposto, S banda, C centrale. Il libero prende il punto della centrale in seconda linea. Disposizione di base: S in 4 e 6, P/O in 1 e 2, C in 3 e 5."
-            : "Ruoli: P palleggio, S1 e S2 bande, C1 e C2 centrali, O opposto. Rotazione n = palleggio in posizione n (Rot. 1: P in 1, Rot. 2: P in 2, e così via)."}
+            ? "Ruoli: P/O palleggio e opposto, S schiacciatore, C centrale. Il libero prende il punto della centrale in seconda linea. Disposizione di base: S in 4 e 6, P/O in 1 e 2, C in 3 e 5."
+            : "Ruoli: P palleggio, S1 e S2 schiacciatori, C1 e C2 centrali, O opposto. Rotazione n = palleggio in posizione n (Rot. 1: P in 1, Rot. 2: P in 2, e così via)."}
         </Text>
 
         <View style={styles.selettoreRiga}>

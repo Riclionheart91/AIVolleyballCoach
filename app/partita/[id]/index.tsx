@@ -1388,7 +1388,7 @@ export default function PartitaLive() {
               <Pressable onPress={() => setPopupCambio(false)} hitSlop={12}><Text style={styles.chiudiPopup}>✕</Text></Pressable>
             </View>
             {uscenteGiaRientrata && (
-              <Text style={styles.nota}>Per {selezionata?.cognome} è un rientro dopo un cambio: per regolamento non può più uscire in questo set. Se hai sbagliato, correggi dal tasto ✏️ Formazione.</Text>
+              <Text style={styles.nota}>{selezionata?.cognome} è un rientro dopo un cambio: per regolamento non può più uscire in questo set. Se hai sbagliato, correggi dal tasto ✏️ Formazione.</Text>
             )}
             {sostituitaDaUscente && !uscenteGiaRientrata && (
               <Text style={styles.nota}>Per regolamento {selezionata?.cognome} può uscire solo per chi ha sostituito.</Text>
