@@ -3,6 +3,7 @@ import { View, Text, TextInput, Pressable, StyleSheet, ActivityIndicator } from 
 import { useLocalSearchParams, router } from "expo-router";
 import { useAuth } from "@/src/context/AuthContext";
 import { supabaseClient } from "@/src/lib/supabase";
+import { ottieniTokenCaptcha, erroreDaCaptcha, MSG_CAPTCHA_FALLITO } from "@/src/lib/captcha";
 import { agganciaScoutQr } from "@/src/services/scoutQr";
 import { brand } from "@/src/config";
 
@@ -33,8 +34,12 @@ export default function IngressoScout() {
     setInCorso(true);
     try {
       if (!session) {
-        const { error } = await supabaseClient.auth.signInAnonymously();
-        if (error) throw new Error(error.message.toLowerCase().includes("anonymous") ? "L'accesso senza account non è attivo: avvisa l'allenatore." : error.message);
+        const captchaToken = await ottieniTokenCaptcha();
+        const { error } = await supabaseClient.auth.signInAnonymously(captchaToken ? { options: { captchaToken } } : undefined);
+        if (error) {
+          if (erroreDaCaptcha(error.message)) throw new Error(MSG_CAPTCHA_FALLITO);
+          throw new Error(error.message.toLowerCase().includes("anonymous") ? "L'accesso senza account non è attivo: avvisa l'allenatore." : error.message);
+        }
       }
       const matchId = await agganciaScoutQr(String(token), nome.trim());
       try { if (typeof window !== "undefined") window.localStorage.setItem(CHIAVE_NOME_SCOUT, nome.trim()); } catch { /* il nome non si ricorda, pazienza */ }

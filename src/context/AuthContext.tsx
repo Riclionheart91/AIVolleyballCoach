@@ -5,6 +5,7 @@ import { supabaseClient } from "@/src/lib/supabase";
 import { supabase as cfg } from "@/src/config";
 import { accettaInvitiPendenti, accettaInvitoLink, CHIAVE_INVITO_LINK } from "@/src/services/teamInvites";
 import { avvisa } from "@/src/lib/confermaAzione";
+import { ottieniTokenCaptcha, erroreDaCaptcha, MSG_CAPTCHA_FALLITO } from "@/src/lib/captcha";
 import { miaSocietaPresidenza, type MiaSocieta } from "@/src/services/societa";
 import type { Ruolo, Season, Team } from "@/src/types/database";
 
@@ -233,8 +234,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   async function accediConPassword(email: string, password: string) {
-    const { error } = await supabaseClient.auth.signInWithPassword({ email: email.trim().toLowerCase(), password });
-    if (error) throw new Error("Email o password non corrette");
+    // Con il captcha attivo serve un token nuovo a ogni accesso; senza chiave nella build resta undefined.
+    const captchaToken = await ottieniTokenCaptcha();
+    const { error } = await supabaseClient.auth.signInWithPassword({
+      email: email.trim().toLowerCase(),
+      password,
+      options: captchaToken ? { captchaToken } : undefined,
+    });
+    if (error) throw new Error(erroreDaCaptcha(error.message) ? MSG_CAPTCHA_FALLITO : "Email o password non corrette");
   }
 
   /**
