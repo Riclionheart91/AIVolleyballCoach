@@ -1,4 +1,4 @@
-import { type ReactNode } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { View, Text, Pressable, StyleSheet, FlatList, useWindowDimensions } from "react-native";
 import { Stack } from "expo-router";
 import { brand } from "@/src/config";
@@ -30,6 +30,8 @@ interface Props {
   campo: ReactNode;
   righe: RigaCronaca[];
   nota?: string;
+  /** Tra un set e l'altro: il set di cui si aspetta la formazione e da quando decorrono i 3 minuti (null = non si sa). */
+  attesaFormazione: { numeroSet: number; daQuando: string | null } | null;
   mostraAnalisi: boolean;
   onAnalisi: () => void;
   onRicarica: () => void;
@@ -39,6 +41,44 @@ interface Props {
 type Voce =
   | { tipo: "set"; chiave: string; numero: number; testo: string }
   | { tipo: "riga"; chiave: string; riga: RigaCronaca };
+
+const SECONDI_ATTESA_FORMAZIONE = 180;
+
+function formattaTempo(secondi: number): string {
+  const m = Math.floor(secondi / 60);
+  const sec = secondi % 60;
+  return `${m}:${String(sec).padStart(2, "0")}`;
+}
+
+/** Avviso tra due set: si aspetta la formazione del nuovo set, con il conto alla rovescia dei 3 minuti concessi. */
+function AttesaFormazione({ numeroSet, daQuando }: { numeroSet: number; daQuando: string | null }) {
+  const [adesso, setAdesso] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setAdesso(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, []);
+  const trascorsi = daQuando ? Math.max(0, Math.floor((adesso - new Date(daQuando).getTime()) / 1000)) : null;
+  const restanti = trascorsi === null ? null : Math.max(0, SECONDI_ATTESA_FORMAZIONE - trascorsi);
+  const scaduto = restanti === 0;
+  const quasi = restanti !== null && restanti > 0 && restanti <= 30;
+  const colore = scaduto || quasi ? brand.colors.error : brand.colors.warning;
+  return (
+    <View style={[s.attesa, { borderColor: colore }]}>
+      <View style={{ flex: 1, gap: 2 }}>
+        <Text style={[s.attesaTitolo, { color: colore }]}>⏳ In attesa della formazione del Set {numeroSet}</Text>
+        <Text style={s.nota}>
+          {scaduto ? "Il tempo massimo di 3 minuti è scaduto." : "Hanno al massimo 3 minuti per consegnarla."}
+        </Text>
+        {restanti !== null && (
+          <View style={s.barraAttesa}>
+            <View style={[s.barraAttesaPiena, { width: `${(restanti / SECONDI_ATTESA_FORMAZIONE) * 100}%`, backgroundColor: colore }]} />
+          </View>
+        )}
+      </View>
+      {restanti !== null && <Text style={[s.attesaTempo, { color: colore }]}>{formattaTempo(restanti)}</Text>}
+    </View>
+  );
+}
 
 /**
  * Cosa vedono atlete e presidente mentre la partita e' in corso: nessun comando, solo il punto della situazione —
@@ -189,6 +229,7 @@ export function VistaLiveLettura(p: Props) {
         )}
         <View style={{ flex: 1, minHeight: 0, gap: 8 }}>
           {tabellone}
+          {p.attesaFormazione && <AttesaFormazione numeroSet={p.attesaFormazione.numeroSet} daQuando={p.attesaFormazione.daQuando} />}
           {chipSet}
           {elenco}
         </View>
@@ -260,6 +301,11 @@ const s = StyleSheet.create({
   pillolaNostra: { backgroundColor: brand.colors.success },
   pillolaLoro: { backgroundColor: brand.colors.error },
   pillolaPuntoTesto: { color: "#000", fontSize: 15, fontWeight: "800" },
+  attesa: { flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: brand.colors.surfaceSecondary, borderRadius: 12, borderWidth: 2, paddingVertical: 10, paddingHorizontal: 14 },
+  attesaTitolo: { fontSize: 15, fontWeight: "800" },
+  attesaTempo: { fontSize: 34, fontWeight: "800", fontVariant: ["tabular-nums"] },
+  barraAttesa: { height: 6, borderRadius: 3, backgroundColor: brand.colors.surfaceTertiary, overflow: "hidden", marginTop: 6 },
+  barraAttesaPiena: { height: 6, borderRadius: 3 },
   piede: { flexDirection: "row", gap: 8, padding: 10, borderTopWidth: 1, borderTopColor: brand.colors.border },
   tastoPiede: { flex: 1, backgroundColor: brand.colors.surfaceSecondary, borderRadius: 10, paddingVertical: 12, alignItems: "center" },
   tastoPiedeTesto: { color: brand.colors.onSurface, fontWeight: "700", fontSize: 14 },

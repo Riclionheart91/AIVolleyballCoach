@@ -974,6 +974,22 @@ export default function PartitaLive() {
     );
   }
 
+  // Tra un set e l'altro: la formazione del nuovo set va consegnata entro 3 minuti dall'ultimo punto del set precedente.
+  const setEFinito = (x: MatchSet) => x.concluso || (x.id === setCorrente.id && setFinitoPerPunteggio);
+  const vintiN = setConclusi.filter((x) => setEFinito(x) && x.punti_noi > x.punti_avversario).length;
+  const vintiL = setConclusi.filter((x) => setEFinito(x) && x.punti_avversario > x.punti_noi).length;
+  const ultimoEventoDelSet = (setId: string): string | null =>
+    azioniCronaca.filter((e) => e.set_id === setId).reduce<string | null>((max, e) => (max === null || e.creato_il > max ? e.creato_il : max), null);
+  let attesaFormazione: { numeroSet: number; daQuando: string | null } | null = null;
+  if (match.stato === "in_corso" && vintiN < 3 && vintiL < 3) {
+    if (setEFinito(setCorrente)) {
+      attesaFormazione = { numeroSet: setCorrente.numero_set + 1, daQuando: ultimoEventoDelSet(setCorrente.id) };
+    } else if (setCorrente.numero_set > 1 && formazione.length < 6 && !azioniCronaca.some((e) => e.set_id === setCorrente.id)) {
+      const prec = setConclusi.find((x) => x.numero_set === setCorrente.numero_set - 1);
+      attesaFormazione = { numeroSet: setCorrente.numero_set, daQuando: prec ? ultimoEventoDelSet(prec.id) : null };
+    }
+  }
+
   // Chi guarda senza registrare (atlete, presidente): schermata dedicata, senza comandi e con il pulsante per uscire.
   if (!puoScoutare && !modoOspite) {
     return (
@@ -993,6 +1009,7 @@ export default function PartitaLive() {
         campo={<CampoPallini pallini={pallini} />}
         righe={cronaca}
         nota={!puoVedereAnalisi && match.stato !== "in_corso" ? "A partita finita vedi solo le tue azioni." : undefined}
+        attesaFormazione={attesaFormazione}
         mostraAnalisi={puoVedereAnalisi}
         onAnalisi={() => router.push(`/analisi-partita/${match.id}`)}
         onRicarica={ricaricaPagina}
