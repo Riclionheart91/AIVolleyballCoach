@@ -280,7 +280,7 @@ export async function generaBlocchiGuidatoAI(
 
   const prompt =
     `Costruisci la periodizzazione dal ${dataInizio} al ${dataFine}.\n` +
-    `Squadra: ${numeroRosa} persone in rosa, livello "${risposte.livello}", ${risposte.seduteSettimana} sedute a settimana. ` +
+    `Squadra: ${numeroRosa} atleti, livello "${risposte.livello}", ${risposte.seduteSettimana} sedute a settimana. ` +
     `Obiettivo principale della stagione: "${risposte.obiettivoStagione}".\n\n` +
     `Gli obiettivi di ogni blocco devono essere scelti ESCLUSIVAMENTE da questi elenchi, copiati alla lettera:\n` +
     `TECNICI: ${listaTecnici.join(" | ")}\n` +

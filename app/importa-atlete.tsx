@@ -126,7 +126,7 @@ export default function ImportaAtlete() {
       {passo === "abbinamento" && fileLetto && mappatura && (
         <View style={styles.card}>
           <Text style={styles.titolo}>2. Abbina le colonne</Text>
-          <Text style={styles.nota}>Ho provato ad abbinare da solo quello che riconoscevo. Controlla e correggi dove serve — "Nessuna corrispondenza" salta quel campo per tutte le righe.</Text>
+          <Text style={styles.nota}>Ho provato ad abbinare in automatico quello che riconoscevo. Controlla e correggi dove serve — "Nessuna corrispondenza" salta quel campo per tutte le righe.</Text>
 
           {CAMPI_IMPORTABILI.map(({ campo, etichetta, obbligatorio }) => (
             <View key={campo} style={styles.rigaMappatura}>

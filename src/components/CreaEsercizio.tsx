@@ -212,7 +212,7 @@ export function CreaEsercizio({
               <Text style={styles.etichettaOpzione}>Correttivi individuali (dalle carenze rilevate)</Text>
               <View style={styles.chipRiga}>
                 <Pressable onPress={() => setAtletaAi(null)} style={[styles.chip, !atletaAi && styles.chipAttivo]}>
-                  <Text style={[styles.chipTesto, !atletaAi && styles.chipTestoAttivo]}>Nessuna</Text>
+                  <Text style={[styles.chipTesto, !atletaAi && styles.chipTestoAttivo]}>Nessuno</Text>
                 </Pressable>
                 {atlete.map((a) => (
                   <Pressable key={a.id} onPress={() => setAtletaAi(atletaAi?.id === a.id ? null : a)} style={[styles.chip, atletaAi?.id === a.id && styles.chipAttivo]}>

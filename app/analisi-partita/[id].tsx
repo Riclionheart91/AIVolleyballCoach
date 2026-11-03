@@ -409,7 +409,7 @@ export default function AnalisiPartita() {
               <Text style={styles.rigaAndamentoTesto}>Errori nostri / punti diretti avversari</Text>
               <Text style={styles.valoreScheda}>{erroriNostri} / {puntiDirettiLoro}</Text>
             </View>
-            <Text style={styles.dettaglioFondamentale}>"Errori nostri" sono quelli attribuiti a chi gioca; "punti diretti avversari" sono i punti loro registrati senza un nostro errore specifico.</Text>
+            <Text style={styles.dettaglioFondamentale}>"Errori nostri" sono quelli attribuiti a un atleta; "punti diretti avversari" sono i punti loro registrati senza un nostro errore specifico.</Text>
           </View>
         )}
 

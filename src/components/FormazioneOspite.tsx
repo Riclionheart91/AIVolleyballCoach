@@ -105,7 +105,7 @@ export function FormazioneOspite({ setId, numeroSet, atlete, precedente, risulta
 
       {haTurno && libere.length > 0 && (
         <>
-          <Text style={styles.sezione}>Giocatori Disponibili</Text>
+          <Text style={styles.sezione}>Atleti disponibili</Text>
           <View style={styles.rigaChip}>
             {libere.map((a) => (
               <Pressable key={a.id} onPress={() => assegna(a.id)} style={styles.chip}>

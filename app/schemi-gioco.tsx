@@ -124,7 +124,7 @@ export default function SchemiGioco() {
       <ScrollView style={{ flex: 1 }} scrollEnabled={!trascinando} contentContainerStyle={{ padding: 16, gap: 14 }}>
         <Text style={styles.nota}>
           {modificabile
-            ? "Scegli dove sta ogni atleta in ricezione, difesa e copertura. Nello scouting chi gioca è disegnato come pallino nei punti dello schema, così lo tocchi dove sta davvero. Quello che non imposti resta nella disposizione di base."
+            ? "Scegli dove sta ogni atleta in ricezione, difesa e copertura. Nello scouting ogni atleta è disegnato come pallino nei punti dello schema, così lo tocchi dove sta davvero. Quello che non imposti resta nella disposizione di base."
             : "Gli schemi di gioco della squadra: come si dispone la squadra in ricezione, difesa e copertura. Sola lettura: li modifica l'allenatore."}
         </Text>
         <Text style={styles.nota}>

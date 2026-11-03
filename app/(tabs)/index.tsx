@@ -66,7 +66,7 @@ export default function Atlete() {
             ))}
           </>
         }
-        ListEmptyComponent={!caricamento ? <Text style={styles.vuoto}>Nessuna atleta ancora. Usa il pulsante + qui sotto.</Text> : null}
+        ListEmptyComponent={!caricamento ? <Text style={styles.vuoto}>Nessun atleta ancora. Usa il pulsante + qui sotto.</Text> : null}
         renderItem={({ item }) => (
           <Pressable style={styles.riga} onPress={() => router.push(`/atleta/${item.id}`)}>
             <Text style={styles.rigaNome}>{item.nome} {item.cognome}</Text>
