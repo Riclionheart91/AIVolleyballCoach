@@ -370,6 +370,15 @@ export default function PartitaLive() {
     ],
     carica,
   );
+
+  // Tra un set e l'altro la trasmissione in tempo reale puo' perdere l'arrivo della nuova formazione (il set nuovo
+  // cambia proprio in quel momento): finche' si aspetta la formazione, chi guarda rilegge la partita ogni 3 secondi.
+  const inAttesaFormazioneRef = useRef(false);
+  useEffect(() => {
+    if (modoOspite || puoScoutareDaRuolo) return;
+    const timer = setInterval(() => { if (inAttesaFormazioneRef.current) carica(); }, 3000);
+    return () => clearInterval(timer);
+  }, [modoOspite, puoScoutareDaRuolo, carica]);
   // Canale a parte: se la tabella dei time-out non fosse nella trasmissione live,
   // non deve disturbare l'aggiornamento di punti e formazione.
   useSincronizzazioneLive([{ nome: "match_timeouts", colonnaFiltro: "match_id", valoreFiltro: match?.id }], carica);
@@ -989,6 +998,8 @@ export default function PartitaLive() {
       attesaFormazione = { numeroSet: setCorrente.numero_set, daQuando: prec ? ultimoEventoDelSet(prec.id) : null };
     }
   }
+
+  inAttesaFormazioneRef.current = attesaFormazione !== null;
 
   // Chi guarda senza registrare (atlete, presidente): schermata dedicata, senza comandi e con il pulsante per uscire.
   if (!puoScoutare && !modoOspite) {
