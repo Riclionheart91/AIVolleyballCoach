@@ -207,7 +207,7 @@ export function VistaLiveLettura(p: Props) {
   ) : null;
 
   return (
-    <View style={s.contenitore}>
+    <View style={[s.contenitore, { paddingTop: "env(safe-area-inset-top)" } as object]}>
       <Stack.Screen options={{ headerShown: false }} />
 
       <View style={s.barra}>
