@@ -1,5 +1,9 @@
 import { Stack } from "expo-router";
 import { AuthProvider } from "@/src/context/AuthContext";
+import { applicaDimensioneTesto } from "@/src/lib/dimensioneTesto";
+
+// Dimensione del testo: segue il telefono (o la scelta fatta in Impostazioni). Va applicata prima del primo disegno.
+applicaDimensioneTesto();
 
 /**
  * Zone sicure del telefono (notch, barra di stato, barra di Home): con l'app installata a tutto schermo

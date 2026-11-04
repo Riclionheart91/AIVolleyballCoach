@@ -1,11 +1,12 @@
 import { useCallback, useState } from "react";
-import { View, Text, TextInput, Pressable, StyleSheet, ScrollView, Switch } from "react-native";
+import { View, Text, TextInput, Pressable, StyleSheet, ScrollView, Switch, Platform } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { useAuth } from "@/src/context/AuthContext";
 import { impostaLinkSporteasy, leggiIntegrazione } from "@/src/services/sporteasy";
 import { elencaProvider, riepilogoChiamateAI, salvaProvider, type AiProviderConfig, type RigaRiepilogoAI } from "@/src/services/aiProviders";
 import { brand } from "@/src/config";
 import { TitoloGrande } from "@/src/components/TitoloGrande";
+import { etichetteDimensioneTesto, leggiScelta, salvaScelta, type ScelteDimensioneTesto } from "@/src/lib/dimensioneTesto";
 import { avvisa } from "@/src/lib/confermaAzione";
 import { leggiImpostazioniNotifiche, salvaImpostazioniNotifiche, IMPOSTAZIONI_NOTIFICHE_DEFAULT, type ImpostazioniNotificheEsercizio } from "@/src/lib/impostazioniEsercizio";
 import {
@@ -113,6 +114,20 @@ export default function Impostazioni() {
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.contenuto}>
       <TitoloGrande titolo="Impostazioni" />
+      {Platform.OS === "web" && (
+        <View style={styles.card}>
+          <Text style={styles.sezioneTitolo}>Dimensione del testo</Text>
+          <Text style={styles.nota}>Di base segue la dimensione del testo impostata sul telefono. Puoi sceglierla a mano: vale per questo dispositivo e la pagina si ricarica.</Text>
+          <View style={styles.selettoreFederazione}>
+            {(Object.keys(etichetteDimensioneTesto) as ScelteDimensioneTesto[]).map((k) => (
+              <Pressable key={k} style={[styles.chipDimensione, leggiScelta() === k && styles.chipFederazioneAttivo]} onPress={() => { salvaScelta(k); if (typeof window !== "undefined") window.location.reload(); }}>
+                <Text style={[styles.chipFederazioneTesto, leggiScelta() === k && styles.chipFederazioneTestoAttivo]}>{k === "auto" ? "Automatica" : etichetteDimensioneTesto[k]}</Text>
+              </Pressable>
+            ))}
+          </View>
+        </View>
+      )}
+
       <View style={styles.card}>
         <Text style={styles.sezioneTitolo}>Avvisi durante l'esercizio</Text>
         <Text style={styles.nota}>Preferenza di questo dispositivo: quanto spesso ricevere un promemoria (vibrazione, suono e notifica) mentre un esercizio è in corso. L'avviso a 30 secondi dalla fine e quello di fine esercizio restano sempre attivi quando l'esercizio ha una durata prevista.</Text>
@@ -202,7 +217,8 @@ const styles = StyleSheet.create({
   rigaProviderNome: { color: brand.colors.onSurface, fontWeight: "600", width: 90 },
   inputPriorita: { backgroundColor: brand.colors.surfaceTertiary, color: brand.colors.onSurface, borderRadius: 10, padding: 6, width: 44, minHeight: 44, textAlign: "center" },
   inputModello: { flex: 1, minWidth: 0, minHeight: 44, backgroundColor: brand.colors.surfaceTertiary, color: brand.colors.onSurface, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 6, fontSize: 13 },
-  selettoreFederazione: { flexDirection: "row", gap: 6 },
+  selettoreFederazione: { flexDirection: "row", gap: 6, flexWrap: "wrap" },
+  chipDimensione: { minHeight: 44, paddingHorizontal: 14, borderRadius: 999, backgroundColor: brand.colors.surfaceTertiary, alignItems: "center", justifyContent: "center" },
   chipFederazione: { paddingVertical: 5, paddingHorizontal: 10, borderRadius: 14, backgroundColor: brand.colors.surfaceTertiary },
   chipFederazioneAttivo: { backgroundColor: brand.colors.brand },
   chipFederazioneTesto: { color: brand.colors.onSurfaceSecondary, fontSize: 12 },
