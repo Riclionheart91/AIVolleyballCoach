@@ -1,5 +1,5 @@
-import { useCallback, useState } from "react";
-import { View, Text, FlatList, TextInput, Pressable, StyleSheet, RefreshControl } from "react-native";
+import { useCallback, useMemo, useRef, useState } from "react";
+import { View, Text, SectionList, ScrollView, TextInput, Pressable, StyleSheet, RefreshControl } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { useAuth } from "@/src/context/AuthContext";
 import { creaAtleta, elencaAtlete, elencaAtleteArchiviate, ripristinaAtleta } from "@/src/services/athletes";
@@ -18,6 +18,49 @@ function testoAvatar(a: Athlete): string {
   return `${(a.nome ?? "").trim().charAt(0)}${(a.cognome ?? "").trim().charAt(0)}`.toUpperCase();
 }
 
+type StatoCertificato = "valido" | "in_scadenza" | "scaduto" | "mancante";
+type FiltroCertificato = StatoCertificato | null;
+type FiltroRuolo = RuoloCampo | null;
+type SezioneRosa = { lettera: string; data: Athlete[] };
+
+const GIORNI_PREAVVISO_CERTIFICATO = 30;
+const SOGLIA_INDICE_AZ = 12;
+
+const opzioniCertificato: { valore: StatoCertificato; etichetta: string }[] = [
+  { valore: "valido", etichetta: "Valido" },
+  { valore: "in_scadenza", etichetta: "In scadenza" },
+  { valore: "scaduto", etichetta: "Scaduto" },
+  { valore: "mancante", etichetta: "Mancante" },
+];
+
+function dueCifre(n: number): string { return n < 10 ? `0${n}` : String(n); }
+function isoLocale(d: Date): string { return `${d.getFullYear()}-${dueCifre(d.getMonth() + 1)}-${dueCifre(d.getDate())}`; }
+
+/** Stato del certificato medico (stesse soglie del centro notifiche: scaduto, in scadenza entro 30 giorni). */
+function statoCertificato(a: Athlete, oggi: string, soglia: string): StatoCertificato {
+  const raw = (a.scadenza_certificato_medico ?? "").slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) return "mancante";
+  if (raw < oggi) return "scaduto";
+  if (raw <= soglia) return "in_scadenza";
+  return "valido";
+}
+
+/** Minuscolo e senza accenti, per confronti di ricerca e ordinamento. */
+function normalizza(t: string | null | undefined): string {
+  return (t ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+}
+
+/** Lettera iniziale del cognome (A-Z, senza accenti); "#" per tutto il resto. */
+function letteraIniziale(a: Athlete): string {
+  const l = normalizza(a.cognome).charAt(0).toUpperCase();
+  return /^[A-Z]$/.test(l) ? l : "#";
+}
+
+function corrisponde(a: Athlete, token: string): boolean {
+  if (/^\d+$/.test(token)) return a.numero_maglia != null && String(a.numero_maglia).startsWith(token);
+  return `${normalizza(a.nome)} ${normalizza(a.cognome)} ${normalizza(a.cognome)} ${normalizza(a.nome)}`.includes(token);
+}
+
 export default function Atlete() {
   const { team, puoScrivere } = useAuth();
   const [atlete, setAtlete] = useState<Athlete[]>([]);
@@ -29,6 +72,12 @@ export default function Atlete() {
   const [nome, setNome] = useState("");
   const [cognome, setCognome] = useState("");
   const [ruoloCampo, setRuoloCampo] = useState<RuoloCampo | null>(null);
+  const [ricerca, setRicerca] = useState("");
+  const [filtroRuolo, setFiltroRuolo] = useState<FiltroRuolo>(null);
+  const [filtroCertificato, setFiltroCertificato] = useState<FiltroCertificato>(null);
+  const listaRef = useRef<SectionList<Athlete, SezioneRosa>>(null);
+  const tentativiScroll = useRef(0);
+  const ultimaLettera = useRef<string | null>(null);
 
   const carica = useCallback(async () => {
     if (!team) return;
@@ -43,6 +92,58 @@ export default function Atlete() {
 
   useFocusEffect(useCallback(() => { carica(); }, [carica]));
 
+  const filtriAttivi = !!ricerca.trim() || filtroRuolo !== null || filtroCertificato !== null;
+
+  // Stato del certificato per atleta (solo chi può scrivere vede e filtra i dati medici).
+  const statiCertificato = useMemo(() => {
+    const mappa: Record<string, StatoCertificato> = {};
+    const adesso = new Date();
+    const oggi = isoLocale(adesso);
+    const soglia = isoLocale(new Date(adesso.getFullYear(), adesso.getMonth(), adesso.getDate() + GIORNI_PREAVVISO_CERTIFICATO));
+    for (const a of atlete) mappa[a.id] = statoCertificato(a, oggi, soglia);
+    return mappa;
+  }, [atlete]);
+
+  const sezioni = useMemo<SezioneRosa[]>(() => {
+    const token = normalizza(ricerca).split(/\s+/).filter(Boolean);
+    const filtrate = atlete.filter((a) => {
+      if (filtroRuolo && a.ruolo_campo !== filtroRuolo) return false;
+      if (puoScrivere && filtroCertificato && statiCertificato[a.id] !== filtroCertificato) return false;
+      return token.every((t) => corrisponde(a, t));
+    });
+    filtrate.sort((x, y) =>
+      normalizza(x.cognome).localeCompare(normalizza(y.cognome), "it") ||
+      normalizza(x.nome).localeCompare(normalizza(y.nome), "it"));
+    const gruppi = new Map<string, Athlete[]>();
+    for (const a of filtrate) {
+      const l = letteraIniziale(a);
+      const g = gruppi.get(l);
+      if (g) g.push(a); else gruppi.set(l, [a]);
+    }
+    return Array.from(gruppi.entries())
+      .sort(([a], [b]) => (a === "#" ? 1 : b === "#" ? -1 : a.localeCompare(b)))
+      .map(([lettera, data]) => ({ lettera, data }));
+  }, [atlete, ricerca, filtroRuolo, filtroCertificato, puoScrivere, statiCertificato]);
+
+  const visibili = useMemo(() => sezioni.reduce((n, s) => n + s.data.length, 0), [sezioni]);
+  const mostraIndice = visibili >= SOGLIA_INDICE_AZ;
+
+  function azzeraFiltri() {
+    setRicerca(""); setFiltroRuolo(null); setFiltroCertificato(null);
+  }
+
+  function vaiALettera(lettera: string) {
+    const sectionIndex = sezioni.findIndex((s) => s.lettera === lettera);
+    if (sectionIndex < 0) return;
+    tentativiScroll.current = 0;
+    ultimaLettera.current = lettera;
+    try {
+      listaRef.current?.scrollToLocation({ sectionIndex, itemIndex: 0, viewPosition: 0, animated: true });
+    } catch {
+      // se la posizione non è ancora misurata, ci riprova onScrollToIndexFailed
+    }
+  }
+
   async function aggiungi() {
     if (!team || !nome.trim() || !cognome.trim()) return;
     await creaAtleta(team.id, { nome: nome.trim(), cognome: cognome.trim(), ruolo_campo: ruoloCampo, numero_maglia: null, data_nascita: null });
@@ -56,17 +157,74 @@ export default function Atlete() {
 
   return (
     <View style={styles.container}>
-      <FlatList
-        data={atlete}
+      <SectionList<Athlete, SezioneRosa>
+        ref={listaRef}
+        sections={sezioni}
         keyExtractor={(a) => a.id}
-        contentContainerStyle={styles.contenuto}
+        stickySectionHeadersEnabled
+        keyboardShouldPersistTaps="handled"
+        initialNumToRender={80}
+        contentContainerStyle={[styles.contenuto, mostraIndice && styles.contenutoConIndice]}
         refreshControl={<RefreshControl refreshing={caricamento} onRefresh={carica} tintColor={brand.colors.brand} />}
+        onScrollToIndexFailed={() => {
+          // elemento non ancora misurato: un solo nuovo tentativo a layout completato
+          if (tentativiScroll.current >= 2 || !ultimaLettera.current) return;
+          tentativiScroll.current += 1;
+          const l = ultimaLettera.current;
+          setTimeout(() => {
+            const sectionIndex = sezioni.findIndex((x) => x.lettera === l);
+            if (sectionIndex >= 0) {
+              try { listaRef.current?.scrollToLocation({ sectionIndex, itemIndex: 0, viewPosition: 0, animated: true }); } catch { /* ignora */ }
+            }
+          }, 120);
+        }}
         ListHeaderComponent={
           <>
             <TitoloGrande
               titolo="Rosa"
-              sottotitolo={team ? `${team.nome} · ${atlete.length} ${atlete.length === 1 ? "atleta" : "atlete"}` : undefined}
+              sottotitolo={team ? `${team.nome} · ${filtriAttivi ? `${visibili} di ${atlete.length}` : atlete.length} ${(filtriAttivi ? visibili : atlete.length) === 1 ? "atleta" : "atlete"}` : undefined}
             />
+            <View style={styles.ricerca}>
+              <Text style={styles.ricercaIcona} accessible={false}>🔍</Text>
+              <TextInput
+                testID="rosa-ricerca"
+                style={styles.ricercaInput}
+                placeholder="Cerca per nome, cognome o numero"
+                placeholderTextColor={brand.colors.muted}
+                value={ricerca}
+                onChangeText={setRicerca}
+                autoCapitalize="none"
+                autoCorrect={false}
+                returnKeyType="search"
+                clearButtonMode="never"
+                accessibilityLabel="Cerca atlete per nome, cognome o numero di maglia"
+              />
+              {!!ricerca && (
+                <Pressable onPress={() => setRicerca("")} hitSlop={8} style={styles.ricercaPulisci} accessibilityRole="button" accessibilityLabel="Cancella la ricerca">
+                  <Text style={styles.ricercaPulisciTesto}>✕</Text>
+                </Pressable>
+              )}
+            </View>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled" style={styles.filtriScroll} contentContainerStyle={styles.filtriRiga}>
+              <Pressable onPress={() => setFiltroRuolo(null)} hitSlop={{ top: 4, bottom: 4 }} style={[styles.chipFiltro, filtroRuolo === null && styles.chipAttivo]}>
+                <Text style={[styles.chipTesto, filtroRuolo === null && styles.chipTestoAttivo]}>Tutte</Text>
+              </Pressable>
+              {ruoliCampo.map((r) => (
+                <Pressable key={r} onPress={() => setFiltroRuolo(filtroRuolo === r ? null : r)} hitSlop={{ top: 4, bottom: 4 }} style={[styles.chipFiltro, filtroRuolo === r && styles.chipAttivo]}>
+                  <Text style={[styles.chipTesto, filtroRuolo === r && styles.chipTestoAttivo]}>{r}</Text>
+                </Pressable>
+              ))}
+            </ScrollView>
+            {puoScrivere && (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled" style={styles.filtriScroll} contentContainerStyle={styles.filtriRiga}>
+                <Text style={styles.etichettaFiltro}>Certificato</Text>
+                {opzioniCertificato.map((o) => (
+                  <Pressable key={o.valore} onPress={() => setFiltroCertificato(filtroCertificato === o.valore ? null : o.valore)} hitSlop={{ top: 4, bottom: 4 }} style={[styles.chipFiltro, filtroCertificato === o.valore && styles.chipAttivo]}>
+                    <Text style={[styles.chipTesto, filtroCertificato === o.valore && styles.chipTestoAttivo]}>{o.etichetta}</Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
+            )}
             {puoScrivere && (
               <Pressable style={styles.bottoneReminder} onPress={() => setReminderSporteasy(true)}>
                 <View style={styles.iconaReminder}><Text style={styles.iconaReminderTesto}>💬</Text></View>
@@ -100,27 +258,71 @@ export default function Atlete() {
             )}
           </>
         }
-        ListEmptyComponent={!caricamento ? <Text style={styles.vuoto}>Nessuna atleta ancora. Usa il pulsante + qui sotto.</Text> : null}
-        renderItem={({ item, index }) => (
-          <View
-            style={[
-              styles.rigaContenitore,
-              index === 0 && styles.rigaPrima,
-              index === atlete.length - 1 && styles.rigaUltima,
-            ]}
-          >
-            {index > 0 && <View style={styles.separatore} />}
-            <Pressable style={styles.riga} onPress={() => router.push(`/atleta/${item.id}`)}>
-              <View style={styles.avatar}><Text style={styles.avatarTesto}>{testoAvatar(item)}</Text></View>
-              <View style={{ flex: 1, gap: 1 }}>
-                <Text style={styles.rigaNome} numberOfLines={1}>{item.nome} {item.cognome}</Text>
-                {!!item.ruolo_campo && <Text style={styles.rigaSotto}>{item.ruolo_campo}{item.numero_maglia ? ` — n. ${item.numero_maglia}` : ""}</Text>}
-              </View>
-              <Text style={styles.chevron}>›</Text>
-            </Pressable>
+        ListEmptyComponent={
+          caricamento ? null : atlete.length === 0 ? (
+            <Text style={styles.vuoto}>Nessuna atleta ancora. Usa il pulsante + qui sotto.</Text>
+          ) : (
+            <View style={styles.vuotoBox}>
+              <Text style={styles.vuotoTitolo}>Nessuna atleta trovata</Text>
+              <Text style={styles.vuoto}>Prova a cambiare la ricerca o i filtri.</Text>
+              <Pressable style={styles.bottoneAzzera} onPress={azzeraFiltri} accessibilityRole="button">
+                <Text style={styles.bottoneAzzeraTesto}>Azzera i filtri</Text>
+              </Pressable>
+            </View>
+          )
+        }
+        renderSectionHeader={({ section }) => (
+          <View style={styles.intestazioneSezione}>
+            <Text style={styles.intestazioneSezioneTesto} accessibilityRole="header">{section.lettera}</Text>
           </View>
         )}
+        renderItem={({ item, index, section }) => {
+          const statoCert = puoScrivere ? statiCertificato[item.id] : undefined;
+          return (
+            <View
+              style={[
+                styles.rigaContenitore,
+                index === 0 && styles.rigaPrima,
+                index === section.data.length - 1 && styles.rigaUltima,
+              ]}
+            >
+              {index > 0 && <View style={styles.separatore} />}
+              <Pressable style={styles.riga} onPress={() => router.push(`/atleta/${item.id}`)}>
+                <View style={styles.avatar}><Text style={styles.avatarTesto}>{testoAvatar(item)}</Text></View>
+                <View style={{ flex: 1, gap: 1 }}>
+                  <Text style={styles.rigaNome} numberOfLines={1}>{item.nome} {item.cognome}</Text>
+                  {!!item.ruolo_campo && <Text style={styles.rigaSotto}>{item.ruolo_campo}{item.numero_maglia ? ` — n. ${item.numero_maglia}` : ""}</Text>}
+                </View>
+                {(statoCert === "scaduto" || statoCert === "in_scadenza") && (
+                  <View
+                    accessible
+                    accessibilityLabel={statoCert === "scaduto" ? "Certificato medico scaduto" : "Certificato medico in scadenza"}
+                    style={[styles.puntoCertificato, { backgroundColor: statoCert === "scaduto" ? brand.colors.error : brand.colors.warning }]}
+                  />
+                )}
+                <Text style={styles.chevron}>›</Text>
+              </Pressable>
+            </View>
+          );
+        }}
       />
+
+      {mostraIndice && (
+        <View style={styles.indice} pointerEvents="box-none">
+          {sezioni.map((s) => (
+            <Pressable
+              key={s.lettera}
+              onPress={() => vaiALettera(s.lettera)}
+              hitSlop={{ left: 14, right: 6 }}
+              style={styles.indiceLettera}
+              accessibilityRole="button"
+              accessibilityLabel={`Vai alla lettera ${s.lettera}`}
+            >
+              <Text style={styles.indiceTesto}>{s.lettera}</Text>
+            </Pressable>
+          ))}
+        </View>
+      )}
 
       {puoScrivere && (
         <FabMenu
@@ -164,6 +366,26 @@ export default function Atlete() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: brand.colors.surface },
   contenuto: { padding: 16, paddingBottom: 100, width: "100%", maxWidth: 900, alignSelf: "center" },
+  contenutoConIndice: { paddingRight: 30 },
+  ricerca: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: brand.colors.surfaceTertiary, borderRadius: 12, paddingLeft: 12, minHeight: 44, marginBottom: 10 },
+  ricercaIcona: { fontSize: 15, opacity: 0.7 },
+  ricercaInput: { flex: 1, color: brand.colors.onSurface, fontSize: 16, minHeight: 44, paddingVertical: 8 },
+  ricercaPulisci: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },
+  ricercaPulisciTesto: { color: brand.colors.muted, fontSize: 15, fontWeight: "700" },
+  filtriScroll: { flexGrow: 0, marginBottom: 8 },
+  filtriRiga: { flexDirection: "row", alignItems: "center", gap: 8, paddingRight: 8 },
+  etichettaFiltro: { color: brand.colors.muted, fontSize: 12, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.6, marginRight: 2 },
+  chipFiltro: { paddingHorizontal: 14, minHeight: 36, borderRadius: 999, backgroundColor: brand.colors.surfaceTertiary, alignItems: "center", justifyContent: "center" },
+  intestazioneSezione: { backgroundColor: brand.colors.surface, paddingTop: 10, paddingBottom: 6, paddingHorizontal: 4 },
+  intestazioneSezioneTesto: { color: brand.colors.muted, fontSize: 13, fontWeight: "700", letterSpacing: 0.4 },
+  puntoCertificato: { width: 10, height: 10, borderRadius: 5, marginRight: 2 },
+  vuotoBox: { alignItems: "center", gap: 8, marginTop: 24 },
+  vuotoTitolo: { color: brand.colors.onSurface, fontSize: 17, fontWeight: "700", textAlign: "center" },
+  bottoneAzzera: { backgroundColor: brand.colors.surfaceTertiary, borderRadius: 999, minHeight: 44, paddingHorizontal: 20, alignItems: "center", justifyContent: "center", marginTop: 4 },
+  bottoneAzzeraTesto: { color: brand.colors.brand, fontSize: 15, fontWeight: "700" },
+  indice: { position: "absolute", right: 2, top: 0, bottom: 100, justifyContent: "center", alignItems: "center", width: 24 },
+  indiceLettera: { height: 20, width: 24, alignItems: "center", justifyContent: "center" },
+  indiceTesto: { color: brand.colors.brand, fontSize: 11, fontWeight: "700" },
   input: { backgroundColor: brand.colors.surfaceTertiary, color: brand.colors.onSurface, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, minHeight: 44, fontSize: 16 },
   etichettaCampo: { color: brand.colors.muted, fontSize: 13, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.6, marginTop: 2 },
   bottone: { backgroundColor: brand.colors.brand, paddingVertical: 12, paddingHorizontal: 20, minHeight: 44, borderRadius: 999, alignItems: "center", justifyContent: "center" },
