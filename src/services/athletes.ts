@@ -37,7 +37,13 @@ export async function ripristinaAtleta(atletaId: string): Promise<void> {
 /** Elimina definitivamente: cancella anche valutazioni/presenze/RPE storiche collegate (cascade a livello di database) — usare con cautela, l'archiviazione è quasi sempre la scelta giusta. */
 export async function eliminaAtletaDefinitivamente(atletaId: string): Promise<void> {
   const { error } = await supabaseClient.from("athletes").delete().eq("id", atletaId);
-  if (error) throw error;
+  if (error) {
+    // Un'atleta con un account collegato non si puo' eliminare: l'account resterebbe in squadra senza atleta.
+    if (error.message.includes("team_members_atleta_id_obbligatorio")) {
+      throw new Error("Questa atleta ha un account collegato (può accedere all'app). Prima togli l'accesso dell'account dalla squadra, poi potrai eliminarla. Se vuoi solo non vederla più, usa «Archivia».");
+    }
+    throw error;
+  }
 }
 
 export interface InputAtleta {
