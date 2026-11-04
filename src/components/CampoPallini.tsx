@@ -35,7 +35,7 @@ function Disco({ p, lato, onPress }: { p: Pallino; lato: { w: number; h: number 
       style={{ position: "absolute", left: p.x * lato.w - d, top: p.y * lato.h - d / 2, width: d * 2, alignItems: "center" }}
     >
       <View style={[styles.pallino, { width: d, height: d, borderRadius: d / 2 }, p.accento && styles.pallinoAccento, p.attivo && styles.pallinoAttivo]}>
-        <Text style={[styles.pallinoTesto, { fontSize: Math.max(11, d * 0.42) }, p.accento && !p.attivo && styles.pallinoTestoAccento]}>{p.etichetta}</Text>
+        <Text style={[styles.pallinoTesto, { fontSize: Math.max(11, d * 0.42) }, p.accento && !p.attivo && styles.pallinoTestoAccento, p.attivo && styles.pallinoTestoAttivo]}>{p.etichetta}</Text>
       </View>
       {p.sotto ? <Text style={[styles.sotto, { fontSize: Math.max(9, d * 0.28) }]} numberOfLines={1}>{p.sotto}</Text> : null}
     </Pressable>
@@ -102,7 +102,7 @@ function PallinoTrascinabile({
       style={[{ position: "absolute", left: p.x * lato.w - d / 2, top: p.y * lato.h - d / 2, width: d, height: d }, modificabile ? ({ touchAction: "none" } as any) : null]}
     >
       <View style={[styles.pallino, { width: d, height: d, borderRadius: d / 2 }, p.accento && styles.pallinoAccento, p.attivo && styles.pallinoAttivo]}>
-        <Text style={[styles.pallinoTesto, { fontSize: Math.max(11, d * 0.42) }, p.accento && !p.attivo && styles.pallinoTestoAccento]}>{p.etichetta}</Text>
+        <Text style={[styles.pallinoTesto, { fontSize: Math.max(11, d * 0.42) }, p.accento && !p.attivo && styles.pallinoTestoAccento, p.attivo && styles.pallinoTestoAttivo]}>{p.etichetta}</Text>
       </View>
       {p.sotto ? <Text pointerEvents="none" style={[styles.sottoEditor, { top: d + 1, left: -d / 2, width: d * 2, fontSize: Math.max(9, d * 0.28) }]} numberOfLines={1}>{p.sotto}</Text> : null}
     </View>
@@ -176,16 +176,17 @@ export function CampoSchemaEditor({
 }
 
 const styles = StyleSheet.create({
-  campo: { flex: 1, width: "100%", backgroundColor: "#1a3a2a", borderRadius: 12, borderWidth: 2, borderColor: brand.colors.brand, overflow: "hidden", position: "relative" },
-  campoEditor: { width: "100%", aspectRatio: 1, maxWidth: 440, alignSelf: "center", backgroundColor: "#1a3a2a", borderRadius: 12, borderWidth: 2, borderColor: brand.colors.brand, overflow: "hidden", position: "relative" },
-  rete: { position: "absolute", top: 0, left: 0, right: 0, height: 16, alignItems: "center", justifyContent: "center", borderBottomWidth: 3, borderBottomColor: "#fff" },
-  reteTesto: { color: "#fff", fontSize: 9, fontWeight: "700", letterSpacing: 2 },
-  lineaAttacco: { position: "absolute", top: "33%", left: 0, right: 0, height: 1, backgroundColor: "rgba(255,255,255,0.35)" },
-  pallino: { backgroundColor: "rgba(255,255,255,0.92)", alignItems: "center", justifyContent: "center", borderWidth: 2, borderColor: "#fff" },
+  campo: { flex: 1, width: "100%", backgroundColor: brand.colors.surfaceSecondary, borderRadius: 16, borderWidth: 2, borderColor: brand.colors.border, overflow: "hidden", position: "relative" },
+  campoEditor: { width: "100%", aspectRatio: 1, maxWidth: 440, alignSelf: "center", backgroundColor: brand.colors.surfaceSecondary, borderRadius: 16, borderWidth: 2, borderColor: brand.colors.border, overflow: "hidden", position: "relative" },
+  rete: { position: "absolute", top: 0, left: 0, right: 0, height: 16, alignItems: "center", justifyContent: "center", borderBottomWidth: 3, borderBottomColor: brand.colors.brandSecondary },
+  reteTesto: { color: brand.colors.onSurfaceSecondary, fontSize: 9, fontWeight: "700", letterSpacing: 2 },
+  lineaAttacco: { position: "absolute", top: "33%", left: 0, right: 0, height: 1, backgroundColor: brand.colors.border },
+  pallino: { backgroundColor: brand.colors.surfaceTertiary, alignItems: "center", justifyContent: "center", borderWidth: 2, borderColor: brand.colors.surfaceTertiary },
   pallinoAccento: { backgroundColor: brand.colors.brandSecondary, borderColor: brand.colors.brandSecondary },
-  pallinoAttivo: { backgroundColor: brand.colors.brand, borderColor: "#fff", borderWidth: 3 },
-  pallinoTesto: { color: "#111", fontWeight: "800" },
+  pallinoAttivo: { backgroundColor: brand.colors.brand, borderColor: "rgba(255,122,0,0.35)", borderWidth: 3 },
+  pallinoTestoAttivo: { color: "#000" },
+  pallinoTesto: { color: brand.colors.onSurface, fontWeight: "800" },
   pallinoTestoAccento: { color: "#000" },
-  sotto: { color: "#fff", fontWeight: "600", marginTop: 1, textAlign: "center" },
-  sottoEditor: { position: "absolute", color: "rgba(255,255,255,0.8)", fontWeight: "600", textAlign: "center" },
+  sotto: { color: brand.colors.onSurfaceSecondary, fontWeight: "600", marginTop: 1, textAlign: "center" },
+  sottoEditor: { position: "absolute", color: brand.colors.onSurfaceSecondary, fontWeight: "600", textAlign: "center" },
 });

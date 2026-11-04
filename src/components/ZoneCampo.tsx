@@ -88,7 +88,7 @@ export function GrigliaZone({ valori }: { valori: Record<number, ValoreZona> }) 
 const styles = StyleSheet.create({
   campo: { gap: 4 },
   riga: { flexDirection: "row", gap: 4 },
-  cella: { flex: 1, backgroundColor: brand.colors.surfaceTertiary, borderRadius: 8, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: brand.colors.border },
+  cella: { flex: 1, backgroundColor: brand.colors.surfaceTertiary, borderRadius: 12, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: brand.colors.border },
   cellaReport: { paddingVertical: 8, minHeight: 78, gap: 1 },
   numero: { color: brand.colors.onSurface, fontSize: 20, fontWeight: "800" },
   numeroPiccolo: { color: brand.colors.muted, fontSize: 10, fontWeight: "700" },
