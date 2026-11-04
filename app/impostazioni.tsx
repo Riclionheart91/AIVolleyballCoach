@@ -15,6 +15,13 @@ import {
   attivaNotifichePushCertificati,
   disattivaNotifichePushCertificati,
 } from "@/src/lib/pushCertificati";
+import {
+  pushEventiSupportato,
+  leggiPreferenzeNotificheEventi,
+  impostaNotificaEvento,
+  type PreferenzeNotificheEventi,
+  type TipoNotificaEvento,
+} from "@/src/lib/pushEventi";
 
 const PROVIDER_CODICI = ["GEMINI", "GROQ", "OPENROUTER"] as const;
 
@@ -28,6 +35,8 @@ export default function Impostazioni() {
   const [intervalloTesto, setIntervalloTesto] = useState(String(IMPOSTAZIONI_NOTIFICHE_DEFAULT.intervalloMinuti));
   const [pushCertificatiAttivo, setPushCertificatiAttivo] = useState(false);
   const [caricandoPush, setCaricandoPush] = useState(false);
+  const [prefEventi, setPrefEventi] = useState<PreferenzeNotificheEventi>({ disponibile: false, partita_live: false, convocazioni: false });
+  const [caricandoEventi, setCaricandoEventi] = useState(false);
 
   const carica = useCallback(async () => {
     if (!team) return;
@@ -42,6 +51,7 @@ export default function Impostazioni() {
     setNotificheEsercizio(imp);
     setIntervalloTesto(String(imp.intervalloMinuti));
     setPushCertificatiAttivo(await statoAbbonamentoPushCertificati().catch(() => false));
+    setPrefEventi(await leggiPreferenzeNotificheEventi());
   }, [team, puoScrivere, isSuperuser]);
 
   useFocusEffect(useCallback(() => { carica(); }, [carica]));
@@ -56,6 +66,19 @@ export default function Impostazioni() {
       avvisa("Errore", (e as Error).message);
     } finally {
       setCaricandoPush(false);
+    }
+  }
+
+  async function cambiaNotificaEvento(tipo: TipoNotificaEvento, attiva: boolean) {
+    setCaricandoEventi(true);
+    try {
+      await impostaNotificaEvento(tipo, attiva);
+      setPrefEventi((p) => ({ ...p, [tipo]: attiva }));
+      setPushCertificatiAttivo(await statoAbbonamentoPushCertificati().catch(() => false));
+    } catch (e) {
+      avvisa("Errore", (e as Error).message);
+    } finally {
+      setCaricandoEventi(false);
     }
   }
 
@@ -158,6 +181,29 @@ export default function Impostazioni() {
         </View>
       )}
 
+      {ruolo != null && prefEventi.disponibile && pushEventiSupportato() && (
+        <View style={styles.card} testID="impostazioni-notifiche-eventi">
+          <Text style={styles.sezioneTitolo}>Notifiche push — partite e convocazioni</Text>
+          <Text style={styles.nota}>Scegli quali avvisi ricevere su questo dispositivo, anche ad app chiusa. La prima volta il browser chiede il permesso per le notifiche.</Text>
+          <View style={styles.rigaEvento}>
+            <View style={styles.rigaEventoTesti}>
+              <Text style={styles.rigaEventoTitolo}>Partita in diretta</Text>
+              <Text style={styles.nota}>Quando inizia una partita della tua squadra.</Text>
+            </View>
+            <Switch value={prefEventi.partita_live} onValueChange={(v) => cambiaNotificaEvento("partita_live", v)} disabled={caricandoEventi} trackColor={{ true: brand.colors.brand }} />
+          </View>
+          {ruolo === "atleta" && (
+            <View style={styles.rigaEvento}>
+              <View style={styles.rigaEventoTesti}>
+                <Text style={styles.rigaEventoTitolo}>Convocazioni</Text>
+                <Text style={styles.nota}>Quando vieni convocata per una partita o la convocazione cambia.</Text>
+              </View>
+              <Switch value={prefEventi.convocazioni} onValueChange={(v) => cambiaNotificaEvento("convocazioni", v)} disabled={caricandoEventi} trackColor={{ true: brand.colors.brand }} />
+            </View>
+          )}
+        </View>
+      )}
+
       <View style={styles.card}>
         <Text style={styles.sezioneTitolo}>Integrazione SportEasy</Text>
         <Text style={styles.nota}>Link calendario iCal della squadra (SportEasy → Impostazioni squadra → Esporta calendario). La sincronizzazione vera e propria si lancia dalla tab Partite.</Text>
@@ -213,6 +259,9 @@ const styles = StyleSheet.create({
   bottoneTesto: { color: "#000", fontWeight: "700", fontSize: 15 },
   rigaProvider: { flexDirection: "row", alignItems: "center", gap: 8, minHeight: 44 },
   rigaNotifiche: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12, minHeight: 44 },
+  rigaEvento: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12, minHeight: 56 },
+  rigaEventoTesti: { flex: 1, minWidth: 0, gap: 2 },
+  rigaEventoTitolo: { color: brand.colors.onSurface, fontWeight: "600", fontSize: 15 },
   rigaRiepilogo: { color: brand.colors.onSurface, fontSize: 14 },
   rigaProviderNome: { color: brand.colors.onSurface, fontWeight: "600", width: 90 },
   inputPriorita: { backgroundColor: brand.colors.surfaceTertiary, color: brand.colors.onSurface, borderRadius: 10, padding: 6, width: 44, minHeight: 44, textAlign: "center" },
