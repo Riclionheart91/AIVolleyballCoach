@@ -14,8 +14,9 @@
 //
 // Segreti della funzione (mai nel repository):
 //   supabase secrets set VAPID_PRIVATE_JWK='{"kty":"EC","crv":"P-256",...}'   (già impostato per i certificati)
-//   supabase secrets set NOTIFICHE_EVENTI_SECRET='<stringa casuale lunga>'     (uguale al secret Vault
-//                                                                              "notifiche_eventi_secret")
+//   Il segreto condiviso NON è un secret della funzione: sta solo nel Vault del database ("notifiche_eventi_secret",
+//   creato dalla migrazione 0098) e la funzione lo legge con la chiave di servizio tramite
+//   leggi_segreto_notifiche_eventi(). Nessuno deve mai vederlo né copiarlo.
 //
 // Rispetto di ruoli/RLS: la funzione usa la chiave di servizio (salta la RLS) ma i destinatari sono ricavati solo da
 // team_members / societa_presidenti / preferenze_notifiche, cioè dalle stesse relazioni su cui si basano le regole
@@ -30,7 +31,6 @@ import { buildPushHTTPRequest } from "npm:@pushforge/builder@2";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const VAPID_PRIVATE_JWK_RAW = Deno.env.get("VAPID_PRIVATE_JWK");
-const SEGRETO_CONDIVISO = Deno.env.get("NOTIFICHE_EVENTI_SECRET");
 const VAPID_ADMIN_CONTACT = "mailto:lil.liu91@gmail.com";
 const BASE_URL_WEB = "/AIVolleyballCoach";
 
@@ -80,11 +80,14 @@ function uguali(a: string, b: string): boolean {
   return diff === 0;
 }
 
-function autorizzata(req: Request): boolean {
+async function autorizzata(req: Request, admin: Admin): Promise<boolean> {
   const bearer = req.headers.get("authorization") ?? "";
   if (SERVICE_ROLE_KEY && uguali(bearer, `Bearer ${SERVICE_ROLE_KEY}`)) return true;
   const segreto = req.headers.get("x-notifiche-secret") ?? "";
-  return !!SEGRETO_CONDIVISO && segreto.length > 0 && uguali(segreto, SEGRETO_CONDIVISO);
+  if (segreto.length === 0) return false;
+  const { data, error } = await admin.rpc("leggi_segreto_notifiche_eventi");
+  if (error || typeof data !== "string" || data.length === 0) return false;
+  return uguali(segreto, data);
 }
 
 function dataLeggibile(iso: string): string {
@@ -300,7 +303,8 @@ async function notificaConvocazioni(admin: Admin, matchId: string) {
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS_HEADERS });
   if (req.method !== "POST") return jsonResponse({ errore: true, messaggio: "Metodo non consentito." }, 405);
-  if (!autorizzata(req)) return jsonResponse({ errore: true, messaggio: "Non autorizzato." }, 401);
+  const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, { auth: { persistSession: false, autoRefreshToken: false } });
+  if (!(await autorizzata(req, admin))) return jsonResponse({ errore: true, messaggio: "Non autorizzato." }, 401);
 
   let corpo: { tipo?: string; match_id?: string } = {};
   try {
@@ -318,7 +322,6 @@ Deno.serve(async (req) => {
     console.warn("VAPID_PRIVATE_JWK non impostato: nessuna notifica verrà inviata.");
   }
 
-  const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, { auth: { persistSession: false, autoRefreshToken: false } });
   try {
     const esito = tipo === "partita_live" ? await notificaPartitaLive(admin, matchId) : await notificaConvocazioni(admin, matchId);
     return jsonResponse({ errore: false, tipo, vapidConfigurato: !!VAPID_PRIVATE_JWK_RAW, ...esito });

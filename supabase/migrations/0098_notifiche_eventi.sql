@@ -25,10 +25,11 @@
 --     live (0096), ristretta alla sola squadra + presidenza per non inondare di avvisi le altre squadre.
 --   - convocazioni: solo le atlete (team_members.ruolo = 'atleta') collegate alle convocate aggiunte o tolte.
 --
--- Configurazione richiesta (una volta, da fare a mano; nessun valore segreto è in questo file):
---   a) Vault:  select vault.create_secret('<stringa casuale lunga>', 'notifiche_eventi_secret');
---   b) Secret della funzione:  supabase secrets set NOTIFICHE_EVENTI_SECRET='<la stessa stringa>'
---   c) Restano validi i secret già esistenti: 'certificati_project_url' e 'certificati_publishable_key' (Vault) e
+-- Configurazione (nessun valore segreto è in questo file e nessuno deve vederlo):
+--   a) Il segreto condiviso 'notifiche_eventi_secret' viene generato casualmente QUI, nel Vault, se non esiste già.
+--      L'edge function lo legge dal Vault con la chiave di servizio (leggi_segreto_notifiche_eventi): non va copiato
+--      da nessuna parte.
+--   b) Restano validi i secret già esistenti: 'certificati_project_url' e 'certificati_publishable_key' (Vault) e
 --      VAPID_PRIVATE_JWK (secret della funzione).
 -- Se mancano (o se l'edge function non è distribuita) i trigger NON falliscono e non bloccano mai l'operazione
 -- originale (avvio partita, convocati): l'invio salta e basta, con un warning nel log del database.
@@ -94,6 +95,30 @@ alter table notifiche_eventi_coda enable row level security;
 -- Nessuna policy: né anon né authenticated vi accedono. Lo usano solo le funzioni interne e l'edge function
 -- (chiave di servizio, che salta la RLS).
 revoke all on table notifiche_eventi_coda from public, anon, authenticated;
+
+-- 2b. Segreto condiviso nel Vault ---------------------------------------------------------------------------
+do $$
+begin
+  if not exists (select 1 from vault.secrets where name = 'notifiche_eventi_secret') then
+    perform vault.create_secret(
+      replace(gen_random_uuid()::text || gen_random_uuid()::text || gen_random_uuid()::text, '-', ''),
+      'notifiche_eventi_secret'
+    );
+  end if;
+end $$;
+
+-- Lettura riservata alla chiave di servizio (edge function): mai a anon/authenticated.
+create or replace function leggi_segreto_notifiche_eventi()
+returns text
+language sql
+security definer
+set search_path = public
+as $$
+  select decrypted_secret from vault.decrypted_secrets where name = 'notifiche_eventi_secret' limit 1;
+$$;
+
+revoke execute on function leggi_segreto_notifiche_eventi() from public, anon, authenticated;
+grant execute on function leggi_segreto_notifiche_eventi() to service_role;
 
 -- 3. Chiamata all'edge function (interna) --------------------------------------------------------------------
 create or replace function invoca_notifica_eventi(p_tipo text, p_match_id uuid)
@@ -256,6 +281,8 @@ end $$;
 -- drop function if exists trg_notifica_convocazioni();
 -- drop function if exists trg_notifica_partita_live();
 -- drop function if exists invoca_notifica_eventi(text, uuid);
+-- drop function if exists leggi_segreto_notifiche_eventi();
+-- delete from vault.secrets where name = 'notifiche_eventi_secret';
 -- drop function if exists imposta_preferenza_notifica(text, boolean);
 -- drop table if exists notifiche_eventi_coda;
 -- drop table if exists preferenze_notifiche;
