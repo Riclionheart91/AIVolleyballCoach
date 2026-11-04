@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Tabs, router } from "expo-router";
-import { Pressable, Text, View, ActivityIndicator, StyleSheet } from "react-native";
+import { Pressable, Text, View, ActivityIndicator, StyleSheet, useWindowDimensions } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "@/src/context/AuthContext";
 import { calcolaNotifiche } from "@/src/services/notifiche";
@@ -82,6 +82,10 @@ function BottoneCambiaSquadra() {
 
 export default function TabsLayout() {
   const { session, caricamento, team, caricamentoContesto, erroreTeam, stagioneAttiva, ruolo } = useAuth();
+  // Due disposizioni: sotto i 700 px (telefoni) barra in basso; da 700 px in su
+  // (iPad, tablet Android, Mac, PC) barra laterale a sinistra.
+  const { width: larghezza } = useWindowDimensions();
+  const largo = larghezza >= 700;
 
   // GUARDIA DIFENSIVA: prima questo controllo viveva solo in app/index.tsx,
   // eseguito una volta sola all'avvio dell'app. Su un sito statico (export
@@ -127,7 +131,20 @@ export default function TabsLayout() {
             <BottoneProfilo />
           </View>
         ),
-        tabBarStyle: { backgroundColor: brand.colors.surfaceSecondary, borderTopColor: brand.colors.border },
+        tabBarPosition: largo ? "left" : "bottom",
+        tabBarVariant: largo ? "material" : "uikit",
+        tabBarLabelPosition: largo ? "beside-icon" : "below-icon",
+        // Barra translucida sfocata (stile Apple Music). Il filtro vale sul web;
+        // dove non e' supportato resta lo sfondo scuro semitrasparente.
+        tabBarStyle: (largo
+          ? { backgroundColor: brand.colors.surfaceSecondary, borderRightColor: brand.colors.border, borderRightWidth: 1 }
+          : {
+              backgroundColor: "rgba(11,18,32,0.78)",
+              borderTopColor: "rgba(255,255,255,0.08)",
+              borderTopWidth: 1,
+              backdropFilter: "blur(28px) saturate(170%)",
+              WebkitBackdropFilter: "blur(28px) saturate(170%)",
+            }) as object,
         tabBarActiveTintColor: brand.colors.brand,
         tabBarInactiveTintColor: brand.colors.muted,
         // 6 voci sono tante per uno schermo stretto: etichette/icone più
@@ -198,7 +215,7 @@ export default function TabsLayout() {
 }
 
 const styles = StyleSheet.create({
-  bottoneLive: { flexDirection: "row", alignItems: "center", gap: 4, marginRight: 12, paddingVertical: 4, paddingHorizontal: 8, borderRadius: 999, borderWidth: 1, borderColor: brand.colors.border, backgroundColor: brand.colors.surfaceSecondary },
+  bottoneLive: { flexDirection: "row", alignItems: "center", gap: 5, marginRight: 12, paddingVertical: 5, paddingHorizontal: 11, borderRadius: 999, borderWidth: 1, borderColor: brand.colors.border, backgroundColor: brand.colors.surfaceSecondary },
   bottoneLiveAcceso: { backgroundColor: brand.colors.error, borderColor: brand.colors.error },
   bottoneLiveTesto: { fontSize: 11, fontWeight: "800", letterSpacing: 0.5 },
   badgeNotifiche: { position: "absolute", top: -4, right: -4, backgroundColor: brand.colors.error, borderRadius: 8, minWidth: 16, height: 16, alignItems: "center", justifyContent: "center", paddingHorizontal: 3 },
