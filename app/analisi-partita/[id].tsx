@@ -19,6 +19,48 @@ import { avvisa } from "@/src/lib/confermaAzione";
 import { brand } from "@/src/config";
 import type { Match, MatchSet } from "@/src/types/database";
 
+/** Iniziali del nome di una squadra, per il cerchio al posto dello stemma. */
+function iniziali(nome: string): string {
+  const parti = nome.trim().split(/\s+/).filter(Boolean);
+  if (parti.length === 0) return "?";
+  return (parti.length === 1 ? parti[0].slice(0, 2) : parti[0][0] + parti[1][0]).toUpperCase();
+}
+
+/** Statistica singola: etichetta, valore e (se c'è una percentuale) una barra. */
+function StatSingola({ etichetta, valore, percentuale, coloreValore }: { etichetta: string; valore: string; percentuale?: number | null; coloreValore?: string }) {
+  return (
+    <View style={styles.stat}>
+      <View style={styles.statRiga}>
+        <Text style={styles.statEtichetta}>{etichetta}</Text>
+        <Text style={[styles.statValore, coloreValore ? { color: coloreValore } : null]}>{valore}</Text>
+      </View>
+      {percentuale != null && (
+        <View style={styles.statTraccia}>
+          <View style={[styles.statRiempimento, { width: `${Math.max(0, Math.min(100, percentuale))}%` }]} />
+        </View>
+      )}
+    </View>
+  );
+}
+
+/** Due valori affiancati con barra divisa in proporzione (sinistra / destra). */
+function StatDoppia({ etichetta, sx, dx, coloreSx, coloreDx }: { etichetta: string; sx: number; dx: number; coloreSx: string; coloreDx: string }) {
+  const haDati = sx + dx > 0;
+  return (
+    <View style={styles.stat}>
+      <View style={styles.statRiga}>
+        <Text style={[styles.statValoreLato, { color: coloreSx }]}>{sx}</Text>
+        <Text style={styles.statEtichettaCentro}>{etichetta}</Text>
+        <Text style={[styles.statValoreLato, { color: coloreDx, textAlign: "right" }]}>{dx}</Text>
+      </View>
+      <View style={styles.statDoppiaBarra}>
+        <View style={{ flex: haDati ? sx : 1, backgroundColor: haDati ? coloreSx : brand.colors.border, borderRadius: 3 }} />
+        <View style={{ flex: haDati ? dx : 1, backgroundColor: haDati ? coloreDx : brand.colors.border, borderRadius: 3 }} />
+      </View>
+    </View>
+  );
+}
+
 /**
  * Analisi ricca di una partita (F4): non solo il punteggio, ma dove
  * si vince e si perde davvero. L'efficienza (punti meno errori sulle
@@ -346,80 +388,96 @@ export default function AnalisiPartita() {
     setSetRivivi((prev) => { const n = new Set(prev); if (n.has(setId)) n.delete(setId); else n.add(setId); return n; });
   }
 
+  const nomeNoi = team?.nome ?? "Noi";
+  const vintiNoi = setGiocati.length > 0 ? setVintiNoi : match.set_vinti_noi;
+  const vintiLoro = setGiocati.length > 0 ? setVintiLoro : match.set_vinti_avversario;
+  const statoTesto = match.stato === "conclusa" ? "FINITA" : match.stato === "in_corso" ? "IN CORSO" : "DA GIOCARE";
+  const dataBreve = new Date(match.data).toLocaleDateString("it-IT", { day: "numeric", month: "short" }).toUpperCase();
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Pressable onPress={() => router.back()} hitSlop={12}><Text style={styles.indietro}>← Partite</Text></Pressable>
-        <Text style={styles.titolo} numberOfLines={1}>vs {match.avversario}</Text>
+        <Pressable onPress={() => router.back()} hitSlop={12} style={styles.tastoIndietro}><Text style={styles.indietro}>‹ Partite</Text></Pressable>
+        <Text style={styles.statoPartita} numberOfLines={1}>{statoTesto} · {dataBreve}</Text>
         <Pressable onPress={onEsportaCsv} hitSlop={8} style={styles.bottoneEsporta}><Text style={styles.bottoneEsportaTesto}>⬇ CSV</Text></Pressable>
         <Pressable onPress={onStampa} hitSlop={8} style={styles.bottoneEsporta}><Text style={styles.bottoneEsportaTesto}>🖨 PDF</Text></Pressable>
       </View>
 
-      <ScrollView contentContainerStyle={{ padding: 16, gap: 20, paddingBottom: 60 }}>
+      <ScrollView contentContainerStyle={styles.contenuto}>
+        <View style={styles.tabellone}>
+          <View style={styles.squadraTab}>
+            <View style={[styles.stemma, { backgroundColor: brand.colors.surfaceTertiary }]}><Text style={[styles.stemmaTesto, { color: brand.colors.brand }]}>{iniziali(nomeNoi)}</Text></View>
+            <Text style={styles.squadraTabNome} numberOfLines={2}>{nomeNoi}</Text>
+          </View>
+          <Text style={[styles.risultatoGrande, { color: vintiNoi > vintiLoro ? brand.colors.success : vintiNoi < vintiLoro ? brand.colors.error : brand.colors.onSurface }]}>
+            {vintiNoi} – {vintiLoro}
+          </Text>
+          <View style={styles.squadraTab}>
+            <View style={[styles.stemma, { backgroundColor: brand.colors.border }]}><Text style={[styles.stemmaTesto, { color: brand.colors.onSurfaceSecondary }]}>{iniziali(match.avversario)}</Text></View>
+            <Text style={styles.squadraTabNome} numberOfLines={2}>{match.avversario}</Text>
+          </View>
+        </View>
+
         {setGiocati.length > 0 && (
-          <View>
-            <Text style={styles.sezione}>Risultato e parziali</Text>
-            <Text style={[styles.risultatoGrande, { color: setVintiNoi > setVintiLoro ? brand.colors.success : setVintiNoi < setVintiLoro ? brand.colors.error : brand.colors.onSurface }]}>
-              {setVintiNoi} - {setVintiLoro}
-            </Text>
-            <View style={styles.rigaParziali}>
-              {setGiocati.map((x) => {
-                const vinto = x.punti_noi > x.punti_avversario;
-                const perso = x.punti_noi < x.punti_avversario;
-                return (
-                  <View key={x.id} style={styles.cardParziale}>
-                    <Text style={styles.parzialeSet}>Set {x.numero_set}</Text>
-                    <Text style={[styles.parzialePunteggio, { color: vinto ? brand.colors.success : perso ? brand.colors.error : brand.colors.onSurface }]}>{x.punti_noi}-{x.punti_avversario}</Text>
-                    {!x.concluso && <Text style={styles.parzialeSet}>in corso</Text>}
+          <View style={styles.schedaLista}>
+            {setGiocati.map((x, i) => {
+              const vinto = x.punti_noi > x.punti_avversario;
+              const perso = x.punti_noi < x.punti_avversario;
+              return (
+                <View key={x.id}>
+                  {i > 0 && <View style={styles.separatore} />}
+                  <View style={styles.rigaSet}>
+                    <View style={{ width: 72 }}>
+                      <Text style={styles.rigaSetNome}>Set {x.numero_set}</Text>
+                      {!x.concluso && <Text style={styles.rigaSetInCorso}>in corso</Text>}
+                    </View>
+                    <Text style={[styles.rigaSetPunti, { textAlign: "right" }, vinto ? styles.puntiForti : perso ? styles.puntiDeboli : null]}>{x.punti_noi}</Text>
+                    <Text style={styles.rigaSetTrattino}>–</Text>
+                    <Text style={[styles.rigaSetPunti, { textAlign: "left" }, perso ? styles.puntiForti : vinto ? styles.puntiDeboli : null]}>{x.punti_avversario}</Text>
+                    <View style={{ width: 72 }} />
                   </View>
-                );
-              })}
-            </View>
+                </View>
+              );
+            })}
           </View>
         )}
 
         {eventiAndamento.length > 0 && (
-          <View>
-            <Text style={styles.sezione}>Scheda della partita</Text>
-            <View style={styles.rigaAndamento}>
-              <Text style={styles.rigaAndamentoTesto}>Side-out (punti vinti quando riceviamo)</Text>
-              <Text style={styles.valoreScheda}>{servizioRicezione?.side_out_pct != null ? `${servizioRicezione.side_out_pct}%` : "—"}</Text>
+          <View style={styles.sezioneBlocco}>
+            <Text style={styles.sezione}>Statistiche</Text>
+            <View style={styles.scheda}>
+              <StatSingola
+                etichetta="Side-out (punti vinti quando riceviamo)"
+                valore={servizioRicezione?.side_out_pct != null ? `${servizioRicezione.side_out_pct}%` : "—"}
+                percentuale={servizioRicezione?.side_out_pct ?? null}
+              />
+              <StatSingola
+                etichetta="Break-point (punti vinti quando battiamo)"
+                valore={servizioRicezione?.break_point_pct != null ? `${servizioRicezione.break_point_pct}%` : "—"}
+                percentuale={servizioRicezione?.break_point_pct ?? null}
+              />
+              <StatSingola
+                etichetta={`Ricezione positiva (${ricezioniPositive}/${ricezioniTot})`}
+                valore={percentuale(ricezioniPositive, ricezioniTot)}
+                percentuale={ricezioniTot > 0 ? (ricezioniPositive / ricezioniTot) * 100 : null}
+              />
+              <StatSingola etichetta="Efficienza in attacco" valore={formattaEfficienza(efficienzaAttacco)} coloreValore={coloreEfficienza(efficienzaAttacco)} />
+              <StatDoppia etichetta="Ace / errori in battuta" sx={aceBattuta} dx={erroriBattuta} coloreSx={brand.colors.success} coloreDx={brand.colors.error} />
+              <StatSingola etichetta="Punti a muro" valore={String(puntiMuro)} />
+              <StatDoppia etichetta="Errori nostri / punti diretti avversari" sx={erroriNostri} dx={puntiDirettiLoro} coloreSx={brand.colors.brand} coloreDx={brand.colors.brandSecondary} />
+              <Text style={styles.dettaglioFondamentale}>"Errori nostri" sono quelli attribuiti a una giocatrice; "punti diretti avversari" sono i punti loro registrati senza un nostro errore specifico.</Text>
             </View>
-            <View style={styles.rigaAndamento}>
-              <Text style={styles.rigaAndamentoTesto}>Break-point (punti vinti quando battiamo)</Text>
-              <Text style={styles.valoreScheda}>{servizioRicezione?.break_point_pct != null ? `${servizioRicezione.break_point_pct}%` : "—"}</Text>
-            </View>
-            <View style={styles.rigaAndamento}>
-              <Text style={styles.rigaAndamentoTesto}>Ricezione positiva ({ricezioniPositive}/{ricezioniTot})</Text>
-              <Text style={styles.valoreScheda}>{percentuale(ricezioniPositive, ricezioniTot)}</Text>
-            </View>
-            <View style={styles.rigaAndamento}>
-              <Text style={styles.rigaAndamentoTesto}>Efficienza in attacco</Text>
-              <Text style={[styles.valoreScheda, { color: coloreEfficienza(efficienzaAttacco) }]}>{formattaEfficienza(efficienzaAttacco)}</Text>
-            </View>
-            <View style={styles.rigaAndamento}>
-              <Text style={styles.rigaAndamentoTesto}>Ace / errori in battuta</Text>
-              <Text style={styles.valoreScheda}>{aceBattuta} / {erroriBattuta}</Text>
-            </View>
-            <View style={styles.rigaAndamento}>
-              <Text style={styles.rigaAndamentoTesto}>Punti a muro</Text>
-              <Text style={styles.valoreScheda}>{puntiMuro}</Text>
-            </View>
-            <View style={styles.rigaAndamento}>
-              <Text style={styles.rigaAndamentoTesto}>Errori nostri / punti diretti avversari</Text>
-              <Text style={styles.valoreScheda}>{erroriNostri} / {puntiDirettiLoro}</Text>
-            </View>
-            <Text style={styles.dettaglioFondamentale}>"Errori nostri" sono quelli attribuiti a una giocatrice; "punti diretti avversari" sono i punti loro registrati senza un nostro errore specifico.</Text>
           </View>
         )}
 
-        <View>
+        <View style={styles.sezioneBlocco}>
           <Text style={styles.sezione}>Efficienza per fondamentale</Text>
           <Text style={styles.nota}>Punti meno errori sulle azioni totali: dice quanto un fondamentale rende, non solo quante volte è stato usato.</Text>
           {fondamentali.length === 0 ? (
             <Text style={styles.vuoto}>Nessun evento registrato in questa partita.</Text>
           ) : (
-            fondamentali.map((f) => (
+            <View style={styles.scheda}>
+            {fondamentali.map((f) => (
               <View key={f.fondamentale} style={styles.rigaFondamentale}>
                 <View style={styles.rigaTitoloFondamentale}>
                   <Text style={styles.nomeFondamentale}>{f.fondamentale === "Punto_avversario" ? "Punto avversario" : f.fondamentale}</Text>
@@ -434,34 +492,35 @@ export default function AnalisiPartita() {
                   {f.azioni} azioni ({f.quota_sul_totale ?? 0}% del totale) · {f.punti} punti, {f.errori} errori
                 </Text>
               </View>
-            ))
+            ))}
+            </View>
           )}
         </View>
 
         {servizioRicezione && (servizioRicezione.punti_in_battuta > 0 || servizioRicezione.punti_in_ricezione > 0) && (
-          <View>
+          <View style={styles.sezioneBlocco}>
             <Text style={styles.sezione}>Side-out % / Break-point %</Text>
             <Text style={styles.nota}>Le due metriche-cardine dell'analisi pallavolistica: quanto si rende servendo e quanto si rende ricevendo.</Text>
-            <View style={styles.rigaAndamento}>
-              <Text style={styles.rigaAndamentoTesto}>Break-point (punti vinti in battuta)</Text>
-              <Text style={[styles.valoreEfficienza, { color: brand.colors.brand }]}>
-                {servizioRicezione.break_point_pct != null ? `${servizioRicezione.break_point_pct}%` : "—"} ({servizioRicezione.punti_vinti_in_battuta}/{servizioRicezione.punti_in_battuta})
+            <View style={styles.scheda}>
+              <StatSingola
+                etichetta="Break-point (punti vinti in battuta)"
+                valore={`${servizioRicezione.break_point_pct != null ? `${servizioRicezione.break_point_pct}%` : "—"} (${servizioRicezione.punti_vinti_in_battuta}/${servizioRicezione.punti_in_battuta})`}
+                percentuale={servizioRicezione.break_point_pct ?? null}
+              />
+              <StatSingola
+                etichetta="Side-out (punti vinti in ricezione)"
+                valore={`${servizioRicezione.side_out_pct != null ? `${servizioRicezione.side_out_pct}%` : "—"} (${servizioRicezione.punti_vinti_in_ricezione}/${servizioRicezione.punti_in_ricezione})`}
+                percentuale={servizioRicezione.side_out_pct ?? null}
+              />
+              <Text style={styles.dettaglioFondamentale}>
+                Ricezioni: {servizioRicezione.ricezioni_ottime} perfette, {servizioRicezione.ricezioni_buone} buone, {servizioRicezione.ricezioni_scarse} scarse, {servizioRicezione.ricezioni_errori} errori.
               </Text>
             </View>
-            <View style={styles.rigaAndamento}>
-              <Text style={styles.rigaAndamentoTesto}>Side-out (punti vinti in ricezione)</Text>
-              <Text style={[styles.valoreEfficienza, { color: brand.colors.brand }]}>
-                {servizioRicezione.side_out_pct != null ? `${servizioRicezione.side_out_pct}%` : "—"} ({servizioRicezione.punti_vinti_in_ricezione}/{servizioRicezione.punti_in_ricezione})
-              </Text>
-            </View>
-            <Text style={styles.dettaglioFondamentale}>
-              Ricezioni: {servizioRicezione.ricezioni_ottime} perfette, {servizioRicezione.ricezioni_buone} buone, {servizioRicezione.ricezioni_scarse} scarse, {servizioRicezione.ricezioni_errori} errori.
-            </Text>
           </View>
         )}
 
         {attaccoPerZona.length > 0 && (
-          <View>
+          <View style={styles.sezioneBlocco}>
             <Text style={styles.sezione}>Attacco: da quale zona rende di più</Text>
             <Text style={styles.nota}>
               La zona è la posizione del nostro campo da cui parte l'attacco (dalla rotazione, non serve indicare nulla). Efficienza = (punti − errori) / attacchi; efficacia = punti / attacchi. Per il confronto servono almeno {MIN_ATTACCHI_ZONA} attacchi dalla zona.
@@ -469,6 +528,7 @@ export default function AnalisiPartita() {
             {migliorePerEfficienza && (
               <Text style={styles.migliore}>⭐ Più efficiente: zona {migliorePerEfficienza.zona} ({formattaEfficienza(migliorePerEfficienza.efficienza)}){migliorePerEfficacia && migliorePerEfficacia.zona !== migliorePerEfficienza.zona ? ` · più efficace: zona ${migliorePerEfficacia.zona} (${Math.round(migliorePerEfficacia.efficacia * 100)}%)` : migliorePerEfficacia ? ` · anche la più efficace (${Math.round(migliorePerEfficacia.efficacia * 100)}%)` : ""}</Text>
             )}
+            <View style={styles.scheda}>
             <View style={styles.rigaTabella}>
               <Text style={[styles.cellaFondamentale, styles.intestazioneTabella]}>Zona</Text>
               <Text style={[styles.cellaNumero, styles.intestazioneTabella]}>Att.</Text>
@@ -488,11 +548,12 @@ export default function AnalisiPartita() {
               </View>
             ))}
             <Text style={styles.notaTabella}>Ultima colonna = efficacia (% di attacchi vincenti). Zone con meno di {MIN_ATTACCHI_ZONA} attacchi non entrano nel confronto. Attacchi con zona nota: {attacchiConZona} su {attacchiTotali}.</Text>
+            </View>
           </View>
         )}
 
         {setGiocati.length > 0 && (
-          <View>
+          <View style={styles.sezioneBlocco}>
             <Text style={styles.sezione}>Andamento punto a punto</Text>
             <Text style={styles.nota}>Differenza punti dopo ogni punto: le serie si vedono come blocchi di barre consecutive nello stesso verso.</Text>
             {setGiocati.map((x) => {
@@ -518,7 +579,7 @@ export default function AnalisiPartita() {
         )}
 
         {setGiocati.length > 0 && eventiAndamento.length > 0 && (
-          <View>
+          <View style={styles.sezioneBlocco}>
             <Text style={styles.sezione}>Rivivi la partita</Text>
             <Text style={styles.nota}>Punto per punto: punteggio, chi ha segnato e come. Con 🔥 le serie da 3 punti di fila e con ⏱ i time-out.</Text>
             <View style={{ flexDirection: "row", gap: 8, marginBottom: 8 }}>
@@ -534,7 +595,7 @@ export default function AnalisiPartita() {
               const to = timeouts.filter((t) => t.set_id === x.id);
               return (
                 <View key={x.id} style={styles.bloccoSet}>
-                  <Pressable onPress={() => alternaSetRivivi(x.id)}>
+                  <Pressable onPress={() => alternaSetRivivi(x.id)} style={styles.rigaToccabile}>
                     <Text style={styles.titoloSet}>{aperto ? "▾" : "▸"} Set {x.numero_set} — {x.punti_noi}-{x.punti_avversario} ({punti.length} punti)</Text>
                   </Pressable>
                   {aperto && punti.map((pt) => {
@@ -561,7 +622,7 @@ export default function AnalisiPartita() {
           </View>
         )}
 
-        <View>
+        <View style={styles.sezioneBlocco}>
           <Text style={styles.sezione}>Contributo individuale</Text>
           <Text style={styles.nota}>Ordinate dal saldo migliore. Il voto è da 0 a 10 (n.c. sotto le {MIN_AZIONI_VOTO} azioni).{Object.keys(dettaglio).length > 0 ? " Tocca una giocatrice per vedere voto e numeri fondamentale per fondamentale." : ""}</Text>
           {migliore && (
@@ -578,7 +639,7 @@ export default function AnalisiPartita() {
               )}
             </View>
           )}
-          <Pressable onPress={() => setMostraCalcoloVoto((v) => !v)}>
+          <Pressable onPress={() => setMostraCalcoloVoto((v) => !v)} style={styles.rigaToccabile}>
             <Text style={styles.linkCalcolo}>{mostraCalcoloVoto ? "▾" : "▸"} Come si calcola il voto</Text>
           </Pressable>
           {mostraCalcoloVoto && (
@@ -589,12 +650,13 @@ export default function AnalisiPartita() {
           {persone.length === 0 ? (
             <Text style={styles.vuoto}>Nessun dato individuale disponibile.</Text>
           ) : (
-            persone.map((p, i) => {
+            <View style={styles.schedaLista}>
+            {persone.map((p, i) => {
               const righe = dettaglio[p.athlete_id] ?? [];
               const espandibile = righe.length > 0;
               const aperta = espandibile && aperti.has(p.athlete_id);
               return (
-                <View key={p.athlete_id} style={styles.cardPersona}>
+                <View key={p.athlete_id} style={[styles.cardPersona, i === persone.length - 1 && { borderBottomWidth: 0 }]}>
                   <Pressable style={styles.rigaPersona} onPress={() => espandibile && alternaDettaglio(p.athlete_id)} disabled={!espandibile}>
                     <Text style={styles.posizionePersona}>{i + 1}</Text>
                     <View style={{ flex: 1 }}>
@@ -616,7 +678,8 @@ export default function AnalisiPartita() {
                   {aperta && renderDettaglioPersona(p.athlete_id)}
                 </View>
               );
-            })
+            })}
+            </View>
           )}
         </View>
 
@@ -626,7 +689,7 @@ export default function AnalisiPartita() {
             .sort((a, b) => b.data.localeCompare(a.data));
           const vinte = precedenti.filter((m) => m.set_vinti_noi > m.set_vinti_avversario).length;
           return (
-            <View>
+            <View style={styles.sezioneBlocco}>
               <Text style={styles.sezione}>Storico contro {match.avversario}</Text>
               {precedenti.length === 0 ? (
                 <Text style={styles.nota}>Nessun'altra partita conclusa contro questa squadra in archivio.</Text>
@@ -635,6 +698,7 @@ export default function AnalisiPartita() {
                   <Text style={styles.nota}>
                     Altre {precedenti.length} {precedenti.length === 1 ? "partita" : "partite"} concluse: {vinte} {vinte === 1 ? "vittoria" : "vittorie"}, {precedenti.length - vinte} {precedenti.length - vinte === 1 ? "sconfitta" : "sconfitte"}. Il nome dell'avversario deve essere scritto uguale.
                   </Text>
+                  <View style={styles.schedaLista}>
                   {precedenti.map((m) => {
                     const vinta = m.set_vinti_noi > m.set_vinti_avversario;
                     const eff = andamento.find((a) => a.match_id === m.id)?.efficienza ?? null;
@@ -649,6 +713,7 @@ export default function AnalisiPartita() {
                       </Pressable>
                     );
                   })}
+                  </View>
                 </>
               )}
             </View>
@@ -656,9 +721,10 @@ export default function AnalisiPartita() {
         })()}
 
         {andamento.length > 1 && (
-          <View>
+          <View style={styles.sezioneBlocco}>
             <Text style={styles.sezione}>Tendenza nelle ultime partite</Text>
             <Text style={styles.nota}>Efficienza complessiva partita per partita: se scende per più gare di fila è un segnale da guardare in allenamento.</Text>
+            <View style={styles.schedaLista}>
             {andamento.map((a) => (
               <View key={a.match_id} style={styles.rigaAndamento}>
                 <Text style={styles.rigaAndamentoTesto} numberOfLines={1}>
@@ -669,6 +735,7 @@ export default function AnalisiPartita() {
                 </Text>
               </View>
             ))}
+            </View>
           </View>
         )}
       </ScrollView>
@@ -678,22 +745,51 @@ export default function AnalisiPartita() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: brand.colors.surface },
-  header: { flexDirection: "row", alignItems: "center", gap: 14, padding: 16, borderBottomWidth: 1, borderBottomColor: brand.colors.border },
-  indietro: { color: brand.colors.brand, fontWeight: "700", fontSize: 15 },
-  titolo: { color: brand.colors.onSurface, fontSize: 17, fontWeight: "700", flex: 1 },
-  sezione: { color: brand.colors.brandSecondary, fontSize: 13, fontWeight: "800", textTransform: "uppercase", marginBottom: 4 },
-  nota: { color: brand.colors.muted, fontSize: 12, lineHeight: 17, marginBottom: 10 },
+  header: { flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 16, paddingVertical: 8, width: "100%", maxWidth: 900, alignSelf: "center" },
+  tastoIndietro: { minHeight: 44, justifyContent: "center" },
+  indietro: { color: brand.colors.brand, fontWeight: "600", fontSize: 17 },
+  statoPartita: { flex: 1, textAlign: "center", color: brand.colors.muted, fontSize: 12, fontWeight: "700", letterSpacing: 0.5 },
+  contenuto: { padding: 16, gap: 20, paddingBottom: 60, width: "100%", maxWidth: 900, alignSelf: "center" },
+  sezioneBlocco: { gap: 10 },
+  sezione: { color: brand.colors.onSurface, fontSize: 22, fontWeight: "700", letterSpacing: -0.3 },
+  nota: { color: brand.colors.muted, fontSize: 12, lineHeight: 17 },
   vuoto: { color: brand.colors.muted, fontSize: 13, textAlign: "center", paddingVertical: 12 },
-  rigaFondamentale: { marginBottom: 12, gap: 4 },
+  scheda: { backgroundColor: brand.colors.surfaceSecondary, borderRadius: 18, padding: 16, gap: 14 },
+  schedaLista: { backgroundColor: brand.colors.surfaceSecondary, borderRadius: 18, overflow: "hidden" },
+  separatore: { height: 1, backgroundColor: brand.colors.border, marginLeft: 16 },
+  rigaToccabile: { minHeight: 44, justifyContent: "center" },
+  tabellone: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8, paddingVertical: 4 },
+  squadraTab: { flex: 1, alignItems: "center", gap: 6 },
+  squadraTabNome: { color: brand.colors.onSurface, fontSize: 14, fontWeight: "700", textAlign: "center" },
+  stemma: { width: 56, height: 56, borderRadius: 28, alignItems: "center", justifyContent: "center" },
+  stemmaTesto: { fontSize: 18, fontWeight: "800" },
+  risultatoGrande: { fontSize: 52, fontWeight: "800", letterSpacing: -1, lineHeight: 58, textAlign: "center" },
+  rigaSet: { flexDirection: "row", alignItems: "center", paddingVertical: 11, paddingHorizontal: 16, minHeight: 48 },
+  rigaSetNome: { color: brand.colors.muted, fontSize: 14, fontWeight: "600" },
+  rigaSetInCorso: { color: brand.colors.warning, fontSize: 11, fontWeight: "700" },
+  rigaSetPunti: { flex: 1, color: brand.colors.onSurface, fontSize: 17, fontWeight: "500" },
+  rigaSetTrattino: { width: 24, textAlign: "center", color: brand.colors.muted },
+  puntiForti: { color: brand.colors.onSurface, fontWeight: "800" },
+  puntiDeboli: { color: brand.colors.muted, fontWeight: "500" },
+  stat: { gap: 5 },
+  statRiga: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 10 },
+  statEtichetta: { flex: 1, color: brand.colors.onSurfaceSecondary, fontSize: 14, fontWeight: "500" },
+  statEtichettaCentro: { flex: 1, color: brand.colors.onSurfaceSecondary, fontSize: 14, fontWeight: "500", textAlign: "center" },
+  statValore: { color: brand.colors.onSurface, fontSize: 14, fontWeight: "800" },
+  statValoreLato: { minWidth: 28, color: brand.colors.onSurface, fontSize: 14, fontWeight: "800" },
+  statTraccia: { height: 6, borderRadius: 3, backgroundColor: brand.colors.surfaceTertiary, overflow: "hidden" },
+  statRiempimento: { height: 6, borderRadius: 3, backgroundColor: brand.colors.brand },
+  statDoppiaBarra: { flexDirection: "row", gap: 4, height: 6 },
+  rigaFondamentale: { gap: 5 },
   rigaTitoloFondamentale: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  nomeFondamentale: { color: brand.colors.onSurface, fontSize: 14, fontWeight: "700" },
+  nomeFondamentale: { color: brand.colors.onSurfaceSecondary, fontSize: 14, fontWeight: "500" },
   valoreEfficienza: { fontSize: 14, fontWeight: "800" },
-  barraSfondo: { height: 8, backgroundColor: brand.colors.surfaceTertiary, borderRadius: 4, overflow: "hidden" },
-  barraRiempimento: { height: "100%", borderRadius: 4 },
+  barraSfondo: { height: 6, backgroundColor: brand.colors.surfaceTertiary, borderRadius: 3, overflow: "hidden" },
+  barraRiempimento: { height: "100%", borderRadius: 3 },
   dettaglioFondamentale: { color: brand.colors.muted, fontSize: 11 },
-  cardPersona: { borderBottomWidth: 1, borderBottomColor: brand.colors.border },
-  rigaPersona: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 8 },
-  tabellaDettaglio: { backgroundColor: brand.colors.surfaceSecondary, borderRadius: 10, padding: 10, marginBottom: 10, marginLeft: 30, gap: 4 },
+  cardPersona: { borderBottomWidth: 1, borderBottomColor: brand.colors.border, paddingHorizontal: 16 },
+  rigaPersona: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 10, minHeight: 56 },
+  tabellaDettaglio: { backgroundColor: brand.colors.surfaceTertiary, borderRadius: 12, padding: 12, marginBottom: 12, gap: 4 },
   rigaTabella: { flexDirection: "row", alignItems: "center", gap: 4 },
   intestazioneTabella: { color: brand.colors.muted, fontSize: 10, fontWeight: "700", textTransform: "uppercase" },
   cellaFondamentale: { flex: 1, color: brand.colors.onSurface, fontSize: 12, fontWeight: "600" },
@@ -704,33 +800,26 @@ const styles = StyleSheet.create({
   rigaTotale: { borderTopWidth: 1, borderTopColor: brand.colors.border, paddingTop: 4, marginTop: 2 },
   testoTotale: { fontWeight: "800", color: brand.colors.onSurface },
   notaTabella: { color: brand.colors.muted, fontSize: 10, marginTop: 4 },
-  risultatoGrande: { fontSize: 34, fontWeight: "800", textAlign: "center", marginVertical: 4 },
-  rigaParziali: { flexDirection: "row", flexWrap: "wrap", gap: 8, justifyContent: "center" },
-  cardParziale: { backgroundColor: brand.colors.surfaceSecondary, borderRadius: 10, paddingVertical: 8, paddingHorizontal: 14, alignItems: "center", minWidth: 76 },
-  parzialeSet: { color: brand.colors.muted, fontSize: 11, fontWeight: "700" },
-  parzialePunteggio: { fontSize: 20, fontWeight: "800" },
-  valoreScheda: { color: brand.colors.onSurface, fontSize: 14, fontWeight: "800" },
   rigaRivivi: { flexDirection: "row", gap: 10, alignItems: "center", paddingVertical: 3 },
   punteggioRivivi: { width: 52, fontSize: 13, fontWeight: "800", textAlign: "right" },
   testoRivivi: { flex: 1, color: brand.colors.onSurfaceSecondary, fontSize: 12 },
   timeoutRivivi: { color: brand.colors.warning, fontSize: 11, fontWeight: "700", paddingLeft: 62, paddingVertical: 2 },
-  migliore: { color: brand.colors.onSurface, fontSize: 14, fontWeight: "700", marginBottom: 6 },
-  linkCalcolo: { color: brand.colors.brandSecondary, fontSize: 12, fontWeight: "700", marginBottom: 6 },
+  migliore: { color: brand.colors.onSurface, fontSize: 14, fontWeight: "700", paddingVertical: 10 },
+  linkCalcolo: { color: brand.colors.brandSecondary, fontSize: 13, fontWeight: "700" },
   votoPersona: { fontSize: 18, fontWeight: "800" },
   posizionePersona: { color: brand.colors.muted, fontSize: 13, fontWeight: "700", width: 20 },
-  nomePersona: { color: brand.colors.onSurface, fontSize: 14, fontWeight: "600" },
+  nomePersona: { color: brand.colors.onSurface, fontSize: 15, fontWeight: "600" },
   dettaglioPersona: { color: brand.colors.muted, fontSize: 11, marginTop: 2 },
-  saldoPersona: { fontSize: 16, fontWeight: "800" },
-  rigaAndamento: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: brand.colors.border, gap: 8 },
-  rigaAndamentoTesto: { color: brand.colors.onSurfaceSecondary, fontSize: 12, flex: 1 },
-  bottoneEsporta: { borderWidth: 1, borderColor: brand.colors.brandSecondary, borderRadius: 8, paddingVertical: 4, paddingHorizontal: 8 },
-  bottoneEsportaTesto: { color: brand.colors.brandSecondary, fontSize: 12, fontWeight: "700" },
-  chipZona: { paddingVertical: 4, paddingHorizontal: 12, borderRadius: 14, backgroundColor: brand.colors.surfaceTertiary },
+  rigaAndamento: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: 12, paddingHorizontal: 16, minHeight: 44, borderBottomWidth: 1, borderBottomColor: brand.colors.border, gap: 8 },
+  rigaAndamentoTesto: { color: brand.colors.onSurfaceSecondary, fontSize: 13, flex: 1 },
+  bottoneEsporta: { backgroundColor: brand.colors.surfaceTertiary, borderRadius: 999, paddingVertical: 8, paddingHorizontal: 12, minHeight: 36, justifyContent: "center" },
+  bottoneEsportaTesto: { color: brand.colors.onSurface, fontSize: 12, fontWeight: "700" },
+  chipZona: { paddingVertical: 10, paddingHorizontal: 16, minHeight: 44, justifyContent: "center", borderRadius: 999, backgroundColor: brand.colors.surfaceTertiary },
   chipZonaAttivo: { backgroundColor: brand.colors.brand },
-  chipZonaTesto: { color: brand.colors.onSurfaceSecondary, fontSize: 12 },
+  chipZonaTesto: { color: brand.colors.onSurfaceSecondary, fontSize: 13 },
   chipZonaTestoAttivo: { color: "#000", fontWeight: "700" },
-  bloccoSet: { marginBottom: 14, gap: 4 },
-  titoloSet: { color: brand.colors.onSurface, fontSize: 13, fontWeight: "700" },
+  bloccoSet: { backgroundColor: brand.colors.surfaceSecondary, borderRadius: 18, padding: 14, gap: 4 },
+  titoloSet: { color: brand.colors.onSurface, fontSize: 14, fontWeight: "700" },
   trendBox: { marginTop: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: brand.colors.border, gap: 4 },
   trendTitolo: { color: brand.colors.brandSecondary, fontSize: 11, fontWeight: "800", textTransform: "uppercase" },
   cellaTrend: { width: 42, textAlign: "right", fontSize: 11, fontWeight: "700", color: brand.colors.onSurfaceSecondary },

@@ -5,6 +5,7 @@ import { useAuth } from "@/src/context/AuthContext";
 import { impostaLinkSporteasy, leggiIntegrazione } from "@/src/services/sporteasy";
 import { elencaProvider, riepilogoChiamateAI, salvaProvider, type AiProviderConfig, type RigaRiepilogoAI } from "@/src/services/aiProviders";
 import { brand } from "@/src/config";
+import { TitoloGrande } from "@/src/components/TitoloGrande";
 import { avvisa } from "@/src/lib/confermaAzione";
 import { leggiImpostazioniNotifiche, salvaImpostazioniNotifiche, IMPOSTAZIONI_NOTIFICHE_DEFAULT, type ImpostazioniNotificheEsercizio } from "@/src/lib/impostazioniEsercizio";
 import {
@@ -110,7 +111,8 @@ export default function Impostazioni() {
   }
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={{ padding: 16, gap: 20 }}>
+    <ScrollView style={styles.container} contentContainerStyle={styles.contenuto}>
+      <TitoloGrande titolo="Impostazioni" />
       <View style={styles.card}>
         <Text style={styles.sezioneTitolo}>Avvisi durante l'esercizio</Text>
         <Text style={styles.nota}>Preferenza di questo dispositivo: quanto spesso ricevere un promemoria (vibrazione, suono e notifica) mentre un esercizio è in corso. L'avviso a 30 secondi dalla fine e quello di fine esercizio restano sempre attivi quando l'esercizio ha una durata prevista.</Text>
@@ -187,18 +189,19 @@ export default function Impostazioni() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: brand.colors.surface },
-  card: { backgroundColor: brand.colors.surfaceSecondary, borderRadius: 12, padding: 14, gap: 10 },
-  sezioneTitolo: { color: brand.colors.onSurface, fontSize: 15, fontWeight: "700" },
-  nota: { color: brand.colors.muted, fontSize: 12 },
-  input: { backgroundColor: brand.colors.surfaceTertiary, color: brand.colors.onSurface, borderRadius: 8, padding: 10 },
-  bottone: { backgroundColor: brand.colors.brand, padding: 10, borderRadius: 8, alignItems: "center" },
-  bottoneTesto: { color: "#000", fontWeight: "700" },
-  rigaProvider: { flexDirection: "row", alignItems: "center", gap: 8 },
-  rigaNotifiche: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  contenuto: { padding: 16, paddingBottom: 48, gap: 18, width: "100%", maxWidth: 900, alignSelf: "center" },
+  card: { backgroundColor: brand.colors.surfaceSecondary, borderRadius: 18, padding: 16, gap: 12 },
+  sezioneTitolo: { color: brand.colors.onSurface, fontSize: 17, fontWeight: "700" },
+  nota: { color: brand.colors.muted, fontSize: 13, lineHeight: 18 },
+  input: { backgroundColor: brand.colors.surfaceTertiary, color: brand.colors.onSurface, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 12, minHeight: 44 },
+  bottone: { backgroundColor: brand.colors.brand, minHeight: 44, paddingHorizontal: 18, borderRadius: 999, alignItems: "center", justifyContent: "center" },
+  bottoneTesto: { color: "#000", fontWeight: "700", fontSize: 15 },
+  rigaProvider: { flexDirection: "row", alignItems: "center", gap: 8, minHeight: 44 },
+  rigaNotifiche: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12, minHeight: 44 },
   rigaRiepilogo: { color: brand.colors.onSurface, fontSize: 14 },
   rigaProviderNome: { color: brand.colors.onSurface, fontWeight: "600", width: 90 },
-  inputPriorita: { backgroundColor: brand.colors.surfaceTertiary, color: brand.colors.onSurface, borderRadius: 6, padding: 6, width: 40, textAlign: "center" },
-  inputModello: { flex: 1, backgroundColor: brand.colors.surfaceTertiary, color: brand.colors.onSurface, borderRadius: 6, padding: 6, fontSize: 12 },
+  inputPriorita: { backgroundColor: brand.colors.surfaceTertiary, color: brand.colors.onSurface, borderRadius: 10, padding: 6, width: 44, minHeight: 44, textAlign: "center" },
+  inputModello: { flex: 1, minWidth: 0, minHeight: 44, backgroundColor: brand.colors.surfaceTertiary, color: brand.colors.onSurface, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 6, fontSize: 13 },
   selettoreFederazione: { flexDirection: "row", gap: 6 },
   chipFederazione: { paddingVertical: 5, paddingHorizontal: 10, borderRadius: 14, backgroundColor: brand.colors.surfaceTertiary },
   chipFederazioneAttivo: { backgroundColor: brand.colors.brand },

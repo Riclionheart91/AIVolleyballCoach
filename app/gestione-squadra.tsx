@@ -8,6 +8,7 @@ import { aggiornaAtleta, elencaAtlete } from "@/src/services/athletes";
 import { confermaAzione, avvisa } from "@/src/lib/confermaAzione";
 import { brand, etichetteRuolo } from "@/src/config";
 import { MessaggioWhatsApp } from "@/src/components/MessaggioWhatsApp";
+import { TitoloGrande } from "@/src/components/TitoloGrande";
 import { invitoAccessoAtleta, invitoStaffLink, invitoStaffPassword } from "@/src/lib/messaggiWhatsApp";
 import { creaLinkAccessoAtleta, creaLinkAccessoStaff, linkAccesso, metodoAccessoPerEmail, type MetodoAccesso } from "@/src/services/accessi";
 import type { Athlete, Ruolo } from "@/src/types/database";
@@ -148,11 +149,11 @@ export default function GestioneSquadra() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Pressable onPress={() => router.back()} hitSlop={12}><Text style={styles.indietro}>← Profilo</Text></Pressable>
-        <Text style={styles.titolo}>Gestione squadra</Text>
+        <Pressable onPress={() => router.back()} hitSlop={12} style={styles.indietroArea}><Text style={styles.indietro}>← Profilo</Text></Pressable>
       </View>
 
-      <ScrollView contentContainerStyle={{ padding: 16, gap: 16, paddingBottom: 60 }}>
+      <ScrollView contentContainerStyle={styles.contenuto}>
+        <TitoloGrande titolo="Gestione squadra" />
         <View style={styles.card}>
           <Text style={styles.sezione}>Collaboratori ({collaboratori.length})</Text>
           {collaboratori.map((m) => (
@@ -418,42 +419,43 @@ export default function GestioneSquadra() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: brand.colors.surface },
-  header: { flexDirection: "row", alignItems: "center", gap: 16, padding: 16, borderBottomWidth: 1, borderBottomColor: brand.colors.border },
+  header: { flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingTop: 8 },
+  indietroArea: { minHeight: 44, justifyContent: "center" },
   indietro: { color: brand.colors.brand, fontWeight: "700", fontSize: 15 },
-  titolo: { color: brand.colors.onSurface, fontSize: 17, fontWeight: "700" },
-  card: { backgroundColor: brand.colors.surfaceSecondary, borderRadius: 12, padding: 14, gap: 10 },
-  sezione: { color: brand.colors.onSurface, fontSize: 15, fontWeight: "700" },
-  etichetta: { color: brand.colors.muted, fontSize: 11, textTransform: "uppercase", marginTop: 4 },
-  nota: { color: brand.colors.muted, fontSize: 12, lineHeight: 17 },
-  riga: { flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: brand.colors.border, minHeight: 52 },
-  rigaTitolo: { color: brand.colors.onSurface, fontSize: 14, fontWeight: "600" },
-  rigaSotto: { color: brand.colors.muted, fontSize: 12, marginTop: 2 },
-  freccia: { color: brand.colors.brand, fontSize: 20, fontWeight: "700" },
+  contenuto: { padding: 16, paddingBottom: 60, gap: 16, width: "100%", maxWidth: 900, alignSelf: "center" },
+  card: { backgroundColor: brand.colors.surfaceSecondary, borderRadius: 18, padding: 16, gap: 10 },
+  sezione: { color: brand.colors.onSurface, fontSize: 22, fontWeight: "700" },
+  etichetta: { color: brand.colors.muted, fontSize: 13, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.6, marginTop: 4 },
+  nota: { color: brand.colors.muted, fontSize: 13, lineHeight: 18 },
+  riga: { flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: brand.colors.border, minHeight: 56 },
+  rigaTitolo: { color: brand.colors.onSurface, fontSize: 16, fontWeight: "600" },
+  rigaSotto: { color: brand.colors.muted, fontSize: 14, marginTop: 2 },
+  freccia: { color: brand.colors.muted, fontSize: 20, fontWeight: "700" },
   statoOk: { color: brand.colors.success, fontSize: 18, fontWeight: "800" },
-  azioneAnnulla: { color: brand.colors.error, fontSize: 12, fontWeight: "600" },
-  bottonePiccolo: { backgroundColor: brand.colors.brand, paddingVertical: 8, paddingHorizontal: 14, borderRadius: 8 },
-  bottonePiccoloTesto: { color: "#000", fontWeight: "700", fontSize: 12 },
-  chipScout: { borderWidth: 1, borderColor: brand.colors.muted, paddingVertical: 6, paddingHorizontal: 10, borderRadius: 14 },
-  chipScoutAttivo: { backgroundColor: brand.colors.brandSecondary, borderColor: brand.colors.brandSecondary },
-  chipScoutTesto: { color: brand.colors.muted, fontSize: 11, fontWeight: "600" },
+  azioneAnnulla: { color: brand.colors.error, fontSize: 13, fontWeight: "600", paddingVertical: 12 },
+  bottonePiccolo: { backgroundColor: brand.colors.brand, minHeight: 44, justifyContent: "center", paddingHorizontal: 16, borderRadius: 999 },
+  bottonePiccoloTesto: { color: "#000", fontWeight: "700", fontSize: 14 },
+  chipScout: { backgroundColor: brand.colors.surfaceTertiary, minHeight: 44, minWidth: 44, alignItems: "center", justifyContent: "center", paddingHorizontal: 12, borderRadius: 999 },
+  chipScoutAttivo: { backgroundColor: brand.colors.brandSecondary },
+  chipScoutTesto: { color: brand.colors.onSurfaceSecondary, fontSize: 13, fontWeight: "600" },
   chipScoutTestoAttivo: { color: "#000" },
-  input: { backgroundColor: brand.colors.surfaceTertiary, color: brand.colors.onSurface, borderRadius: 8, padding: 10 },
+  input: { backgroundColor: brand.colors.surfaceTertiary, color: brand.colors.onSurface, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 12, minHeight: 44 },
   chipRiga: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
-  chip: { paddingVertical: 8, paddingHorizontal: 12, borderRadius: 16, backgroundColor: brand.colors.surfaceTertiary },
+  chip: { minHeight: 44, justifyContent: "center", paddingHorizontal: 16, borderRadius: 999, backgroundColor: brand.colors.surfaceTertiary },
   chipAttivo: { backgroundColor: brand.colors.brand },
-  chipTesto: { color: brand.colors.onSurfaceSecondary, fontSize: 12 },
+  chipTesto: { color: brand.colors.onSurfaceSecondary, fontSize: 14 },
   chipTestoAttivo: { color: "#000", fontWeight: "700" },
   rigaPermesso: { flexDirection: "row", gap: 10, alignItems: "flex-start", paddingVertical: 8 },
   quadratino: { width: 22, height: 22, borderRadius: 6, borderWidth: 2, borderColor: brand.colors.brand, alignItems: "center", justifyContent: "center", marginTop: 2 },
   quadratinoAttivo: { backgroundColor: brand.colors.brand },
   spunta: { color: "#000", fontWeight: "800", fontSize: 12 },
   testoPermesso: { color: brand.colors.onSurface, fontSize: 14, fontWeight: "600" },
-  bottone: { backgroundColor: brand.colors.brand, padding: 12, borderRadius: 8, alignItems: "center" },
+  bottone: { backgroundColor: brand.colors.brand, minHeight: 44, paddingHorizontal: 18, paddingVertical: 12, borderRadius: 999, alignItems: "center", justifyContent: "center" },
   bottoneTesto: { color: "#000", fontWeight: "700" },
-  bottoneDistruttivo: { borderColor: brand.colors.error, borderWidth: 1, padding: 12, borderRadius: 8, alignItems: "center" },
+  bottoneDistruttivo: { backgroundColor: brand.colors.surfaceTertiary, minHeight: 44, paddingHorizontal: 18, paddingVertical: 12, borderRadius: 999, alignItems: "center", justifyContent: "center" },
   bottoneDistruttivoTesto: { color: brand.colors.error, fontWeight: "700" },
   sfondoPopup: { flex: 1, backgroundColor: "rgba(0,0,0,0.55)", justifyContent: "center", padding: 24 },
-  cartaPopup: { backgroundColor: brand.colors.surfaceSecondary, borderRadius: 16, padding: 20, gap: 10 },
-  titoloPopup: { color: brand.colors.onSurface, fontSize: 16, fontWeight: "700" },
-  chiudi: { color: brand.colors.muted, fontSize: 13, textAlign: "center", paddingVertical: 6 },
+  cartaPopup: { backgroundColor: brand.colors.surfaceSecondary, borderRadius: 18, padding: 20, gap: 10, width: "100%", maxWidth: 480, alignSelf: "center" },
+  titoloPopup: { color: brand.colors.onSurface, fontSize: 18, fontWeight: "700" },
+  chiudi: { color: brand.colors.muted, fontSize: 15, textAlign: "center", paddingVertical: 12 },
 });

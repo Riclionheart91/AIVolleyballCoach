@@ -61,12 +61,12 @@ export function GraficoAndamentoSet({ punti, timeouts }: { punti: PuntoAndamento
 }
 
 const styles = StyleSheet.create({
-  area: { flexDirection: "row", backgroundColor: brand.colors.surfaceSecondary, borderRadius: 8, overflow: "hidden", position: "relative" },
+  area: { flexDirection: "row", backgroundColor: brand.colors.surface, borderRadius: 12, overflow: "hidden", position: "relative" },
   lineaZero: { position: "absolute", left: 0, right: 0, height: 1, backgroundColor: brand.colors.border },
   colonna: { flex: 1, height: "100%", position: "relative", paddingHorizontal: 0.5 },
-  barra: { position: "absolute", left: 0.5, right: 0.5, borderRadius: 1 },
+  barra: { position: "absolute", left: 0.5, right: 0.5, borderRadius: 2 },
   lineaTimeout: { position: "absolute", top: 0, bottom: 0, left: "40%", width: 2 },
   vuoto: { color: brand.colors.muted, fontSize: 12, paddingVertical: 6 },
-  legenda: { marginTop: 4, gap: 1 },
+  legenda: { marginTop: 8, gap: 2 },
   legendaTesto: { color: brand.colors.muted, fontSize: 10 },
 });

@@ -5,6 +5,7 @@ import { useAuth } from "@/src/context/AuthContext";
 import { elencaSquadreSocieta } from "@/src/services/societa";
 import { avvisa } from "@/src/lib/confermaAzione";
 import { brand } from "@/src/config";
+import { TitoloGrande } from "@/src/components/TitoloGrande";
 
 interface VoceRubrica {
   email: string;
@@ -55,7 +56,7 @@ export default function RubricaStaff() {
   if (!societaPresidenza) {
     return (
       <View style={styles.container}>
-        <Text style={styles.nota}>Questa sezione è riservata al presidente di una società.</Text>
+        <Text style={[styles.nota, { padding: 16 }]}>Questa sezione è riservata al presidente di una società.</Text>
       </View>
     );
   }
@@ -63,25 +64,35 @@ export default function RubricaStaff() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Pressable onPress={() => router.back()} hitSlop={12}><Text style={styles.indietro}>← Profilo</Text></Pressable>
-        <Text style={styles.titolo}>Rubrica staff</Text>
+        <Pressable onPress={() => router.back()} hitSlop={12} style={styles.indietroArea}><Text style={styles.indietro}>← Profilo</Text></Pressable>
       </View>
 
-      <ScrollView contentContainerStyle={{ padding: 16, gap: 12, paddingBottom: 60 }}>
+      <ScrollView contentContainerStyle={styles.contenuto}>
+        <TitoloGrande titolo="Rubrica staff" />
         {caricamento ? (
           <ActivityIndicator color={brand.colors.brand} />
         ) : voci.length === 0 ? (
           <Text style={styles.nota}>Nessun allenatore o vice ancora assegnato in nessuna squadra della società.</Text>
         ) : (
-          voci.map((voce) => (
-            <View key={voce.email} style={styles.card}>
-              <Text style={styles.email}>{voce.nome}</Text>
-              {voce.nome !== voce.email && <Text style={styles.riga}>{voce.email}</Text>}
-              {voce.ruoli.map((r, i) => (
-                <Text key={i} style={styles.riga}>{r.ruolo} · {r.squadra}</Text>
-              ))}
-            </View>
-          ))
+          <View style={styles.scheda}>
+            {voci.map((voce, idx) => (
+              <View key={voce.email}>
+                {idx > 0 && <View style={styles.separatore} />}
+                <View style={styles.voce}>
+                  <View style={styles.avatar}>
+                    <Text style={styles.avatarTesto}>{(voce.nome.replace(/[^a-zA-Z]/g, "").slice(0, 2) || "?").toUpperCase()}</Text>
+                  </View>
+                  <View style={{ flex: 1, gap: 2 }}>
+                    <Text style={styles.email}>{voce.nome}</Text>
+                    {voce.nome !== voce.email && <Text style={styles.riga}>{voce.email}</Text>}
+                    {voce.ruoli.map((r, i) => (
+                      <Text key={i} style={styles.riga}>{r.ruolo} · {r.squadra}</Text>
+                    ))}
+                  </View>
+                </View>
+              </View>
+            ))}
+          </View>
         )}
       </ScrollView>
     </View>
@@ -90,11 +101,16 @@ export default function RubricaStaff() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: brand.colors.surface },
-  header: { flexDirection: "row", alignItems: "center", gap: 16, padding: 16, borderBottomWidth: 1, borderBottomColor: brand.colors.border },
+  header: { flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingTop: 8 },
+  indietroArea: { minHeight: 44, justifyContent: "center" },
   indietro: { color: brand.colors.brand, fontWeight: "700", fontSize: 15 },
-  titolo: { color: brand.colors.onSurface, fontSize: 17, fontWeight: "700" },
-  card: { backgroundColor: brand.colors.surfaceSecondary, borderRadius: 12, padding: 14, gap: 4 },
-  email: { color: brand.colors.onSurface, fontSize: 15, fontWeight: "700" },
-  riga: { color: brand.colors.muted, fontSize: 12.5 },
-  nota: { color: brand.colors.muted, fontSize: 12, lineHeight: 17 },
+  contenuto: { padding: 16, paddingBottom: 60, gap: 12, width: "100%", maxWidth: 900, alignSelf: "center" },
+  scheda: { backgroundColor: brand.colors.surfaceSecondary, borderRadius: 18, overflow: "hidden" },
+  voce: { flexDirection: "row", alignItems: "flex-start", gap: 12, paddingVertical: 12, paddingHorizontal: 14, minHeight: 56 },
+  avatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: brand.colors.surfaceTertiary, alignItems: "center", justifyContent: "center" },
+  avatarTesto: { color: brand.colors.brand, fontSize: 14, fontWeight: "800" },
+  separatore: { height: 1, backgroundColor: brand.colors.border, marginLeft: 66 },
+  email: { color: brand.colors.onSurface, fontSize: 16, fontWeight: "700" },
+  riga: { color: brand.colors.muted, fontSize: 14 },
+  nota: { color: brand.colors.muted, fontSize: 13, lineHeight: 18 },
 });
