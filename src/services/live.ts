@@ -15,10 +15,10 @@ export interface PartitaLive {
   set_vinti_avversario: number;
 }
 
-/** Le partite in corso della propria societa'. In caso di errore: lista vuota (il pulsante resta grigio). */
+/** Le partite in corso della propria societa'. In caso di errore lancia: chi chiama deve distinguere "nessuna live" da "non sono riuscito a leggere". */
 export async function elencaPartiteLive(): Promise<PartitaLive[]> {
   const { data, error } = await supabaseClient.rpc("live_partite_in_corso");
-  if (error) { console.warn("Errore nel leggere le live:", error.message); return []; }
+  if (error) { console.warn("Errore nel leggere le live:", error.message); throw new Error(error.message); }
   return (data ?? []) as PartitaLive[];
 }
 

@@ -9,13 +9,18 @@ const INTERVALLO_MS = 10000;
 /** Le partite in corso della propria societa': tocca una partita per seguirla punto per punto, in sola lettura. */
 export default function ElencoLive() {
   const [partite, setPartite] = useState<PartitaLive[] | null>(null);
+  const [errore, setErrore] = useState<string | null>(null);
 
-  const carica = useCallback(async () => { setPartite(await elencaPartiteLive()); }, []);
+  // Se la lettura fallisce NON si mostra "nessuna partita": si tiene l'elenco precedente, si segnala l'errore e si riprova.
+  const carica = useCallback(async () => {
+    try { setPartite(await elencaPartiteLive()); setErrore(null); }
+    catch (e) { setErrore(e instanceof Error ? e.message : "Errore di rete"); }
+  }, []);
   useFocusEffect(useCallback(() => { carica(); }, [carica]));
   useEffect(() => {
-    const t = setInterval(carica, INTERVALLO_MS);
+    const t = setInterval(carica, errore ? 2500 : INTERVALLO_MS);
     return () => clearInterval(t);
-  }, [carica]);
+  }, [carica, errore]);
 
   return (
     <View style={s.container}>
@@ -28,7 +33,8 @@ export default function ElencoLive() {
 
       <ScrollView contentContainerStyle={{ padding: 16, gap: 12, paddingBottom: 60 }}>
         {partite === null && <ActivityIndicator color={brand.colors.brand} />}
-        {partite !== null && partite.length === 0 && (
+        {errore && <Text style={s.errore}>Non riesco ad aggiornare l'elenco ({errore}). Riprovo…</Text>}
+        {partite !== null && partite.length === 0 && !errore && (
           <Text style={s.nota}>In questo momento nessuna partita della tua società è in corso.</Text>
         )}
         {(partite ?? []).map((p) => (
@@ -56,6 +62,7 @@ const s = StyleSheet.create({
   header: { flexDirection: "row", alignItems: "center", gap: 16, padding: 16, borderBottomWidth: 1, borderBottomColor: brand.colors.border },
   indietro: { color: brand.colors.brand, fontWeight: "700", fontSize: 15 },
   titolo: { color: brand.colors.onSurface, fontSize: 17, fontWeight: "700" },
+  errore: { color: brand.colors.warning, fontSize: 13 },
   nota: { color: brand.colors.muted, fontSize: 13 },
   card: { backgroundColor: brand.colors.surfaceSecondary, borderRadius: 12, padding: 14, gap: 10, borderWidth: 1, borderColor: brand.colors.border },
   rigaTesta: { flexDirection: "row", alignItems: "center", gap: 10 },

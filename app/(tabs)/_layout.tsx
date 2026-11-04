@@ -24,7 +24,7 @@ function BottoneLive() {
 
   useEffect(() => {
     let attivo = true;
-    const aggiorna = () => { elencaPartiteLive().then((l) => { if (attivo) setInCorso(l.length); }).catch(() => { if (attivo) setInCorso(0); }); };
+    const aggiorna = () => { elencaPartiteLive().then((l) => { if (attivo) setInCorso(l.length); }).catch(() => { /* in caso di errore resta lo stato precedente: al prossimo giro si riprova */ }); };
     aggiorna();
     const t = setInterval(aggiorna, 20000);
     return () => { attivo = false; clearInterval(t); };
