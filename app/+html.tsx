@@ -34,6 +34,7 @@ export default function Root({ children }: { children: React.ReactNode }) {
             rinforzo per browser che leggono anche il meta diretto). */}
         <meta name="mobile-web-app-capable" content="yes" />
         <meta name="theme-color" content="#0B1220" />
+        <meta name="color-scheme" content="dark" />
 
         {/* Manifest esplicito: Expo Router con export statico NON lo
             genera più da solo (il supporto PWA integrato è stato
@@ -59,6 +60,7 @@ export default function Root({ children }: { children: React.ReactNode }) {
 
 const RESET_RESPONSIVO = `
 html, body, #root {
+  background-color: #0B1220; /* sfondo dell'app: colora anche la fascia della barra di stato e sotto la barra in basso */
   height: 100%;
   width: 100%;
   max-width: 100vw;
