@@ -137,7 +137,7 @@ export default function TabsLayout() {
         // Barra translucida sfocata (stile Apple Music). Il filtro vale sul web;
         // dove non e' supportato resta lo sfondo scuro semitrasparente.
         tabBarStyle: (largo
-          ? { backgroundColor: brand.colors.surfaceSecondary, borderRightColor: brand.colors.border, borderRightWidth: 1 }
+          ? { backgroundColor: brand.colors.surfaceSecondary, borderRightColor: brand.colors.border, borderRightWidth: 1, width: 232, paddingTop: 8 }
           : {
               backgroundColor: "rgba(11,18,32,0.78)",
               borderTopColor: "rgba(255,255,255,0.08)",
@@ -151,7 +151,7 @@ export default function TabsLayout() {
         // piccole e meno padding evitano che la tab bar spinga la
         // pagina oltre il viewport (una delle cause dello scroll
         // laterale segnalato).
-        tabBarLabelStyle: { fontSize: 10 },
+        tabBarLabelStyle: largo ? { fontSize: 15, fontWeight: "600" } : { fontSize: 10 },
         tabBarIconStyle: { marginBottom: -2 },
         tabBarItemStyle: { paddingHorizontal: 0 },
       }}
