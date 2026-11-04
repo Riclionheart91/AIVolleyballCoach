@@ -1049,7 +1049,7 @@ export default function PartitaLive() {
   if (soloVisione) {
     return (
       <VistaLiveLettura
-        nomeNoi={team?.nome ?? "Noi"}
+        nomeNoi={((modoOspite || modoLive) ? nomeSquadraOspite : team?.nome) ?? "Noi"}
         nomeAvversario={match.avversario}
         partitaInCorso={match.stato === "in_corso"}
         setLista={setConclusi.map((x) => ({ id: x.id, numero: x.numero_set, noi: x.punti_noi, avv: x.punti_avversario, concluso: x.concluso, inCorso: x.id === setCorrente.id && !x.concluso }))}
@@ -1079,7 +1079,7 @@ export default function PartitaLive() {
       <View style={{ flex: orizzontale ? 1 : undefined, gap: 3 }}>
         <View style={styles.rigaSquadra}>
           <Text style={styles.indicatoreServizio}>{noiAlServizio ? "🏐" : ""}</Text>
-          <Text style={[styles.nomeSquadra, noiAlServizio && styles.nomeSquadraAlServizio]} numberOfLines={1}>{(modoOspite ? nomeSquadraOspite : team?.nome) ?? "Noi"}</Text>
+          <Text style={[styles.nomeSquadra, noiAlServizio && styles.nomeSquadraAlServizio]} numberOfLines={1}>{((modoOspite || modoLive) ? nomeSquadraOspite : team?.nome) ?? "Noi"}</Text>
         </View>
         <View style={styles.rigaSquadra}>
           <Text style={styles.indicatoreServizio}>{noiAlServizio ? "" : "🏐"}</Text>
