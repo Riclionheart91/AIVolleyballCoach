@@ -6,6 +6,8 @@ import { aggiungiConvocato, correggiFormazione } from "@/src/services/matches";
 import type { Athlete, MatchSetLineup } from "@/src/types/database";
 
 const MAX_LIBERI = 2;
+/** Atlete convocate, Libero escluso (la distinta e' 12 + 2 Liberi). */
+const MAX_CONVOCATE = 12;
 // Disposizione sul campo visto dalla nostra parte: rete in alto, 4-3-2 davanti e 5-6-1 dietro.
 const RIGHE: number[][] = [[4, 3, 2], [5, 6, 1]];
 
@@ -79,6 +81,8 @@ export function CorreggiFormazione({ visibile, setId, matchId, numeroSet, atlete
   const completa = Object.keys(posizioni).length === 6;
   const nLiberi = Array.from(liberiIds).filter((id) => convocateIds.includes(id)).length;
   const primoSet = numeroSet === 1;
+  const nConvocateGioco = convocateIds.filter((id) => !liberiIds.has(id)).length;
+  const convocateAlMassimo = nConvocateGioco >= MAX_CONVOCATE;
   const idInCampo = new Set(inCampo.map((r) => r.athlete_id));
 
   function assegna(athleteId: string) {
@@ -214,9 +218,13 @@ export function CorreggiFormazione({ visibile, setId, matchId, numeroSet, atlete
                     </Pressable>
                   )}
                   {primoSet ? (
-                    <Pressable onPress={() => setElencoAggiunta(elencoAggiunta === "convocato" ? null : "convocato")} style={[styles.chipAzione, elencoAggiunta === "convocato" && styles.chipAttivo]}>
-                      <Text style={[styles.chipAzioneTesto, elencoAggiunta === "convocato" && styles.chipTestoAttivo]}>+ Aggiungi convocata</Text>
-                    </Pressable>
+                    convocateAlMassimo ? (
+                      <Text style={styles.nota}>Convocate al massimo ({MAX_CONVOCATE} più i Liberi).</Text>
+                    ) : (
+                      <Pressable onPress={() => setElencoAggiunta(elencoAggiunta === "convocato" ? null : "convocato")} style={[styles.chipAzione, elencoAggiunta === "convocato" && styles.chipAttivo]}>
+                        <Text style={[styles.chipAzioneTesto, elencoAggiunta === "convocato" && styles.chipTestoAttivo]}>+ Aggiungi convocata</Text>
+                      </Pressable>
+                    )
                   ) : (
                     <Text style={styles.nota}>Dal secondo set i convocati non si cambiano più.</Text>
                   )}
