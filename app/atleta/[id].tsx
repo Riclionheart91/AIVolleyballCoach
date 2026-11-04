@@ -98,7 +98,7 @@ export default function SchedaAtleta() {
     if (!atleta) return;
     confermaAzione(
       "Eliminare definitivamente?",
-      `"${atleta.nome} ${atleta.cognome}" e TUTTO il suo storico (valutazioni, presenze, RPE, scout) verranno cancellati per sempre. Nella maggior parte dei casi è meglio archiviare invece di eliminare. Procedere comunque?`,
+      `"${atleta.nome} ${atleta.cognome}" e TUTTO il suo storico (valutazioni, presenze, RPE, scout) verranno cancellati per sempre. Se ha un account collegato, perde anche l'accesso alla squadra. Nella maggior parte dei casi è meglio archiviare invece di eliminare. Procedere comunque?`,
       "Elimina definitivamente",
       async () => {
         try { await eliminaAtletaDefinitivamente(atleta.id); router.back(); } catch (e) { avvisa("Errore", (e as Error).message); }

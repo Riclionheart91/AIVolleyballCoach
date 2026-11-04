@@ -47,6 +47,11 @@ export function promemoriaCertificato(squadra: string, scadenzaIso: string): str
     : `Ciao {nome}, ti ricordo che il tuo certificato medico agonistico scade il ${data(scadenzaIso)}. Fissa per tempo la visita e portami il nuovo certificato. Grazie!`;
 }
 
+/** Promemoria per tutto il gruppo: aggiornare la propria scheda anagrafica su SportEasy. */
+export function promemoriaSporteasy(squadra: string): string {
+  return `Ciao {nome}! Ricordo a tutte di controllare e aggiornare la propria scheda anagrafica su SportEasy (dati personali, codice fiscale, telefono, email e certificato medico) per la squadra ${squadra}. Serve a tenere in ordine la squadra: grazie!`;
+}
+
 /** Testo di partenza per il gruppo: risultato e set, poi lo spazio per il commento dell'allenatore. */
 export function commentoPartita(m: Match, sets: MatchSet[], squadra: string): string {
   const esito = m.set_vinti_noi > m.set_vinti_avversario ? "Vittoria" : m.set_vinti_noi < m.set_vinti_avversario ? "Sconfitta" : "Pareggio";

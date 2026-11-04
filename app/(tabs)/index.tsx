@@ -8,6 +8,8 @@ import { PopupForm } from "@/src/components/PopupForm";
 import { brand, ruoliCampo } from "@/src/config";
 import type { Athlete, RuoloCampo } from "@/src/types/database";
 import { avvisa } from "@/src/lib/confermaAzione";
+import { MessaggioWhatsApp } from "@/src/components/MessaggioWhatsApp";
+import { promemoriaSporteasy } from "@/src/lib/messaggiWhatsApp";
 
 export default function Atlete() {
   const { team, puoScrivere } = useAuth();
@@ -16,6 +18,7 @@ export default function Atlete() {
   const [mostraArchiviate, setMostraArchiviate] = useState(false);
   const [caricamento, setCaricamento] = useState(true);
   const [popupAperto, setPopupAperto] = useState(false);
+  const [reminderSporteasy, setReminderSporteasy] = useState(false);
   const [nome, setNome] = useState("");
   const [cognome, setCognome] = useState("");
   const [ruoloCampo, setRuoloCampo] = useState<RuoloCampo | null>(null);
@@ -54,6 +57,11 @@ export default function Atlete() {
         ListHeaderComponent={
           <>
             {puoScrivere && (
+              <Pressable style={styles.bottoneReminder} onPress={() => setReminderSporteasy(true)}>
+                <Text style={styles.bottoneReminderTesto}>💬 Ricorda alle atlete di aggiornare la scheda su SportEasy</Text>
+              </Pressable>
+            )}
+            {puoScrivere && (
               <Pressable style={styles.rigaEspandi} onPress={() => setMostraArchiviate(!mostraArchiviate)}>
                 <Text style={styles.rigaEspandiTesto}>{mostraArchiviate ? "▾" : "▸"} Rosa archiviate ({archiviate.length})</Text>
               </Pressable>
@@ -82,6 +90,16 @@ export default function Atlete() {
             { icona: "✍️", etichetta: "Una atleta a mano", descrizione: "Scrivi nome, cognome e ruolo", onPress: () => setPopupAperto(true) },
             { icona: "📄", etichetta: "Importa la rosa da un file", descrizione: "Carichi l'elenco e le atlete entrano tutte insieme", onPress: () => router.push("/importa-atlete") },
           ]}
+        />
+      )}
+
+      {reminderSporteasy && team && (
+        <MessaggioWhatsApp
+          visibile
+          titolo="Promemoria SportEasy"
+          nota="Si apre WhatsApp col messaggio pronto: scegli il gruppo della squadra e premi invia. Puoi modificare il testo qui sopra."
+          modelli={[{ etichetta: "SportEasy", testo: promemoriaSporteasy(team.nome) }]}
+          onChiudi={() => setReminderSporteasy(false)}
         />
       )}
 
@@ -115,6 +133,8 @@ const styles = StyleSheet.create({
   rigaNome: { color: brand.colors.onSurface, fontSize: 16, fontWeight: "600" },
   rigaSotto: { color: brand.colors.muted, fontSize: 13 },
   vuoto: { color: brand.colors.muted, textAlign: "center", marginTop: 32 },
+  bottoneReminder: { backgroundColor: brand.colors.surfaceSecondary, borderWidth: 1, borderColor: brand.colors.border, borderRadius: 10, padding: 12, marginBottom: 8 },
+  bottoneReminderTesto: { color: brand.colors.onSurface, fontSize: 13, fontWeight: "600" },
   rigaEspandi: { paddingVertical: 4 },
   rigaEspandiTesto: { color: brand.colors.brandSecondary, fontSize: 13, fontWeight: "600" },
   rigaArchiviata: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: 6 },
