@@ -7,6 +7,7 @@ import { confermaAzione, avvisa } from "@/src/lib/confermaAzione";
 import { SchedaRendimento } from "@/src/components/SchedaRendimento";
 import { CaricoAllenamento } from "@/src/components/CaricoAllenamento";
 import { PianiIndividuali } from "@/src/components/PianiIndividuali";
+import { TitoloGrande } from "@/src/components/TitoloGrande";
 import { brand, ruoliCampo } from "@/src/config";
 import type { Athlete, RuoloCampo } from "@/src/types/database";
 
@@ -15,7 +16,7 @@ export default function SchedaAtleta() {
   const { team, puoScrivere } = useAuth();
   const [atleta, setAtleta] = useState<Athlete | null>(null);
   const [inModifica, setInModifica] = useState(false);
-  const [anagraficaAperta, setAnagraficaAperta] = useState(false);
+  const [anagraficaAperta, setAnagraficaAperta] = useState(true);
   const [salvataggio, setSalvataggio] = useState(false);
 
   const [nome, setNome] = useState("");
@@ -109,29 +110,42 @@ export default function SchedaAtleta() {
 
   if (!atleta) return <View style={styles.container}><ActivityIndicator color={brand.colors.brand} style={{ marginTop: 40 }} /></View>;
 
+  const sottotitolo = [
+    atleta.numero_maglia != null ? `#${atleta.numero_maglia}` : null,
+    atleta.ruolo_campo || null,
+    team?.nome || null,
+  ].filter(Boolean).join(" · ");
+  const cert = statoCertificato(atleta.scadenza_certificato_medico);
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Pressable onPress={tornaIndietro} hitSlop={12}>
-          <Text style={styles.indietro}>← Rosa</Text>
-        </Pressable>
-        {inModifica && puoScrivere && (
-          <View style={{ flexDirection: "row", gap: 16 }}>
-            {atleta.status === "attiva" ? (
-              <Pressable onPress={chiediArchiviazione}><Text style={styles.azioneHeader}>Archivia</Text></Pressable>
-            ) : (
-              <Pressable onPress={chiediRipristino}><Text style={styles.azioneHeader}>Ripristina</Text></Pressable>
+        <View style={styles.colonna}>
+          <View style={styles.rigaHeader}>
+            <Pressable onPress={tornaIndietro} hitSlop={12} style={styles.bersaglio}>
+              <Text style={styles.indietro}>‹ Rosa</Text>
+            </Pressable>
+            {inModifica && puoScrivere && (
+              <View style={{ flexDirection: "row", gap: 8 }}>
+                {atleta.status === "attiva" ? (
+                  <Pressable onPress={chiediArchiviazione} style={styles.pillSecondaria}><Text style={styles.pillSecondariaTesto}>Archivia</Text></Pressable>
+                ) : (
+                  <Pressable onPress={chiediRipristino} style={styles.pillSecondaria}><Text style={styles.pillSecondariaTesto}>Ripristina</Text></Pressable>
+                )}
+                <Pressable onPress={chiediEliminazione} style={styles.pillSecondaria}><Text style={styles.elimina}>Elimina</Text></Pressable>
+              </View>
             )}
-            <Pressable onPress={chiediEliminazione}><Text style={styles.elimina}>Elimina</Text></Pressable>
           </View>
-        )}
+        </View>
       </View>
 
-      <ScrollView contentContainerStyle={{ padding: 16, gap: 12 }}>
+      <ScrollView contentContainerStyle={styles.scroll}>
+       <View style={styles.colonna}>
         {atleta.status === "archiviata" && <Text style={styles.badgeArchiviata}>ARCHIVIATA</Text>}
 
         {inModifica ? (
           <>
+            <TitoloGrande titolo="Modifica atleta" />
             <Campo etichetta="Nome"><TextInput style={styles.input} value={nome} onChangeText={setNome} placeholderTextColor={brand.colors.muted} /></Campo>
             <Campo etichetta="Cognome"><TextInput style={styles.input} value={cognome} onChangeText={setCognome} placeholderTextColor={brand.colors.muted} /></Campo>
             <Campo etichetta="Ruolo in campo">
@@ -158,35 +172,52 @@ export default function SchedaAtleta() {
           </>
         ) : (
           <>
-            {/* Ordine: identità, anagrafica richiusa (dove la si cerca),
-                poi il rendimento in sintesi e i piani individuali.
+            {/* Ordine: identità, rendimento in sintesi (anelli, certificato,
+                voto, azioni), anagrafica, carico e piani individuali.
                 Il dettaglio per fondamentale e gli obiettivi si aprono
                 a richiesta, per tenere la scheda compatta. */}
-            <Text style={styles.titolo}>{atleta.nome} {atleta.cognome}</Text>
-            {!!atleta.ruolo_campo && <Text style={styles.sottotitolo}>{atleta.ruolo_campo}{atleta.numero_maglia ? ` — n. ${atleta.numero_maglia}` : ""}</Text>}
+            <TitoloGrande titolo={`${atleta.nome} ${atleta.cognome}`} sottotitolo={sottotitolo || undefined} />
 
-            <Pressable onPress={() => setAnagraficaAperta(!anagraficaAperta)} style={styles.apriSezione}>
-              <Text style={styles.apriSezioneTesto}>{anagraficaAperta ? "▾" : "▸"} Dati anagrafici</Text>
+            <SchedaRendimento
+              athleteId={atleta.id}
+              nomeAtleta={`${atleta.nome} ${atleta.cognome}`}
+              modificabile={puoScrivere}
+              soloRiepilogo
+              riquadroAccanto={
+                <View style={styles.riquadro}>
+                  <Text style={styles.etichettaRiquadro}>CERTIFICATO</Text>
+                  <Text style={[styles.valoreRiquadro, { color: cert.colore }]}>{cert.valore}</Text>
+                  <Text style={styles.notaRiquadro}>{cert.nota}</Text>
+                </View>
+              }
+              sottoRiquadri={puoScrivere ? (
+                <View style={styles.rigaPulsanti}>
+                  <Pressable style={styles.pillPrimaria} onPress={() => setInModifica(true)}>
+                    <Text style={styles.pillPrimariaTesto}>Modifica</Text>
+                  </Pressable>
+                </View>
+              ) : undefined}
+            />
+
+            <Pressable onPress={() => setAnagraficaAperta(!anagraficaAperta)} style={styles.intestazioneSezione}>
+              <Text style={styles.titoloSezione}>Anagrafica</Text>
+              <Text style={styles.chevron}>{anagraficaAperta ? "▾" : "▸"}</Text>
             </Pressable>
             {anagraficaAperta && (
-              <>
+              <View style={styles.listaRaggruppata}>
                 <RigaSolaLettura etichetta="Data di nascita" valore={atleta.data_nascita} />
                 <RigaSolaLettura etichetta="Codice fiscale" valore={atleta.codice_fiscale} />
                 <RigaSolaLettura etichetta="Numero di licenza" valore={atleta.numero_licenza} />
                 <RigaSolaLettura etichetta="Scadenza certificato medico" valore={atleta.scadenza_certificato_medico} />
                 <RigaSolaLettura etichetta="Telefono" valore={atleta.telefono} />
                 <RigaSolaLettura etichetta="Email" valore={atleta.email_contatto} />
-                <RigaSolaLettura etichetta="Note" valore={atleta.note_personali} />
-              </>
+                <RigaSolaLettura etichetta="Note" valore={atleta.note_personali} ultima />
+              </View>
             )}
-
-            <View style={{ marginTop: 12 }}>
-              <SchedaRendimento athleteId={atleta.id} nomeAtleta={`${atleta.nome} ${atleta.cognome}`} modificabile={puoScrivere} soloRiepilogo />
-            </View>
 
             <CaricoAllenamento athleteId={atleta.id} />
 
-            <Text style={styles.titoloSezione}>Piani individuali</Text>
+            <Text style={[styles.titoloSezione, { marginTop: 12 }]}>Piani individuali</Text>
             {team && (
               <PianiIndividuali
                 teamId={team.id}
@@ -198,13 +229,9 @@ export default function SchedaAtleta() {
             )}
           </>
         )}
+       </View>
       </ScrollView>
 
-      {puoScrivere && !inModifica && (
-        <Pressable style={styles.fabModifica} onPress={() => setInModifica(true)}>
-          <Text style={styles.fabModificaTesto}>✎</Text>
-        </Pressable>
-      )}
     </View>
   );
 }
@@ -213,42 +240,67 @@ function Campo({ etichetta, children }: { etichetta: string; children: React.Rea
   return <View style={{ gap: 4 }}><Text style={styles.etichettaCampo}>{etichetta}</Text>{children}</View>;
 }
 
-function RigaSolaLettura({ etichetta, valore }: { etichetta: string; valore: string | null }) {
+function RigaSolaLettura({ etichetta, valore, ultima = false }: { etichetta: string; valore: string | null; ultima?: boolean }) {
   return (
-    <View style={styles.rigaSolaLettura}>
-      <Text style={styles.etichettaCampo}>{etichetta}</Text>
-      <Text style={styles.valoreSolaLettura}>{valore || "—"}</Text>
-    </View>
+    <>
+      <View style={styles.rigaSolaLettura}>
+        <Text style={styles.etichettaRiga}>{etichetta}</Text>
+        <Text style={styles.valoreSolaLettura}>{valore || "—"}</Text>
+      </View>
+      {!ultima && <View style={styles.separatore} />}
+    </>
   );
+}
+
+/** Scadenza del certificato medico: testo breve (gg/mm/aa), colore e nota in base ai giorni mancanti. */
+function statoCertificato(scadenza: string | null): { valore: string; colore: string; nota: string } {
+  if (!scadenza) return { valore: "—", colore: brand.colors.muted, nota: "non indicato" };
+  const [a, m, g] = scadenza.slice(0, 10).split("-");
+  const data = new Date(`${scadenza.slice(0, 10)}T00:00:00`);
+  if (!a || !m || !g || isNaN(data.getTime())) return { valore: scadenza, colore: brand.colors.muted, nota: "data non valida" };
+  const oggi = new Date();
+  oggi.setHours(0, 0, 0, 0);
+  const giorni = Math.round((data.getTime() - oggi.getTime()) / 86400000);
+  const valore = `${g}/${m}/${a.slice(2)}`;
+  if (giorni < 0) return { valore, colore: brand.colors.error, nota: "scaduto" };
+  if (giorni <= 30) return { valore, colore: brand.colors.warning, nota: giorni === 0 ? "scade oggi" : `scade tra ${giorni} gg` };
+  return { valore, colore: brand.colors.success, nota: "valido" };
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: brand.colors.surface },
-  header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", padding: 16, borderBottomWidth: 1, borderBottomColor: brand.colors.border },
-  indietro: { color: brand.colors.brand, fontWeight: "700", fontSize: 15 },
-  azioneHeader: { color: brand.colors.brandSecondary, fontWeight: "600" },
-  elimina: { color: brand.colors.error, fontWeight: "600" },
+  header: { paddingHorizontal: 16, paddingTop: 8 },
+  colonna: { width: "100%", maxWidth: 900, alignSelf: "center", gap: 12 },
+  rigaHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", minHeight: 44 },
+  scroll: { padding: 16, paddingBottom: 48 },
+  bersaglio: { minHeight: 44, justifyContent: "center" },
+  indietro: { color: brand.colors.brand, fontWeight: "600", fontSize: 17 },
+  pillSecondaria: { minHeight: 44, paddingHorizontal: 16, borderRadius: 999, backgroundColor: brand.colors.surfaceTertiary, alignItems: "center", justifyContent: "center" },
+  pillSecondariaTesto: { color: brand.colors.onSurface, fontWeight: "600", fontSize: 15 },
+  elimina: { color: brand.colors.error, fontWeight: "600", fontSize: 15 },
+  pillPrimaria: { flex: 1, minHeight: 44, borderRadius: 999, backgroundColor: brand.colors.brand, alignItems: "center", justifyContent: "center" },
+  pillPrimariaTesto: { color: "#000", fontSize: 16, fontWeight: "700" },
+  rigaPulsanti: { flexDirection: "row", gap: 10 },
   badgeArchiviata: { color: brand.colors.warning, fontWeight: "700", fontSize: 12 },
-  titolo: { color: brand.colors.onSurface, fontSize: 22, fontWeight: "700" },
-  apriSezione: { paddingVertical: 12, marginTop: 8, borderTopWidth: 1, borderTopColor: brand.colors.border },
-  apriSezioneTesto: { color: brand.colors.brandSecondary, fontSize: 13, fontWeight: "700" },
-  titoloSezione: { color: brand.colors.brandSecondary, fontSize: 12, fontWeight: "800", textTransform: "uppercase", marginTop: 16 },
-  sottotitolo: { color: brand.colors.brandSecondary, fontSize: 14, fontWeight: "600" },
-  etichettaCampo: { color: brand.colors.muted, fontSize: 12, textTransform: "uppercase" },
-  valoreSolaLettura: { color: brand.colors.onSurface, fontSize: 15 },
-  rigaSolaLettura: { gap: 2, borderTopWidth: 1, borderTopColor: brand.colors.border, paddingTop: 8 },
-  input: { backgroundColor: brand.colors.surfaceSecondary, color: brand.colors.onSurface, borderRadius: 8, padding: 10 },
+  riquadro: { flex: 1, backgroundColor: brand.colors.surfaceSecondary, borderRadius: 18, padding: 14, gap: 2 },
+  etichettaRiquadro: { color: brand.colors.muted, fontSize: 12, fontWeight: "700", letterSpacing: 0.6 },
+  valoreRiquadro: { fontSize: 26, fontWeight: "800", letterSpacing: -0.5 },
+  notaRiquadro: { color: brand.colors.muted, fontSize: 12 },
+  intestazioneSezione: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", minHeight: 44, marginTop: 12 },
+  titoloSezione: { color: brand.colors.onSurface, fontSize: 22, fontWeight: "700", letterSpacing: -0.3 },
+  chevron: { color: brand.colors.muted, fontSize: 16 },
+  listaRaggruppata: { backgroundColor: brand.colors.surfaceSecondary, borderRadius: 18, overflow: "hidden" },
+  rigaSolaLettura: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", gap: 16, paddingVertical: 12, paddingHorizontal: 16, minHeight: 44 },
+  etichettaRiga: { color: brand.colors.onSurfaceSecondary, fontSize: 15 },
+  valoreSolaLettura: { color: brand.colors.onSurface, fontSize: 15, fontWeight: "600", flexShrink: 1, textAlign: "right" },
+  separatore: { height: 1, backgroundColor: brand.colors.border, marginLeft: 16 },
+  etichettaCampo: { color: brand.colors.muted, fontSize: 13, fontWeight: "600", textTransform: "uppercase", letterSpacing: 0.6 },
+  input: { backgroundColor: brand.colors.surfaceSecondary, color: brand.colors.onSurface, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, minHeight: 44, fontSize: 16 },
   selettoreRiga: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  chip: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 16, backgroundColor: brand.colors.surfaceSecondary },
+  chip: { minHeight: 44, paddingHorizontal: 16, borderRadius: 999, backgroundColor: brand.colors.surfaceTertiary, alignItems: "center", justifyContent: "center" },
   chipAttivo: { backgroundColor: brand.colors.brand },
-  chipTesto: { color: brand.colors.onSurfaceSecondary, fontSize: 13 },
+  chipTesto: { color: brand.colors.onSurfaceSecondary, fontSize: 14 },
   chipTestoAttivo: { color: "#000", fontWeight: "700" },
-  bottone: { backgroundColor: brand.colors.brand, padding: 12, borderRadius: 8, alignItems: "center", marginTop: 8 },
-  bottoneTesto: { color: "#000", fontWeight: "700" },
-  fabModifica: {
-    position: "absolute", right: 20, bottom: 24, width: 56, height: 56, borderRadius: 28,
-    backgroundColor: brand.colors.brandSecondary, alignItems: "center", justifyContent: "center",
-    shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 5,
-  },
-  fabModificaTesto: { color: "#000", fontSize: 22, fontWeight: "700" },
+  bottone: { backgroundColor: brand.colors.brand, minHeight: 44, paddingHorizontal: 16, borderRadius: 999, alignItems: "center", justifyContent: "center", marginTop: 8 },
+  bottoneTesto: { color: "#000", fontWeight: "700", fontSize: 16 },
 });

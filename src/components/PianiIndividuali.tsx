@@ -291,7 +291,7 @@ export function PianiIndividuali({ teamId, athleteId, nomePersona, ruolo, modifi
             </Pressable>
 
             {modificabile && inGruppo(p) && (
-              <Pressable onPress={() => apriGruppo(p)} hitSlop={6}>
+              <Pressable onPress={() => apriGruppo(p)} hitSlop={6} style={styles.bersaglioLink}>
                 <Text style={styles.gruppoLink}>👥 Piano condiviso da {p.persone_gruppo} persone · chi c'è e a che punto sono ▸</Text>
               </Pressable>
             )}
@@ -310,6 +310,7 @@ export function PianiIndividuali({ teamId, athleteId, nomePersona, ruolo, modifi
                           <Pressable
                             key={n}
                             onPress={() => commutaSvolto(pe, n)}
+                            hitSlop={4}
                             style={[styles.spunta, fatta && styles.spuntaAttiva]}
                           >
                             {fatta ? <Text style={styles.spuntaSegno}>✓</Text> : <Text style={styles.numeroSeduta}>{n + 1}</Text>}
@@ -455,7 +456,7 @@ export function PianiIndividuali({ teamId, athleteId, nomePersona, ruolo, modifi
                 <Text style={styles.bottoneAITesto}>+ Aggiungi persone</Text>
               </Pressable>
             )}
-            <Pressable onPress={() => setGruppoAperto(null)}><Text style={styles.nota}>Chiudi</Text></Pressable>
+            <Pressable onPress={() => setGruppoAperto(null)}><Text style={[styles.nota, styles.chiudi]}>Chiudi</Text></Pressable>
           </View>
         </View>
       </Modal>
@@ -471,7 +472,7 @@ export function PianiIndividuali({ teamId, athleteId, nomePersona, ruolo, modifi
             <Pressable style={[styles.bottoneAI, selAssegna.size === 0 && { opacity: 0.4 }]} onPress={confermaAssegna} disabled={selAssegna.size === 0}>
               <Text style={styles.bottoneAITesto}>Assegna a {selAssegna.size} {selAssegna.size === 1 ? "persona" : "persone"}</Text>
             </Pressable>
-            <Pressable onPress={() => setAssegna(null)}><Text style={styles.nota}>Annulla</Text></Pressable>
+            <Pressable onPress={() => setAssegna(null)}><Text style={[styles.nota, styles.chiudi]}>Annulla</Text></Pressable>
           </View>
         </View>
       </Modal>
@@ -480,7 +481,7 @@ export function PianiIndividuali({ teamId, athleteId, nomePersona, ruolo, modifi
 }
 
 const styles = StyleSheet.create({
-  card: { backgroundColor: brand.colors.surfaceSecondary, borderRadius: 12, padding: 14, gap: 6 },
+  card: { backgroundColor: brand.colors.surfaceSecondary, borderRadius: 18, padding: 16, gap: 6 },
   cardSpenta: { opacity: 0.6 },
   rigaTitolo: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   titolo: { color: brand.colors.onSurface, fontSize: 15, fontWeight: "700", flex: 1 },
@@ -493,28 +494,30 @@ const styles = StyleSheet.create({
   rigaEsercizio: { flexDirection: "row", gap: 10, alignItems: "flex-start", minHeight: 48, paddingVertical: 4 },
   colonnaSpunte: { gap: 4 },
   numeroSeduta: { color: brand.colors.muted, fontSize: 11, fontWeight: "700" },
-  spunta: { width: 30, height: 30, borderRadius: 6, borderWidth: 2, borderColor: brand.colors.brand, alignItems: "center", justifyContent: "center", marginTop: 2 },
+  spunta: { width: 36, height: 36, borderRadius: 10, borderWidth: 2, borderColor: brand.colors.brand, alignItems: "center", justifyContent: "center", marginTop: 2 },
   spuntaAttiva: { backgroundColor: brand.colors.brand },
   spuntaSegno: { color: "#000", fontWeight: "800", fontSize: 14 },
   nomeEsercizio: { color: brand.colors.onSurface, fontSize: 14, fontWeight: "600" },
   indicazioni: { color: brand.colors.onSurfaceSecondary, fontSize: 12, lineHeight: 17, marginTop: 2 },
   frequenza: { color: brand.colors.brandSecondary, fontSize: 11, marginTop: 2 },
-  rigaModifica: { flexDirection: "row", gap: 16, marginTop: 6 },
-  bottoneAggiungi: { borderWidth: 1, borderColor: brand.colors.brand, borderRadius: 8, padding: 10, alignItems: "center" },
-  bottoneAggiungiTesto: { color: brand.colors.brand, fontWeight: "600" },
+  rigaModifica: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", columnGap: 16 },
+  bottoneAggiungi: { backgroundColor: brand.colors.surfaceTertiary, borderRadius: 999, minHeight: 44, paddingHorizontal: 16, alignItems: "center", justifyContent: "center" },
+  bottoneAggiungiTesto: { color: brand.colors.onSurface, fontWeight: "600" },
   sfondoModale: { flex: 1, backgroundColor: "rgba(0,0,0,0.55)", justifyContent: "center", padding: 16 },
-  cartaModale: { backgroundColor: brand.colors.surfaceSecondary, borderRadius: 16, padding: 18, gap: 10 },
-  rigaAzioni: { flexDirection: "row", justifyContent: "flex-end", gap: 16, flexWrap: "wrap" },
-  azione: { color: brand.colors.brand, fontSize: 13, fontWeight: "600" },
-  azioneDistruttiva: { color: brand.colors.error, fontSize: 13, fontWeight: "600" },
+  cartaModale: { backgroundColor: brand.colors.surfaceSecondary, borderRadius: 18, padding: 18, gap: 10, width: "100%", maxWidth: 560, alignSelf: "center" },
+  rigaAzioni: { flexDirection: "row", justifyContent: "flex-end", alignItems: "center", columnGap: 16, flexWrap: "wrap" },
+  azione: { color: brand.colors.brand, fontSize: 14, fontWeight: "600", paddingVertical: 12 },
+  azioneDistruttiva: { color: brand.colors.error, fontSize: 14, fontWeight: "600", paddingVertical: 12 },
   nota: { color: brand.colors.muted, fontSize: 12, lineHeight: 17 },
   gruppoLink: { color: brand.colors.brandSecondary, fontSize: 12, fontWeight: "600" },
+  bersaglioLink: { minHeight: 44, justifyContent: "center" },
+  chiudi: { textAlign: "center", paddingVertical: 14 },
   personalizzato: { color: brand.colors.muted, fontSize: 11, marginTop: 2, fontStyle: "italic" },
-  rigaMembro: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: brand.colors.border },
-  input: { backgroundColor: brand.colors.surfaceTertiary, color: brand.colors.onSurface, borderRadius: 8, padding: 10, minHeight: 56, textAlignVertical: "top" },
+  rigaMembro: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 8, minHeight: 44, borderBottomWidth: 1, borderBottomColor: brand.colors.border },
+  input: { backgroundColor: brand.colors.surfaceTertiary, color: brand.colors.onSurface, borderRadius: 12, padding: 12, minHeight: 56, textAlignVertical: "top" },
   rigaGenerazione: { flexDirection: "row", gap: 8 },
-  bottoneAI: { flex: 1, borderWidth: 1, borderColor: brand.colors.brandSecondary, borderRadius: 10, paddingVertical: 10, alignItems: "center" },
-  bottoneAITesto: { color: brand.colors.brandSecondary, fontWeight: "700" },
-  bottoneNota: { width: 44, borderWidth: 1, borderColor: brand.colors.muted, borderRadius: 10, alignItems: "center", justifyContent: "center" },
-  bottoneNotaTesto: { color: brand.colors.muted, fontSize: 20, fontWeight: "700" },
+  bottoneAI: { flex: 1, backgroundColor: brand.colors.surfaceTertiary, borderRadius: 999, minHeight: 44, paddingHorizontal: 12, alignItems: "center", justifyContent: "center" },
+  bottoneAITesto: { color: brand.colors.onSurface, fontWeight: "700" },
+  bottoneNota: { width: 44, height: 44, backgroundColor: brand.colors.surfaceTertiary, borderRadius: 999, alignItems: "center", justifyContent: "center" },
+  bottoneNotaTesto: { color: brand.colors.onSurface, fontSize: 20, fontWeight: "700" },
 });

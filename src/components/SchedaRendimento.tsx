@@ -1,5 +1,7 @@
-import { useCallback, useState } from "react";
+import { Fragment, useCallback, useState } from "react";
+import type { ReactNode } from "react";
 import { View, Text, Pressable, StyleSheet, ActivityIndicator, Modal, TextInput, ScrollView } from "react-native";
+import Svg, { Circle } from "react-native-svg";
 import { useFocusEffect } from "expo-router";
 import { impostaObiettivo, leggiSchedaAtleta, rimuoviObiettivo, type RigaScheda } from "@/src/services/schedaAtleta";
 import { avvisa } from "@/src/lib/confermaAzione";
@@ -14,6 +16,36 @@ function coloreLivello(valore: number): string {
   return brand.colors.error;
 }
 
+/** Un anello: raggio, colore e frazione 0..1 riempita. */
+interface Anello { raggio: number; colore: string; frazione: number }
+
+/**
+ * Tre anelli concentrici stile Apple Fitness. Usa solo frazioni calcolate
+ * dai dati reali della scheda; con frazione 0 resta solo la traccia.
+ */
+function Anelli({ anelli }: { anelli: Anello[] }) {
+  return (
+    <Svg width={132} height={132} viewBox="0 0 120 120">
+      {anelli.map((a) => {
+        const circonferenza = 2 * Math.PI * a.raggio;
+        const f = Math.max(0, Math.min(1, a.frazione));
+        return (
+          <Fragment key={a.raggio}>
+            <Circle cx={60} cy={60} r={a.raggio} fill="none" stroke={a.colore} strokeOpacity={0.2} strokeWidth={9} />
+            {f > 0 && (
+              <Circle
+                cx={60} cy={60} r={a.raggio} fill="none" stroke={a.colore} strokeWidth={9} strokeLinecap="round"
+                strokeDasharray={`${f * circonferenza} ${circonferenza}`}
+                rotation={-90} origin="60, 60"
+              />
+            )}
+          </Fragment>
+        );
+      })}
+    </Svg>
+  );
+}
+
 /**
  * Scheda di rendimento personale. Pensata perché l'atleta la apra e
  * capisca in tre secondi: dove sono, dove devo arrivare, sto
@@ -24,10 +56,14 @@ function coloreLivello(valore: number): string {
  * "modificabile" è vero solo per l'allenatore: l'atleta vede gli
  * obiettivi ma non può cambiarseli.
  */
-export function SchedaRendimento({ athleteId, nomeAtleta, modificabile, soloRiepilogo = false }: {
+export function SchedaRendimento({ athleteId, nomeAtleta, modificabile, soloRiepilogo = false, riquadroAccanto, sottoRiquadri }: {
   athleteId: string; nomeAtleta?: string; modificabile: boolean;
   /** true = mostra solo i tre numeri sintetici, il dettaglio si apre a richiesta. */
   soloRiepilogo?: boolean;
+  /** Riquadro (es. certificato medico) affiancato al riquadro del voto. */
+  riquadroAccanto?: ReactNode;
+  /** Contenuto (es. pulsanti) subito sotto i riquadri, prima del dettaglio per fondamentale. */
+  sottoRiquadri?: ReactNode;
 }) {
   const [dettaglioAperto, setDettaglioAperto] = useState(false);
   const [righe, setRighe] = useState<RigaScheda[]>([]);
@@ -65,22 +101,48 @@ export function SchedaRendimento({ athleteId, nomeAtleta, modificabile, soloRiep
 
   if (caricamento) return <ActivityIndicator color={brand.colors.brand} style={{ marginTop: 24 }} />;
 
+  const fondamentaliTotali = righe.length;
+  const virgola = (n: number) => n.toFixed(1).replace(".", ",");
+  const anelli: Anello[] = [
+    { raggio: 54, colore: brand.colors.brand, frazione: fondamentaliTotali > 0 ? conValutazioni.length / fondamentaliTotali : 0 },
+    { raggio: 42, colore: brand.colors.brandSecondary, frazione: obiettiviTotali > 0 ? obiettiviRaggiunti / obiettiviTotali : 0 },
+    { raggio: 30, colore: brand.colors.success, frazione: fondamentaliTotali > 0 ? recordAttivi / fondamentaliTotali : 0 },
+  ];
+
   return (
     <View style={{ gap: 12 }}>
-      <View style={styles.riepilogo}>
-        <View style={styles.boxRiepilogo}>
-          <Text style={styles.valoreRiepilogo}>{mediaGenerale ? mediaGenerale.toFixed(1) : "—"}</Text>
-          <Text style={styles.etichettaRiepilogo}>media</Text>
-        </View>
-        <View style={styles.boxRiepilogo}>
-          <Text style={styles.valoreRiepilogo}>{recordAttivi > 0 ? `🏆 ${recordAttivi}` : "—"}</Text>
-          <Text style={styles.etichettaRiepilogo}>record attivi</Text>
-        </View>
-        <View style={styles.boxRiepilogo}>
-          <Text style={styles.valoreRiepilogo}>{obiettiviTotali > 0 ? `${obiettiviRaggiunti}/${obiettiviTotali}` : "—"}</Text>
-          <Text style={styles.etichettaRiepilogo}>obiettivi</Text>
+      <View style={styles.cardAnelli}>
+        <Anelli anelli={anelli} />
+        <View style={styles.legendaAnelli}>
+          <View>
+            <Text style={[styles.etichettaAnello, { color: brand.colors.brand }]}>VALUTATI</Text>
+            <Text style={styles.valoreAnello}>{fondamentaliTotali > 0 ? `${conValutazioni.length}/${fondamentaliTotali}` : "—"}</Text>
+          </View>
+          <View>
+            <Text style={[styles.etichettaAnello, { color: brand.colors.brandSecondary }]}>OBIETTIVI</Text>
+            <Text style={styles.valoreAnello}>{obiettiviTotali > 0 ? `${obiettiviRaggiunti}/${obiettiviTotali}` : "—"}</Text>
+          </View>
+          <View>
+            <Text style={[styles.etichettaAnello, { color: brand.colors.success }]}>RECORD ATTIVI</Text>
+            <Text style={styles.valoreAnello}>{recordAttivi > 0 ? `🏆 ${recordAttivi}` : "—"}</Text>
+          </View>
         </View>
       </View>
+
+      <View style={styles.rigaRiquadri}>
+        {riquadroAccanto}
+        <View style={styles.riquadro}>
+          <Text style={styles.etichettaRiquadro}>VOTO</Text>
+          <Text style={[styles.valoreRiquadro, mediaGenerale != null && { color: coloreLivello(mediaGenerale) }]}>
+            {mediaGenerale != null ? virgola(mediaGenerale) : "—"}
+          </Text>
+          <Text style={styles.notaRiquadro}>
+            {conValutazioni.length > 0 ? `media su ${conValutazioni.length} ${conValutazioni.length === 1 ? "fondamentale" : "fondamentali"}` : "nessuna valutazione"}
+          </Text>
+        </View>
+      </View>
+
+      {sottoRiquadri}
 
       {soloRiepilogo && (
         <Pressable onPress={() => setDettaglioAperto(!dettaglioAperto)} style={styles.apriDettaglio}>
@@ -197,13 +259,18 @@ export function SchedaRendimento({ athleteId, nomeAtleta, modificabile, soloRiep
 }
 
 const styles = StyleSheet.create({
-  riepilogo: { flexDirection: "row", gap: 8 },
-  boxRiepilogo: { flex: 1, backgroundColor: brand.colors.surfaceSecondary, borderRadius: 12, paddingVertical: 12, alignItems: "center" },
-  valoreRiepilogo: { color: brand.colors.onSurface, fontSize: 20, fontWeight: "800" },
-  etichettaRiepilogo: { color: brand.colors.muted, fontSize: 10, textTransform: "uppercase" },
-  apriDettaglio: { paddingVertical: 10, alignItems: "center" },
+  cardAnelli: { backgroundColor: brand.colors.surfaceSecondary, borderRadius: 22, padding: 18, flexDirection: "row", alignItems: "center", gap: 20 },
+  legendaAnelli: { flex: 1, gap: 8 },
+  etichettaAnello: { fontSize: 12, fontWeight: "700", letterSpacing: 0.3 },
+  valoreAnello: { color: brand.colors.onSurface, fontSize: 24, fontWeight: "800", letterSpacing: -0.5, lineHeight: 28 },
+  rigaRiquadri: { flexDirection: "row", gap: 10 },
+  riquadro: { flex: 1, backgroundColor: brand.colors.surfaceSecondary, borderRadius: 18, padding: 14, gap: 2 },
+  etichettaRiquadro: { color: brand.colors.muted, fontSize: 12, fontWeight: "700", letterSpacing: 0.6 },
+  valoreRiquadro: { color: brand.colors.onSurface, fontSize: 26, fontWeight: "800", letterSpacing: -0.5 },
+  notaRiquadro: { color: brand.colors.muted, fontSize: 12 },
+  apriDettaglio: { minHeight: 44, justifyContent: "center", alignItems: "center" },
   apriDettaglioTesto: { color: brand.colors.brandSecondary, fontSize: 13, fontWeight: "600" },
-  card: { backgroundColor: brand.colors.surfaceSecondary, borderRadius: 12, padding: 14, gap: 8, borderWidth: 1, borderColor: "transparent" },
+  card: { backgroundColor: brand.colors.surfaceSecondary, borderRadius: 18, padding: 16, gap: 8, borderWidth: 1, borderColor: "transparent" },
   cardRecord: { borderColor: brand.colors.warning },
   rigaTitolo: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   nomeFondamentale: { color: brand.colors.onSurface, fontSize: 16, fontWeight: "700" },
@@ -219,12 +286,12 @@ const styles = StyleSheet.create({
   messaggioRecord: { color: brand.colors.warning, fontSize: 12, fontWeight: "700" },
   suggerimento: { color: brand.colors.brandSecondary, fontSize: 10 },
   sfondoPopup: { flex: 1, backgroundColor: "rgba(0,0,0,0.55)", justifyContent: "center", padding: 24 },
-  cartaPopup: { backgroundColor: brand.colors.surfaceSecondary, borderRadius: 16, padding: 20, maxHeight: "85%" },
+  cartaPopup: { backgroundColor: brand.colors.surfaceSecondary, borderRadius: 18, width: "100%", maxWidth: 520, alignSelf: "center", padding: 20, maxHeight: "85%" },
   titoloPopup: { color: brand.colors.onSurface, fontSize: 16, fontWeight: "700" },
   input: { backgroundColor: brand.colors.surfaceTertiary, color: brand.colors.onSurface, borderRadius: 8, padding: 12 },
-  bottone: { backgroundColor: brand.colors.brand, padding: 12, borderRadius: 8, alignItems: "center" },
+  bottone: { backgroundColor: brand.colors.brand, minHeight: 44, justifyContent: "center", paddingHorizontal: 16, borderRadius: 999, alignItems: "center" },
   bottoneTesto: { color: "#000", fontWeight: "700" },
-  bottoneDistruttivo: { borderColor: brand.colors.error, borderWidth: 1, padding: 12, borderRadius: 8, alignItems: "center" },
+  bottoneDistruttivo: { borderColor: brand.colors.error, borderWidth: 1, minHeight: 44, justifyContent: "center", paddingHorizontal: 16, borderRadius: 999, alignItems: "center" },
   bottoneDistruttivoTesto: { color: brand.colors.error, fontWeight: "700" },
-  chiudi: { color: brand.colors.muted, fontSize: 13, textAlign: "center", paddingVertical: 6 },
+  chiudi: { color: brand.colors.muted, fontSize: 13, textAlign: "center", paddingVertical: 14 },
 });
