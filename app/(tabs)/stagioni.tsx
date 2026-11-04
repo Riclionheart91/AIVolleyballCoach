@@ -4,6 +4,7 @@ import { useFocusEffect } from "expo-router";
 import { useAuth } from "@/src/context/AuthContext";
 import { chiudiEApriNuovaStagioneSocieta, elencaStagioniSocieta, generaBaselineStagione } from "@/src/services/seasons";
 import { confermaAzione, avvisa } from "@/src/lib/confermaAzione";
+import { TitoloGrande } from "@/src/components/TitoloGrande";
 import { brand } from "@/src/config";
 import type { Season } from "@/src/types/database";
 
@@ -73,32 +74,61 @@ export default function Stagioni() {
     );
   }
 
+  const attive = stagioni.filter((s) => s.stato === "attiva");
+  const altre = stagioni.filter((s) => s.stato !== "attiva");
+
+  function renderAzioni(item: Season) {
+    if (item.stato !== "attiva" || !(puoScrivere || puoGestireStagioni)) return null;
+    return (
+      <View style={styles.azioni}>
+        {puoScrivere && (
+          <Pressable style={styles.pillSecondaria} onPress={() => generaBaseline(item.id)}>
+            <Text style={styles.pillSecondariaTesto}>Genera baseline</Text>
+          </Pressable>
+        )}
+        {puoGestireStagioni && (
+          <Pressable style={styles.pillDistruttiva} onPress={confermaChiusura} disabled={inCorso}>
+            <Text style={styles.pillDistruttivaTesto}>{inCorso ? "Un attimo…" : "Termina e apri la nuova"}</Text>
+          </Pressable>
+        )}
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       <FlatList
-        data={stagioni}
+        data={altre}
         keyExtractor={(s) => s.id}
-        contentContainerStyle={{ padding: 16, paddingBottom: 90 }}
+        contentContainerStyle={styles.contenuto}
         refreshControl={<RefreshControl refreshing={caricamento} onRefresh={carica} tintColor={brand.colors.brand} />}
-        ListEmptyComponent={!caricamento ? <Text style={styles.vuoto}>Nessuna stagione ancora.</Text> : null}
-        renderItem={({ item }) => (
-          <View style={styles.card}>
-            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-              <Text style={styles.cardTitolo}>{item.nome}</Text>
-              <Text style={[styles.badge, item.stato === "attiva" && styles.badgeAttiva]}>{item.stato}</Text>
-            </View>
-            <Text style={styles.cardSotto}>Apertura: {item.data_apertura}</Text>
-            <View style={styles.azioni}>
-              {puoScrivere && item.stato === "attiva" && (
-                <Pressable style={styles.bottoneSecondario} onPress={() => generaBaseline(item.id)}>
-                  <Text style={styles.bottoneSecondarioTesto}>Genera baseline</Text>
-                </Pressable>
-              )}
-              {puoGestireStagioni && item.stato === "attiva" && (
-                <Pressable style={styles.bottoneSecondarioDistruttivo} onPress={confermaChiusura} disabled={inCorso}>
-                  <Text style={styles.bottoneSecondarioDistruttivoTesto}>{inCorso ? "Un attimo…" : "Termina e apri la nuova"}</Text>
-                </Pressable>
-              )}
+        ListHeaderComponent={
+          <View style={{ gap: 14, marginBottom: altre.length > 0 ? 12 : 0 }}>
+            <TitoloGrande titolo="Stagioni" />
+            {attive.length > 0 && <Text style={styles.titoloSezione}>In corso</Text>}
+            {attive.map((item) => (
+              <View key={item.id} style={styles.schedaEvidenza}>
+                <View style={styles.rigaTitolo}>
+                  <Text style={styles.evidenzaTitolo}>{item.nome}</Text>
+                  <Text style={[styles.badge, styles.badgeAttiva]}>{item.stato}</Text>
+                </View>
+                <Text style={styles.cardSotto}>Apertura: {item.data_apertura}</Text>
+                {renderAzioni(item)}
+              </View>
+            ))}
+            {altre.length > 0 && <Text style={styles.titoloSezione}>Storico</Text>}
+          </View>
+        }
+        ListEmptyComponent={!caricamento && stagioni.length === 0 ? <Text style={styles.vuoto}>Nessuna stagione ancora.</Text> : null}
+        renderItem={({ item, index }) => (
+          <View style={[styles.rigaWrap, index === 0 && styles.rigaPrima, index === altre.length - 1 && styles.rigaUltima]}>
+            {index > 0 && <View style={styles.separatore} />}
+            <View style={styles.riga}>
+              <View style={{ flex: 1, gap: 1 }}>
+                <Text style={styles.cardTitolo}>{item.nome}</Text>
+                <Text style={styles.cardSotto}>Apertura: {item.data_apertura}</Text>
+              </View>
+              <Text style={styles.badge}>{item.stato}</Text>
             </View>
           </View>
         )}
@@ -112,15 +142,24 @@ export default function Stagioni() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: brand.colors.surface },
-  card: { backgroundColor: brand.colors.surfaceSecondary, borderRadius: 12, padding: 14, marginBottom: 10, gap: 4 },
-  cardTitolo: { color: brand.colors.onSurface, fontSize: 16, fontWeight: "700" },
+  contenuto: { padding: 16, paddingBottom: 90, width: "100%", maxWidth: 900, alignSelf: "center" },
+  titoloSezione: { color: brand.colors.onSurface, fontSize: 22, fontWeight: "700", letterSpacing: -0.3 },
+  schedaEvidenza: { backgroundColor: brand.colors.surfaceSecondary, borderWidth: 1, borderColor: brand.colors.border, borderRadius: 22, padding: 18, gap: 8 },
+  rigaTitolo: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 10 },
+  evidenzaTitolo: { color: brand.colors.onSurface, fontSize: 24, fontWeight: "700", letterSpacing: -0.4, flexShrink: 1 },
+  rigaWrap: { backgroundColor: brand.colors.surfaceSecondary },
+  rigaPrima: { borderTopLeftRadius: 18, borderTopRightRadius: 18 },
+  rigaUltima: { borderBottomLeftRadius: 18, borderBottomRightRadius: 18 },
+  riga: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 10, paddingHorizontal: 16, minHeight: 60 },
+  separatore: { height: 1, backgroundColor: brand.colors.border, marginLeft: 16 },
+  cardTitolo: { color: brand.colors.onSurface, fontSize: 16, fontWeight: "600" },
   cardSotto: { color: brand.colors.muted, fontSize: 13 },
-  badge: { color: brand.colors.muted, fontSize: 12, textTransform: "uppercase" },
+  badge: { color: brand.colors.muted, fontSize: 12, textTransform: "uppercase", letterSpacing: 0.6 },
   badgeAttiva: { color: brand.colors.success, fontWeight: "700" },
-  azioni: { flexDirection: "row", gap: 8, marginTop: 8 },
-  bottoneSecondario: { borderColor: brand.colors.brand, borderWidth: 1, paddingVertical: 6, paddingHorizontal: 10, borderRadius: 8 },
-  bottoneSecondarioTesto: { color: brand.colors.brand, fontWeight: "600", fontSize: 13 },
-  bottoneSecondarioDistruttivo: { borderColor: brand.colors.error, borderWidth: 1, paddingVertical: 6, paddingHorizontal: 10, borderRadius: 8 },
-  bottoneSecondarioDistruttivoTesto: { color: brand.colors.error, fontWeight: "600", fontSize: 13 },
+  azioni: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 8 },
+  pillSecondaria: { backgroundColor: brand.colors.surfaceTertiary, paddingHorizontal: 20, borderRadius: 999, minHeight: 46, justifyContent: "center", alignItems: "center" },
+  pillSecondariaTesto: { color: brand.colors.onSurface, fontWeight: "600", fontSize: 15 },
+  pillDistruttiva: { backgroundColor: brand.colors.surfaceTertiary, paddingHorizontal: 20, borderRadius: 999, minHeight: 46, justifyContent: "center", alignItems: "center" },
+  pillDistruttivaTesto: { color: brand.colors.error, fontWeight: "600", fontSize: 15 },
   vuoto: { color: brand.colors.muted, textAlign: "center", marginTop: 32 },
 });

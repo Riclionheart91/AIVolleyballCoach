@@ -7,6 +7,7 @@ import { elencaAtlete } from "@/src/services/athletes";
 import { pesiFasiPerData, type PesoFase, elencaPianoAllenamento, generaPianoAllenamentoAI, impostaPianoAllenamento, leggiBloccoPerData, type VoceRiepilogoPiano } from "@/src/services/trainingPlan";
 import { avvisa } from "@/src/lib/confermaAzione";
 import { CreaEsercizio } from "@/src/components/CreaEsercizio";
+import { TitoloGrande } from "@/src/components/TitoloGrande";
 import { brand, fasiAllenamento } from "@/src/config";
 import { supabaseClient } from "@/src/lib/supabase";
 import type { Athlete, Exercise, Training } from "@/src/types/database";
@@ -366,10 +367,11 @@ export default function PianoAllenamento() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Pressable onPress={() => router.back()} hitSlop={12}><Text style={styles.indietro}>← {training.titolo}</Text></Pressable>
+        <Pressable style={styles.indietroArea} onPress={() => router.back()} hitSlop={12}><Text style={styles.indietro}>← {training.titolo}</Text></Pressable>
       </View>
 
-      <ScrollView contentContainerStyle={{ padding: 16, gap: 14 }}>
+      <ScrollView contentContainerStyle={styles.contenuto}>
+        <TitoloGrande titolo="Piano allenamento" />
         <View style={styles.card}>
           <Text style={styles.etichetta}>Argomento della sessione</Text>
           <TextInput style={styles.input} placeholder="Es. difesa e copertura attacco" placeholderTextColor={brand.colors.muted} value={argomento} onChangeText={setArgomento} />
@@ -404,7 +406,7 @@ export default function PianoAllenamento() {
         <View style={styles.card}>
           <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
             <Text style={styles.etichetta}>Esercizi ({totaleMinuti} min totali)</Text>
-            <Pressable onPress={() => { setIndiceSostituzione(null); setMostraNuovoEsercizio(false); setMostraCatalogo(true); }}><Text style={styles.linkAggiungi}>+ Aggiungi</Text></Pressable>
+            <Pressable style={styles.linkAggiungiArea} onPress={() => { setIndiceSostituzione(null); setMostraNuovoEsercizio(false); setMostraCatalogo(true); }}><Text style={styles.linkAggiungi}>+ Aggiungi</Text></Pressable>
           </View>
 
           {esercizi.length === 0 ? (
@@ -532,7 +534,7 @@ export default function PianoAllenamento() {
               <Text style={styles.bottoneSceltaNota}>Il piano attuale viene rifatto da zero</Text>
             </Pressable>
 
-            <Pressable onPress={() => setSceltaGenerazione(false)}>
+            <Pressable style={{ minHeight: 44, justifyContent: "center" }} onPress={() => setSceltaGenerazione(false)}>
               <Text style={styles.annullaScelta}>Annulla</Text>
             </Pressable>
           </View>
@@ -544,12 +546,12 @@ export default function PianoAllenamento() {
           <View style={styles.cartaPopup}>
             <View style={styles.intestazionePopup}>
               <Text style={styles.titoloPopup}>{indiceSostituzione !== null ? "Sostituisci con…" : "Scegli un esercizio"}</Text>
-              <Pressable onPress={chiudiCatalogo}><Text style={styles.chiudiPopup}>✕</Text></Pressable>
+              <Pressable style={styles.chiudiArea} onPress={chiudiCatalogo}><Text style={styles.chiudiPopup}>✕</Text></Pressable>
             </View>
 
             {mostraNuovoEsercizio ? (
               <View style={styles.formNuovoEsercizio}>
-                <Pressable onPress={() => setMostraNuovoEsercizio(false)}>
+                <Pressable style={{ minHeight: 44, justifyContent: "center" }} onPress={() => setMostraNuovoEsercizio(false)}>
                   <Text style={styles.linkNuovoEsercizioTesto}>‹ Torna al catalogo</Text>
                 </Pressable>
                 {team && (
@@ -598,42 +600,46 @@ export default function PianoAllenamento() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: brand.colors.surface },
-  header: { flexDirection: "row", padding: 16, borderBottomWidth: 1, borderBottomColor: brand.colors.border },
-  indietro: { color: brand.colors.brand, fontWeight: "700", fontSize: 15 },
-  card: { backgroundColor: brand.colors.surfaceSecondary, borderRadius: 12, padding: 14, gap: 8 },
-  etichetta: { color: brand.colors.onSurface, fontWeight: "700", fontSize: 14 },
-  input: { backgroundColor: brand.colors.surfaceTertiary, color: brand.colors.onSurface, borderRadius: 8, padding: 10 },
+  contenuto: { padding: 16, paddingBottom: 60, gap: 14, width: "100%", maxWidth: 900, alignSelf: "center" },
+  indietroArea: { minHeight: 44, justifyContent: "center" },
+  linkAggiungiArea: { minHeight: 44, justifyContent: "center" },
+  chiudiArea: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },
+  header: { flexDirection: "row", paddingHorizontal: 16, paddingVertical: 4, borderBottomWidth: 1, borderBottomColor: brand.colors.border },
+  indietro: { color: brand.colors.brand, fontWeight: "700", fontSize: 16 },
+  card: { backgroundColor: brand.colors.surfaceSecondary, borderRadius: 18, padding: 16, gap: 10 },
+  etichetta: { color: brand.colors.onSurface, fontWeight: "700", fontSize: 15 },
+  input: { backgroundColor: brand.colors.surfaceTertiary, color: brand.colors.onSurface, borderRadius: 12, padding: 12, minHeight: 44 },
   nota: { color: brand.colors.muted, fontSize: 12 },
   notaPeriodo: { color: brand.colors.brandSecondary, fontSize: 12, fontWeight: "600" },
   rigaGenerazione: { flexDirection: "row", gap: 10, alignItems: "flex-end" },
-  bottoneAI: { borderWidth: 1, borderColor: brand.colors.brandSecondary, borderRadius: 8, paddingVertical: 10, paddingHorizontal: 14, justifyContent: "center", minWidth: 60, alignItems: "center" },
+  bottoneAI: { backgroundColor: brand.colors.surfaceTertiary, borderRadius: 999, paddingHorizontal: 18, justifyContent: "center", minWidth: 60, minHeight: 46, alignItems: "center" },
   barraAvanzamentoSfondo: { height: 4, backgroundColor: brand.colors.surfaceTertiary, borderRadius: 2, overflow: "hidden" },
   barraAvanzamentoRiempimento: { height: "100%", backgroundColor: brand.colors.brandSecondary },
   erroreTesto: { color: brand.colors.error, fontSize: 12 },
   bottoneAITesto: { color: brand.colors.brandSecondary, fontWeight: "700" },
-  linkAggiungi: { color: brand.colors.brand, fontWeight: "600", fontSize: 13 },
+  linkAggiungi: { color: brand.colors.brand, fontWeight: "700", fontSize: 15 },
   sfondoPopup: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "flex-end" },
-  cartaPopup: { backgroundColor: brand.colors.surfaceSecondary, borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, gap: 8, maxHeight: "80%" },
+  cartaPopup: { backgroundColor: brand.colors.surfaceSecondary, borderTopLeftRadius: 22, borderTopRightRadius: 22, padding: 20, gap: 8, maxHeight: "80%", width: "100%", maxWidth: 900, alignSelf: "center" },
   intestazionePopup: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 4 },
-  titoloPopup: { color: brand.colors.onSurface, fontSize: 16, fontWeight: "700" },
+  titoloPopup: { color: brand.colors.onSurface, fontSize: 22, fontWeight: "700", letterSpacing: -0.3 },
   chiudiPopup: { color: brand.colors.muted, fontSize: 18 },
-  rigaCategoria: { paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: brand.colors.border },
+  rigaCategoria: { paddingVertical: 12, minHeight: 44, justifyContent: "center", borderBottomWidth: 1, borderBottomColor: brand.colors.border },
   rigaCategoriaTesto: { color: brand.colors.onSurface, fontSize: 14, fontWeight: "700" },
-  rigaCatalogo: { paddingVertical: 8, paddingLeft: 20, borderBottomWidth: 1, borderBottomColor: brand.colors.border },
+  rigaCatalogo: { paddingVertical: 10, minHeight: 44, paddingLeft: 20, borderBottomWidth: 1, borderBottomColor: brand.colors.border },
   rigaCatalogoTesto: { color: brand.colors.onSurface, fontSize: 14, fontWeight: "600" },
   rigaCatalogoDescrizione: { color: brand.colors.muted, fontSize: 12, marginTop: 2, lineHeight: 17 },
   linkNuovoEsercizio: { paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: brand.colors.border, marginBottom: 4 },
   linkNuovoEsercizioTesto: { color: brand.colors.brandSecondary, fontSize: 13, fontWeight: "700" },
   formNuovoEsercizio: { gap: 8, paddingBottom: 10 },
-  bottoneSceltaPrimaria: { backgroundColor: brand.colors.brand, borderRadius: 10, padding: 14, alignItems: "center", gap: 2 },
+  bottoneSceltaPrimaria: { backgroundColor: brand.colors.brand, borderRadius: 22, padding: 14, minHeight: 56, alignItems: "center", justifyContent: "center", gap: 2 },
   bottoneSceltaPrimariaTesto: { color: "#000", fontWeight: "800", fontSize: 15 },
-  bottoneSceltaSecondaria: { borderWidth: 1, borderColor: brand.colors.brand, borderRadius: 10, padding: 14, alignItems: "center", gap: 2 },
-  bottoneSceltaSecondariaTesto: { color: brand.colors.brand, fontWeight: "800", fontSize: 15 },
+  bottoneSceltaSecondaria: { backgroundColor: brand.colors.surfaceTertiary, borderRadius: 22, padding: 14, minHeight: 56, alignItems: "center", justifyContent: "center", gap: 2 },
+  bottoneSceltaSecondariaTesto: { color: brand.colors.onSurface, fontWeight: "800", fontSize: 15 },
   bottoneSceltaNota: { color: brand.colors.muted, fontSize: 11 },
   annullaScelta: { color: brand.colors.muted, fontSize: 13, textAlign: "center", paddingVertical: 8 },
-  bloccoFase: { backgroundColor: brand.colors.surfaceSecondary, borderRadius: 12, padding: 12, marginBottom: 10, gap: 4 },
+  bloccoFase: { backgroundColor: brand.colors.surface, borderRadius: 16, padding: 12, marginTop: 6, gap: 4 },
   intestazioneFase: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  titoloFase: { color: brand.colors.brandSecondary, fontSize: 13, fontWeight: "800", textTransform: "uppercase" },
+  titoloFase: { color: brand.colors.onSurface, fontSize: 17, fontWeight: "700" },
   minutiFase: { color: brand.colors.onSurface, fontSize: 13, fontWeight: "700" },
   minutiEccesso: { color: brand.colors.warning },
   descrizioneFase: { color: brand.colors.muted, fontSize: 11, lineHeight: 15, marginBottom: 4 },
@@ -642,14 +648,14 @@ const styles = StyleSheet.create({
   sottoEsercizio: { color: brand.colors.muted, fontSize: 11 },
   titoloSottogruppoPiano: { color: brand.colors.muted, fontSize: 10, fontWeight: "700", textTransform: "uppercase", paddingTop: 6, paddingBottom: 2, paddingLeft: 4 },
   rigaComandiEsercizio: { flexDirection: "row", gap: 6, marginTop: 4 },
-  tastoComando: { flex: 1, backgroundColor: brand.colors.surfaceTertiary, paddingVertical: 12, borderRadius: 8, alignItems: "center", minHeight: 44, justifyContent: "center" },
+  tastoComando: { flex: 1, backgroundColor: brand.colors.surfaceTertiary, paddingVertical: 12, borderRadius: 999, alignItems: "center", minHeight: 44, justifyContent: "center" },
   tastoComandoTesto: { color: brand.colors.onSurface, fontWeight: "700", fontSize: 13 },
   tastoSpento: { color: brand.colors.muted, opacity: 0.4 },
-  tastoComandoDistruttivo: { flex: 1, borderWidth: 1, borderColor: brand.colors.error, paddingVertical: 12, borderRadius: 8, alignItems: "center", minHeight: 44, justifyContent: "center" },
+  tastoComandoDistruttivo: { flex: 1, backgroundColor: brand.colors.surfaceTertiary, paddingVertical: 12, borderRadius: 999, alignItems: "center", minHeight: 44, justifyContent: "center" },
   tastoComandoDistruttivoTesto: { color: brand.colors.error, fontWeight: "700", fontSize: 13 },
   etichettaMini: { color: brand.colors.muted, fontSize: 10, textTransform: "uppercase", marginTop: 6 },
   rigaFasi: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
-  chipFase: { backgroundColor: brand.colors.surfaceTertiary, paddingVertical: 8, paddingHorizontal: 12, borderRadius: 14 },
+  chipFase: { backgroundColor: brand.colors.surfaceTertiary, paddingVertical: 10, paddingHorizontal: 14, borderRadius: 999, minHeight: 44, justifyContent: "center" },
   chipFaseTesto: { color: brand.colors.onSurfaceSecondary, fontSize: 12 },
   bloccoCategoria: { marginBottom: 10 },
   intestazioneCategoria: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
@@ -663,13 +669,13 @@ const styles = StyleSheet.create({
   testoDettaglio: { color: brand.colors.onSurfaceSecondary, fontSize: 13, lineHeight: 19 },
   noteEsercizio: { color: brand.colors.muted, fontSize: 12 },
   rigaSostituzione: { flexDirection: "row", gap: 8 },
-  bottoneRigenera: { flex: 1, borderWidth: 1, borderColor: brand.colors.brandSecondary, borderRadius: 8, paddingVertical: 8, alignItems: "center" },
-  bottoneRigeneraTesto: { color: brand.colors.brandSecondary, fontSize: 12, fontWeight: "700" },
+  bottoneRigenera: { flex: 1, backgroundColor: brand.colors.surfaceTertiary, borderRadius: 999, paddingVertical: 10, minHeight: 44, justifyContent: "center", alignItems: "center" },
+  bottoneRigeneraTesto: { color: brand.colors.brandSecondary, fontSize: 13, fontWeight: "700" },
   etichettaCategoriaPiano: { color: brand.colors.brandSecondary, fontSize: 12, fontWeight: "700", marginTop: 8, textTransform: "uppercase" },
-  rigaEsercizio: { flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 6, borderTopWidth: 1, borderTopColor: brand.colors.border },
+  rigaEsercizio: { flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 6, minHeight: 48, borderTopWidth: 1, borderTopColor: brand.colors.border },
   rigaEsercizioNome: { color: brand.colors.onSurface, flex: 1, fontSize: 14 },
-  inputDurata: { backgroundColor: brand.colors.surfaceTertiary, color: brand.colors.onSurface, borderRadius: 6, padding: 6, width: 44, textAlign: "center" },
+  inputDurata: { backgroundColor: brand.colors.surfaceTertiary, color: brand.colors.onSurface, borderRadius: 10, padding: 6, width: 48, minHeight: 36, textAlign: "center" },
   rimuovi: { color: brand.colors.error, fontSize: 16, paddingHorizontal: 4 },
-  bottoneSalva: { backgroundColor: brand.colors.brand, padding: 14, borderRadius: 10, alignItems: "center" },
-  bottoneSalvaTesto: { color: "#000", fontWeight: "700" },
+  bottoneSalva: { backgroundColor: brand.colors.brand, padding: 14, borderRadius: 999, alignItems: "center", minHeight: 50, justifyContent: "center" },
+  bottoneSalvaTesto: { color: "#000", fontWeight: "700", fontSize: 16 },
 });

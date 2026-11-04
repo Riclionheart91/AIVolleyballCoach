@@ -11,6 +11,7 @@ import { confermaAzione, avvisa } from "@/src/lib/confermaAzione";
 import { FabAggiungi } from "@/src/components/Fab";
 import { PannelloSporteasy } from "@/src/components/PannelloSporteasy";
 import { PopupForm } from "@/src/components/PopupForm";
+import { TitoloGrande } from "@/src/components/TitoloGrande";
 import { brand } from "@/src/config";
 import type { Athlete, Attendance, Rpe, Training } from "@/src/types/database";
 
@@ -27,6 +28,16 @@ function dataIsoATesto(iso: string): string {
   const d = new Date(iso);
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+/** "OGGI · 21:00" oppure "GIO 5 NOV · 21:00" per la scheda in evidenza. */
+function etichettaQuando(iso: string): string {
+  const d = new Date(iso);
+  const ora = d.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" });
+  const giorno = d.toDateString() === new Date().toDateString()
+    ? "OGGI"
+    : d.toLocaleDateString("it-IT", { weekday: "short", day: "numeric", month: "short" }).replace(/\./g, "").toUpperCase();
+  return `${giorno} · ${ora}`;
 }
 
 /** Primo giorno del mese corrente, a mezzanotte locale. */
@@ -154,85 +165,136 @@ export default function Allenamenti() {
     ? titolo !== allenamentoInModifica.titolo || dataTesto !== dataIsoATesto(allenamentoInModifica.data)
     : titolo !== "Allenamento" || true;
 
+  const oggiInizio = new Date();
+  oggiInizio.setHours(0, 0, 0, 0);
+  // Scheda in evidenza: la prima seduta (oggi o futura) del mese mostrato.
+  const prossimo = allenamenti
+    .filter((t) => new Date(t.data) >= oggiInizio)
+    .sort((a, b) => new Date(a.data).getTime() - new Date(b.data).getTime())[0] ?? null;
+  const elenco = prossimo ? allenamenti.filter((t) => t.id !== prossimo.id) : allenamenti;
+
+  /** Azioni della seduta (stesse funzioni di prima): pill Avvia/Piano/Modifica + link secondari. */
+  function renderAzioni(item: Training) {
+    if (!puoScrivere) return null;
+    return (
+      <View style={styles.azioniBlocco}>
+        <View style={styles.rigaAzioniCard}>
+          <Pressable style={styles.pillPrimaria} onPress={() => router.push(`/sessione/${item.id}`)}>
+            <Text style={styles.pillPrimariaTesto}>▶ Avvia</Text>
+          </Pressable>
+          <Pressable style={styles.pillSecondaria} onPress={() => router.push(`/allenamento/${item.id}`)}>
+            <Text style={styles.pillSecondariaTesto}>Piano{item.durata_totale_minuti ? ` · ${item.durata_totale_minuti}′` : ""}</Text>
+          </Pressable>
+          <Pressable style={styles.pillSecondaria} onPress={() => apriModifica(item)}>
+            <Text style={styles.pillSecondariaTesto}>Modifica</Text>
+          </Pressable>
+        </View>
+        <View style={styles.rigaLinkCard}>
+          <Pressable style={styles.linkAzione} onPress={() => chiediConversione(item)} accessibilityLabel="È una partita">
+            <Text style={styles.linkAzioneTesto}>🏐 È una partita</Text>
+          </Pressable>
+          <Pressable style={styles.linkAzione} onPress={() => onArchiviaSingolo(item, true)} accessibilityLabel="Archivia">
+            <Text style={styles.linkAzioneTesto}>🗄 Archivia</Text>
+          </Pressable>
+          <Pressable style={styles.linkAzione} onPress={() => chiediEliminazione(item)}>
+            <Text style={styles.azioneCardDistruttiva}>Elimina</Text>
+          </Pressable>
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       <FlatList
-        data={allenamenti}
+        data={elenco}
         keyExtractor={(t) => t.id}
-        contentContainerStyle={{ padding: 16, paddingBottom: 90 }}
+        contentContainerStyle={styles.contenuto}
         refreshControl={<RefreshControl refreshing={false} onRefresh={carica} tintColor={brand.colors.brand} />}
         ListHeaderComponent={
-          <View style={{ marginBottom: 12, gap: 10 }}>
+          <View style={{ marginBottom: 12, gap: 14 }}>
+            <TitoloGrande titolo="Allenamenti" />
+
             {puoScrivere && team && <PannelloSporteasy teamId={team.id} onSincronizzato={carica} />}
 
             <View style={styles.barraMese}>
-              <Pressable onPress={() => cambiaMese(-1)} hitSlop={10}><Text style={styles.frecciaMese}>‹</Text></Pressable>
+              <Pressable style={styles.frecciaArea} onPress={() => cambiaMese(-1)} hitSlop={10}><Text style={styles.frecciaMese}>‹</Text></Pressable>
               <Text style={styles.etichettaMese}>
                 {meseVisualizzato.toLocaleDateString("it-IT", { month: "long", year: "numeric" })} · {allenamenti.length}
               </Text>
-              <Pressable onPress={() => cambiaMese(1)} hitSlop={10}><Text style={styles.frecciaMese}>›</Text></Pressable>
+              <Pressable style={styles.frecciaArea} onPress={() => cambiaMese(1)} hitSlop={10}><Text style={styles.frecciaMese}>›</Text></Pressable>
             </View>
 
             {puoScrivere && (
               <View style={styles.rigaArchivio}>
-                <Pressable onPress={() => setMostraArchivio(!mostraArchivio)}>
+                <Pressable style={styles.linkArchivioArea} onPress={() => setMostraArchivio(!mostraArchivio)}>
                   <Text style={styles.linkArchivio}>{mostraArchivio ? "▾" : "▸"} Archivio ({archiviati.length})</Text>
                 </Pressable>
-                <Pressable onPress={onArchiviaPassati}>
+                <Pressable style={styles.linkArchivioArea} onPress={onArchiviaPassati}>
                   <Text style={styles.linkArchivio}>Archivia passati</Text>
                 </Pressable>
               </View>
             )}
 
-            {mostraArchivio && archiviati.map((a) => (
-              <View key={a.id} style={styles.rigaArchiviato}>
-                <Text style={styles.rigaArchiviatoTesto}>{a.titolo} — {new Date(a.data).toLocaleDateString("it-IT")}</Text>
-                <Pressable onPress={() => onArchiviaSingolo(a, false)}><Text style={styles.linkArchivio}>Ripristina</Text></Pressable>
-              </View>
-            ))}
-          </View>
-        }
-        ListEmptyComponent={<Text style={styles.vuoto}>Nessun allenamento in questo mese. Usa le frecce per cambiare mese, il pulsante + per aggiungerne uno, oppure sincronizza SportEasy qui sopra.</Text>}
-        renderItem={({ item }) => (
-          <View style={styles.card}>
-            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
-              <Pressable style={{ flex: 1 }} onPress={() => setAperto(aperto === item.id ? null : item.id)}>
-                <Text style={styles.cardTitolo}>{item.titolo}</Text>
-                <Text style={styles.cardSotto}>{new Date(item.data).toLocaleString("it-IT", { dateStyle: "medium", timeStyle: "short" })}</Text>
-                {new Date(item.data) > new Date() && <Text style={styles.badgeFuturo}>programmato</Text>}
-              </Pressable>
-              {puoScrivere && (
-                <View style={styles.flagAngolo}>
-                  <Pressable style={styles.flag} onPress={() => chiediConversione(item)} accessibilityLabel="È una partita">
-                    <Text style={styles.flagTesto}>🏐 È una partita</Text>
-                  </Pressable>
-                  <Pressable style={styles.flag} onPress={() => onArchiviaSingolo(item, true)} accessibilityLabel="Archivia">
-                    <Text style={styles.flagTesto}>🗄 Archivia</Text>
-                  </Pressable>
-                </View>
-              )}
-            </View>
-
-            {puoScrivere && (
-              <View style={styles.rigaAzioniCard}>
-                <Pressable style={styles.bottoneAvvia} onPress={() => router.push(`/sessione/${item.id}`)}>
-                  <Text style={styles.bottoneAvviaTesto}>▶ Avvia</Text>
-                </Pressable>
-                <Pressable style={styles.bottoneAzione} onPress={() => router.push(`/allenamento/${item.id}`)}>
-                  <Text style={styles.bottoneAzioneTesto}>Piano{item.durata_totale_minuti ? ` · ${item.durata_totale_minuti}′` : ""}</Text>
-                </Pressable>
-                <Pressable style={styles.bottoneAzione} onPress={() => apriModifica(item)}>
-                  <Text style={styles.bottoneAzioneTesto}>Modifica</Text>
-                </Pressable>
-                <Pressable onPress={() => chiediEliminazione(item)}><Text style={styles.azioneCardDistruttiva}>Elimina</Text></Pressable>
+            {mostraArchivio && archiviati.length > 0 && (
+              <View style={styles.gruppoArchiviati}>
+                {archiviati.map((a, i) => (
+                  <View key={a.id}>
+                    {i > 0 && <View style={styles.separatore} />}
+                    <View style={styles.rigaArchiviato}>
+                      <Text style={styles.rigaArchiviatoTesto}>{a.titolo} — {new Date(a.data).toLocaleDateString("it-IT")}</Text>
+                      <Pressable style={styles.linkArchivioArea} onPress={() => onArchiviaSingolo(a, false)}><Text style={styles.linkArchivio}>Ripristina</Text></Pressable>
+                    </View>
+                  </View>
+                ))}
               </View>
             )}
 
-            {/* Presenze e RPE rimossi: le prestazioni si valutano
-                mensilmente e tramite scouting (globale, amichevole,
-                partita), non con un punteggio per seduta. */}
+            {prossimo && (
+              <View style={{ gap: 12 }}>
+                <Text style={styles.titoloSezione}>Prossimo allenamento</Text>
+                <View style={styles.schedaEvidenza}>
+                  <View style={{ gap: 6 }}>
+                    <Text style={styles.evidenzaQuando}>{etichettaQuando(prossimo.data)}</Text>
+                    <Text style={styles.evidenzaTitolo}>{prossimo.titolo}</Text>
+                    {!!prossimo.durata_totale_minuti && <Text style={styles.evidenzaSotto}>{prossimo.durata_totale_minuti} minuti</Text>}
+                    {new Date(prossimo.data) > new Date() && <Text style={styles.badgeFuturo}>programmato</Text>}
+                  </View>
+                  {renderAzioni(prossimo)}
+                </View>
+              </View>
+            )}
+
+            {elenco.length > 0 && <Text style={styles.titoloSezione}>{prossimo ? "Altri del mese" : "Del mese"}</Text>}
           </View>
-        )}
+        }
+        ListEmptyComponent={allenamenti.length === 0 ? <Text style={styles.vuoto}>Nessun allenamento in questo mese. Usa le frecce per cambiare mese, il pulsante + per aggiungerne uno, oppure sincronizza SportEasy qui sopra.</Text> : null}
+        renderItem={({ item, index }) => {
+          const d = new Date(item.data);
+          return (
+            <View style={[styles.rigaWrap, index === 0 && styles.rigaPrima, index === elenco.length - 1 && styles.rigaUltima]}>
+              {index > 0 && <View style={styles.separatore} />}
+              <View style={styles.riga}>
+                <View style={styles.tessera}>
+                  <Text style={styles.tesseraMese}>{d.toLocaleDateString("it-IT", { month: "short" }).replace(/\./g, "").toUpperCase()}</Text>
+                  <Text style={styles.tesseraGiorno}>{d.getDate()}</Text>
+                </View>
+                <View style={{ flex: 1, gap: 1 }}>
+                  <Text style={styles.cardTitolo} numberOfLines={2}>{item.titolo}</Text>
+                  <Text style={styles.cardSotto}>
+                    {d.toLocaleDateString("it-IT", { weekday: "long" }).replace(/^./, (c) => c.toUpperCase())} · {d.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })}
+                  </Text>
+                  {d > new Date() && <Text style={styles.badgeFuturo}>programmato</Text>}
+                </View>
+              </View>
+              {puoScrivere && <View style={styles.azioniEspanse}>{renderAzioni(item)}</View>}
+
+              {/* Presenze e RPE rimossi: le prestazioni si valutano
+                  mensilmente e tramite scouting (globale, amichevole,
+                  partita), non con un punteggio per seduta. */}
+            </View>
+          );
+        }}
       />
 
       {puoScrivere && <FabAggiungi onPress={apriNuovo} />}
@@ -258,46 +320,50 @@ export default function Allenamenti() {
  */
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: brand.colors.surface },
-  input: { backgroundColor: brand.colors.surfaceTertiary, color: brand.colors.onSurface, borderRadius: 8, padding: 12 },
+  contenuto: { padding: 16, paddingBottom: 90, width: "100%", maxWidth: 900, alignSelf: "center" },
+  input: { backgroundColor: brand.colors.surfaceTertiary, color: brand.colors.onSurface, borderRadius: 12, padding: 12, minHeight: 44 },
   nota: { color: brand.colors.muted, fontSize: 12 },
-  bottone: { backgroundColor: brand.colors.brand, padding: 12, borderRadius: 8, alignItems: "center" },
+  bottone: { backgroundColor: brand.colors.brand, padding: 12, borderRadius: 999, alignItems: "center", minHeight: 44, justifyContent: "center" },
   bottoneTesto: { color: "#000", fontWeight: "700" },
-  card: { backgroundColor: brand.colors.surfaceSecondary, borderRadius: 12, padding: 14, marginBottom: 10 },
-  cardTitolo: { color: brand.colors.onSurface, fontSize: 16, fontWeight: "700" },
+  titoloSezione: { color: brand.colors.onSurface, fontSize: 22, fontWeight: "700", letterSpacing: -0.3 },
+  // Scheda in evidenza (prossimo allenamento)
+  schedaEvidenza: { backgroundColor: brand.colors.surfaceSecondary, borderWidth: 1, borderColor: brand.colors.border, borderRadius: 22, padding: 18, gap: 14 },
+  evidenzaQuando: { color: brand.colors.brand, fontSize: 12, fontWeight: "700", letterSpacing: 0.8 },
+  evidenzaTitolo: { color: brand.colors.onSurface, fontSize: 24, fontWeight: "700", letterSpacing: -0.4 },
+  evidenzaSotto: { color: brand.colors.onSurfaceSecondary, fontSize: 14 },
+  // Elenco raggruppato: righe in un'unica scheda, separatore sottile rientrato
+  rigaWrap: { backgroundColor: brand.colors.surfaceSecondary },
+  rigaPrima: { borderTopLeftRadius: 18, borderTopRightRadius: 18 },
+  rigaUltima: { borderBottomLeftRadius: 18, borderBottomRightRadius: 18 },
+  riga: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 10, paddingHorizontal: 14, minHeight: 64 },
+  separatore: { height: 1, backgroundColor: brand.colors.border, marginLeft: 72 },
+  tessera: { width: 46, height: 46, borderRadius: 11, backgroundColor: brand.colors.surfaceTertiary, alignItems: "center", justifyContent: "center" },
+  tesseraMese: { color: brand.colors.brand, fontSize: 10, fontWeight: "700", letterSpacing: 0.6 },
+  tesseraGiorno: { color: brand.colors.onSurface, fontSize: 19, fontWeight: "700", lineHeight: 22 },
+  cardTitolo: { color: brand.colors.onSurface, fontSize: 16, fontWeight: "600" },
   cardSotto: { color: brand.colors.muted, fontSize: 13 },
   badgeFuturo: { color: brand.colors.brandSecondary, fontSize: 11, fontWeight: "700", textTransform: "uppercase" },
-  // Pulsanti veri con area di tocco adeguata al posto dei link testuali:
-  // su web e su telefono i link piccoli sono scomodi da centrare.
-  rigaAzioniCard: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 10 },
-  bottoneAvvia: { backgroundColor: brand.colors.success, paddingVertical: 10, paddingHorizontal: 16, borderRadius: 10, minHeight: 40, justifyContent: "center" },
-  bottoneAvviaTesto: { color: "#000", fontWeight: "800", fontSize: 13 },
-  flagAngolo: { alignItems: "flex-end", gap: 4 },
-  flag: { borderWidth: 1, borderColor: brand.colors.border, borderStyle: "dashed", borderRadius: 12, paddingVertical: 3, paddingHorizontal: 9 },
-  flagTesto: { color: brand.colors.muted, fontSize: 11, fontWeight: "600" },
-  bottoneAzione: { borderWidth: 1, borderColor: brand.colors.border, backgroundColor: brand.colors.surfaceTertiary, paddingVertical: 10, paddingHorizontal: 14, borderRadius: 10, minHeight: 40, justifyContent: "center" },
-  bottoneAzioneTesto: { color: brand.colors.onSurface, fontWeight: "600", fontSize: 13 },
-  azioneCard: { color: brand.colors.brand, fontSize: 12, fontWeight: "600" },
-  azioneCardAvvio: { color: brand.colors.success, fontSize: 12, fontWeight: "700" },
-  azioneCardDistruttiva: { color: brand.colors.error, fontSize: 12, fontWeight: "600" },
+  // Azioni: pill con area di tocco adeguata
+  azioniEspanse: { paddingHorizontal: 14, paddingBottom: 12 },
+  azioniBlocco: { gap: 4 },
+  rigaAzioniCard: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  rigaLinkCard: { flexDirection: "row", flexWrap: "wrap", columnGap: 16 },
+  pillPrimaria: { backgroundColor: brand.colors.brand, paddingHorizontal: 22, borderRadius: 999, minHeight: 46, justifyContent: "center", alignItems: "center" },
+  pillPrimariaTesto: { color: "#000", fontWeight: "700", fontSize: 16 },
+  pillSecondaria: { backgroundColor: brand.colors.surfaceTertiary, paddingHorizontal: 20, borderRadius: 999, minHeight: 46, justifyContent: "center", alignItems: "center" },
+  pillSecondariaTesto: { color: brand.colors.onSurface, fontWeight: "600", fontSize: 15 },
+  linkAzione: { minHeight: 44, justifyContent: "center" },
+  linkAzioneTesto: { color: brand.colors.muted, fontSize: 13, fontWeight: "600" },
+  azioneCardDistruttiva: { color: brand.colors.error, fontSize: 13, fontWeight: "600" },
   vuoto: { color: brand.colors.muted, textAlign: "center", marginTop: 32 },
-  barraMese: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", backgroundColor: brand.colors.surfaceSecondary, borderRadius: 10, paddingVertical: 8, paddingHorizontal: 16 },
-  frecciaMese: { color: brand.colors.brand, fontSize: 24, fontWeight: "700", lineHeight: 26 },
-  etichettaMese: { color: brand.colors.onSurface, fontWeight: "700", fontSize: 14, textTransform: "capitalize" },
+  barraMese: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", backgroundColor: brand.colors.surfaceSecondary, borderRadius: 16, paddingHorizontal: 6, minHeight: 52 },
+  frecciaArea: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },
+  frecciaMese: { color: brand.colors.brand, fontSize: 26, fontWeight: "700", lineHeight: 28 },
+  etichettaMese: { color: brand.colors.onSurface, fontWeight: "700", fontSize: 15, textTransform: "capitalize" },
   rigaArchivio: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  linkArchivio: { color: brand.colors.brandSecondary, fontSize: 12, fontWeight: "600" },
-  rigaArchiviato: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: 4, paddingLeft: 8 },
-  rigaArchiviatoTesto: { color: brand.colors.muted, fontSize: 12, flex: 1 },
-  presenzeContainer: { marginTop: 12, gap: 8, borderTopWidth: 1, borderTopColor: brand.colors.border, paddingTop: 12 },
-  rigaAtleta: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
-  rigaAtletaNome: { color: brand.colors.onSurface, flex: 1 },
-  rigaSolaLetturaValore: { color: brand.colors.muted, fontSize: 13 },
-  presenzaBottoni: { flexDirection: "row", gap: 4 },
-  presenzaBtn: { width: 28, height: 28, borderRadius: 6, alignItems: "center", justifyContent: "center", backgroundColor: brand.colors.surfaceTertiary },
-  presenzaBtnSi: { backgroundColor: brand.colors.success },
-  presenzaBtnNo: { backgroundColor: brand.colors.error },
-  presenzaBtnTesto: { color: "#fff", fontWeight: "700", fontSize: 12 },
-  rpeBottoni: { flexDirection: "row", gap: 4 },
-  rpeBtn: { width: 26, height: 26, borderRadius: 6, alignItems: "center", justifyContent: "center", backgroundColor: brand.colors.surfaceTertiary },
-  rpeBtnAttivo: { backgroundColor: brand.colors.brand },
-  rpeBtnTesto: { color: brand.colors.onSurface, fontSize: 11, fontWeight: "700" },
+  linkArchivioArea: { minHeight: 44, justifyContent: "center" },
+  linkArchivio: { color: brand.colors.brandSecondary, fontSize: 14, fontWeight: "600" },
+  gruppoArchiviati: { backgroundColor: brand.colors.surfaceSecondary, borderRadius: 18, overflow: "hidden" },
+  rigaArchiviato: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 10, paddingVertical: 4, paddingHorizontal: 14, minHeight: 48 },
+  rigaArchiviatoTesto: { color: brand.colors.onSurfaceSecondary, fontSize: 13, flex: 1 },
 });

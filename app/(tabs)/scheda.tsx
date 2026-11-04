@@ -1,6 +1,7 @@
 import { View, Text, StyleSheet, ScrollView } from "react-native";
 import { useAuth } from "@/src/context/AuthContext";
 import { PianiIndividuali } from "@/src/components/PianiIndividuali";
+import { TitoloGrande } from "@/src/components/TitoloGrande";
 import { brand } from "@/src/config";
 
 /**
@@ -22,19 +23,24 @@ export default function SchedaPersonale() {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.contenuto}>
-      <Text style={styles.titolo}>Il mio allenamento</Text>
-      <Text style={styles.nota}>
-        Gli esercizi assegnati dall'allenatore sulle aree da migliorare. Segna le sedute svolte man mano: serve a te per non perdere il filo e allo staff per capire come sta andando.
-      </Text>
-      <PianiIndividuali teamId={team.id} athleteId={atletaId} nomePersona="" ruolo={null} modificabile={false} sempreEsploso />
+      <View style={styles.colonna}>
+        <TitoloGrande titolo="Il mio allenamento" />
+        <View style={styles.schedaNota}>
+          <Text style={styles.nota}>
+            Gli esercizi assegnati dall'allenatore sulle aree da migliorare. Segna le sedute svolte man mano: serve a te per non perdere il filo e allo staff per capire come sta andando.
+          </Text>
+        </View>
+        <PianiIndividuali teamId={team.id} athleteId={atletaId} nomePersona="" ruolo={null} modificabile={false} sempreEsploso />
+      </View>
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: brand.colors.surface },
-  contenuto: { padding: 16, gap: 12, paddingBottom: 60 },
-  titolo: { color: brand.colors.onSurface, fontSize: 22, fontWeight: "700" },
-  nota: { color: brand.colors.muted, fontSize: 13, lineHeight: 19 },
+  contenuto: { padding: 16, paddingBottom: 90 },
+  colonna: { width: "100%", maxWidth: 900, alignSelf: "center", gap: 14 },
+  schedaNota: { backgroundColor: brand.colors.surfaceSecondary, borderRadius: 18, padding: 16 },
+  nota: { color: brand.colors.onSurfaceSecondary, fontSize: 14, lineHeight: 20 },
   vuoto: { color: brand.colors.muted, textAlign: "center", marginTop: 40 },
 });
