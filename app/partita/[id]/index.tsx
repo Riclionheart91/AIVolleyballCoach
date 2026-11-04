@@ -58,6 +58,7 @@ import { elencaSchemiGioco } from "@/src/services/schemiGioco";
 import { SOGLIA_SERIE_AVVERSARIA, chiHaSegnato, serieAvversariaInCorso } from "@/src/lib/andamentoPunti";
 import { costruisciCronaca } from "@/src/lib/cronacaLive";
 import { VistaLiveLettura } from "@/src/components/VistaLiveLettura";
+import { statoPartitaLive } from "@/src/services/live";
 
 type Passo = "giocatrice" | "fondamentale" | "esito" | "zona";
 
@@ -132,17 +133,19 @@ const INTERVALLO_AGGIORNAMENTO_OSPITE_MS = 4000;
  *    attribuzione, che era il difetto del flusso precedente.
  */
 export default function PartitaLive() {
-  const { id, ospite } = useLocalSearchParams<{ id: string; ospite?: string }>();
+  const { id, ospite, live } = useLocalSearchParams<{ id: string; ospite?: string; live?: string }>();
   const { team, puoScrivere, puoScoutare: puoScoutareDaRuolo, puoVedereAnalisi } = useAuth();
   // Scout OSPITE: persona esterna alla squadra, invitata solo su questa partita.
   // Legge tutto da una funzione dedicata del database e non puo' avviare/chiudere set o partita.
   const modoOspite = ospite === "1";
+  // Live aperta dall'elenco "Partite in corso": solo da guardare, anche per le squadre della societa' di cui non si fa parte.
+  const modoLive = live === "1";
   // Scout ospite: registra una persona alla volta. Chi ha il turno scouta, gli altri guardano e possono subentrare.
   const [turno, setTurno] = useState<TurnoScout | null>(null);
   const turnoLasciato = useRef(false);
   const [precedente, setPrecedente] = useState<{ formazione: { athlete_id: string; posizione: number }[]; chi_ha_servito_per_primo: "noi" | "avversario" | null } | null>(null);
   const [setConclusi, setSetConclusi] = useState<MatchSet[]>([]);
-  const puoScoutare = modoOspite ? !!turno?.mio : puoScoutareDaRuolo;
+  const puoScoutare = modoLive ? false : modoOspite ? !!turno?.mio : puoScoutareDaRuolo;
   const [nomeSquadraOspite, setNomeSquadraOspite] = useState<string | null>(null);
   const [erroreOspite, setErroreOspite] = useState<string | null>(null);
   const [match, setMatch] = useState<Match | null>(null);
@@ -260,8 +263,36 @@ export default function PartitaLive() {
   const scala = Math.max(0.68, Math.min(1.08, spazioComandi / 340)) * 0.8;
   const d = (valore: number) => Math.round(valore * scala);
 
+  /** Chiude la live e torna alla schermata precedente (o all'elenco delle partite se non c'e' una precedente). */
+  const uscitaLive = useCallback(() => {
+    if (router.canGoBack()) router.back(); else router.replace("/(tabs)/partite");
+  }, []);
+
   const carica = useCallback(async () => {
     if (!id) return;
+    if (modoLive) {
+      try {
+        const st = await statoPartitaLive(id);
+        setMatch(st.match);
+        setNomeSquadraOspite(st.team_nome);
+        setSetCorrente(st.sets.find((x) => x.id === st.set_attivo_id) ?? null);
+        setEventi(st.eventi);
+        setAzioniCronaca(st.eventi);
+        setAtlete(st.atlete);
+        setConvocateIds(st.convocati.map((c) => c.athlete_id));
+        setLiberiIds(new Set(st.convocati.filter((c) => c.is_libero).map((c) => c.athlete_id)));
+        setRegolePunteggio(st.regole);
+        setFormazione(st.formazione.filter((f) => f.in_campo).sort((a, b) => (a.posizione ?? 0) - (b.posizione ?? 0)));
+        setStoricoFormazione(st.formazione);
+        setLibero(st.libero ?? null);
+        setTimeouts(st.timeouts ?? []);
+        setSetConclusi(st.sets);
+      } catch (e) {
+        // La partita non e' piu' in corso (o non e' piu' visibile): la live si chiude da sola.
+        if ((e as Error).message.includes("Permesso negato")) uscitaLive();
+      }
+      return;
+    }
     if (modoOspite) {
       try {
         const st = await statoPartitaOspite(id);
@@ -327,7 +358,7 @@ export default function PartitaLive() {
     }
     // La domanda "Set concluso! Passare al prossimo set?" riguarda solo chi registra la partita, non chi la guarda.
     if (attivo && m && !modoOspite && puoScoutareDaRuolo) verificaFineSet(attivo, m, set, regoleFresche);
-  }, [id, modoOspite, puoScoutareDaRuolo]);
+  }, [id, modoOspite, modoLive, puoScoutareDaRuolo]);
 
   useFocusEffect(useCallback(() => { carica(); }, [carica]));
 
@@ -336,9 +367,9 @@ export default function PartitaLive() {
   const [schemi, setSchemi] = useState<Record<string, Assegnazioni>>({});
   const teamIdPartita = match?.team_id;
   useEffect(() => {
-    if (modoOspite || !teamIdPartita) return;
+    if (modoOspite || modoLive || !teamIdPartita) return;
     elencaSchemiGioco(teamIdPartita).then(setSchemi).catch(() => setSchemi({}));
-  }, [modoOspite, teamIdPartita]);
+  }, [modoOspite, modoLive, teamIdPartita]);
 
   // "Lascia senza Libero" vale finche' il centrale resta in seconda linea: in prima linea (o fuori campo) si azzera.
   useEffect(() => {
@@ -354,10 +385,10 @@ export default function PartitaLive() {
   // L'ospite non puo' leggere le tabelle direttamente, quindi niente
   // trasmissione in tempo reale: si rilegge a intervalli brevi.
   useEffect(() => {
-    if (!modoOspite) return;
+    if (!modoOspite && !modoLive) return;
     const timer = setInterval(() => { carica(); }, INTERVALLO_AGGIORNAMENTO_OSPITE_MS);
     return () => clearInterval(timer);
-  }, [modoOspite, carica]);
+  }, [modoOspite, modoLive, carica]);
 
   // Se un'altra persona (vice, scout) registra da un altro
   // dispositivo, questa schermata si aggiorna da sola invece di
@@ -373,6 +404,18 @@ export default function PartitaLive() {
 
   // Tra un set e l'altro la trasmissione in tempo reale puo' perdere l'arrivo della nuova formazione (il set nuovo
   // cambia proprio in quel momento): finche' si aspetta la formazione, chi guarda rilegge la partita ogni 3 secondi.
+  // Chi guarda senza registrare esce da solo quando la partita viene chiusa.
+  useEffect(() => {
+    if (modoOspite || modoLive || puoScoutareDaRuolo || !id) return;
+    const timer = setInterval(async () => {
+      try {
+        const { data } = await supabaseClient.from("matches").select("stato").eq("id", id).single();
+        if (data?.stato === "conclusa") uscitaLive();
+      } catch { /* alla prossima lettura */ }
+    }, 5000);
+    return () => clearInterval(timer);
+  }, [modoOspite, modoLive, puoScoutareDaRuolo, id, uscitaLive]);
+
   const inAttesaFormazioneRef = useRef(false);
   useEffect(() => {
     if (modoOspite || puoScoutareDaRuolo) return;
@@ -418,7 +461,7 @@ export default function PartitaLive() {
             else { await nuovoSet(m.id); carica(); }
             return;
           }
-          if (finita) { await chiudiMatch(m.id); router.back(); }
+          if (finita) { await chiudiMatch(m.id); router.replace("/(tabs)/partite"); }
           else { await nuovoSet(m.id); router.replace(`/partita/${m.id}/prepara`); }
         } catch (e) { avvisa("Errore", (e as Error).message); }
       },
@@ -566,7 +609,7 @@ export default function PartitaLive() {
   function onChiudiPartita() {
     if (!match) return;
     confermaAzione("Chiudere la partita?", "Non potrai più registrare eventi.", "Chiudi", async () => {
-      try { await chiudiMatch(match.id); router.back(); } catch (e) { avvisa("Errore", (e as Error).message); }
+      try { await chiudiMatch(match.id); router.replace("/(tabs)/partite"); } catch (e) { avvisa("Errore", (e as Error).message); }
     }, true);
   }
 
@@ -726,7 +769,8 @@ export default function PartitaLive() {
     && Math.abs(setCorrente.punti_noi - setCorrente.punti_avversario) >= 2;
   const setVintiNoi = setConclusi.filter((x) => x.id !== setCorrente.id && x.concluso && x.punti_noi > x.punti_avversario).length + (setFinitoPerPunteggio && setCorrente.punti_noi > setCorrente.punti_avversario ? 1 : 0);
   const setVintiLoro = setConclusi.filter((x) => x.id !== setCorrente.id && x.concluso && x.punti_avversario > x.punti_noi).length + (setFinitoPerPunteggio && setCorrente.punti_avversario > setCorrente.punti_noi ? 1 : 0);
-  const cronaca = !puoScoutare && !modoOspite
+  const soloVisione = modoLive || (!puoScoutare && !modoOspite);
+  const cronaca = soloVisione
     ? costruisciCronaca(
         azioniCronaca,
         (setId) => setConclusi.find((x) => x.id === setId)?.numero_set ?? 0,
@@ -1002,7 +1046,7 @@ export default function PartitaLive() {
   inAttesaFormazioneRef.current = attesaFormazione !== null;
 
   // Chi guarda senza registrare (atlete, presidente): schermata dedicata, senza comandi e con il pulsante per uscire.
-  if (!puoScoutare && !modoOspite) {
+  if (soloVisione) {
     return (
       <VistaLiveLettura
         nomeNoi={team?.nome ?? "Noi"}
@@ -1019,12 +1063,12 @@ export default function PartitaLive() {
         serviamoNoi={noiAlServizio}
         campo={<CampoPallini pallini={pallini} />}
         righe={cronaca}
-        nota={!puoVedereAnalisi && match.stato !== "in_corso" ? "A partita finita vedi solo le tue azioni." : undefined}
+        nota={!modoLive && !puoVedereAnalisi && match.stato !== "in_corso" ? "A partita finita vedi solo le tue azioni." : undefined}
         attesaFormazione={attesaFormazione}
-        mostraAnalisi={puoVedereAnalisi}
+        mostraAnalisi={puoVedereAnalisi && !modoLive}
         onAnalisi={() => router.push(`/analisi-partita/${match.id}`)}
         onRicarica={ricaricaPagina}
-        onEsci={() => { if (router.canGoBack()) router.back(); else router.replace("/"); }}
+        onEsci={uscitaLive}
       />
     );
   }

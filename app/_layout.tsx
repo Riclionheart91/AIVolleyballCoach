@@ -32,6 +32,7 @@ export default function RootLayout() {
         <Stack.Screen name="gestione-societa" options={{ headerShown: false }} />
         <Stack.Screen name="rubrica-staff" options={{ headerShown: false }} />
         <Stack.Screen name="crea-societa" options={{ headerShown: false }} />
+        <Stack.Screen name="live" options={{ headerShown: false }} />
         <Stack.Screen name="visione-analisi-presidenti" options={{ headerShown: false }} />
         <Stack.Screen name="analisi-partita/[id]" options={{ headerShown: false }} />
         <Stack.Screen name="importa-atlete" options={{ headerShown: true, title: "Importa rosa" }} />

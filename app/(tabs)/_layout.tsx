@@ -4,6 +4,7 @@ import { Pressable, Text, View, ActivityIndicator, StyleSheet } from "react-nati
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "@/src/context/AuthContext";
 import { calcolaNotifiche } from "@/src/services/notifiche";
+import { elencaPartiteLive } from "@/src/services/live";
 import { brand } from "@/src/config";
 
 /** Banner stagione: sempre visibile in header, tocco -> tab Stagioni (dove si vede l'elenco di quelle passate e si può cambiare/attivare). */
@@ -14,6 +15,26 @@ function BannerStagione() {
       <Ionicons name="trophy-outline" size={14} color={brand.colors.brand} />
       <Text style={styles.bannerTesto} numberOfLines={1}>{stagioneAttiva ? stagioneAttiva.nome : "Nessuna stagione attiva"}</Text>
       <Ionicons name="chevron-down" size={14} color={brand.colors.muted} />
+    </Pressable>
+  );
+}
+
+function BottoneLive() {
+  const [inCorso, setInCorso] = useState(0);
+
+  useEffect(() => {
+    let attivo = true;
+    const aggiorna = () => { elencaPartiteLive().then((l) => { if (attivo) setInCorso(l.length); }).catch(() => { if (attivo) setInCorso(0); }); };
+    aggiorna();
+    const t = setInterval(aggiorna, 20000);
+    return () => { attivo = false; clearInterval(t); };
+  }, []);
+
+  const acceso = inCorso > 0;
+  return (
+    <Pressable onPress={() => router.push("/live")} style={[styles.bottoneLive, acceso && styles.bottoneLiveAcceso]} accessibilityLabel={acceso ? "Partite in corso" : "Nessuna partita in corso"}>
+      <Ionicons name="radio" size={18} color={acceso ? "#fff" : brand.colors.muted} />
+      <Text style={[styles.bottoneLiveTesto, { color: acceso ? "#fff" : brand.colors.muted }]}>LIVE</Text>
     </Pressable>
   );
 }
@@ -101,6 +122,7 @@ export default function TabsLayout() {
         headerLeft: () => <BottoneCambiaSquadra />,
         headerRight: () => (
           <View style={{ flexDirection: "row" }}>
+            <BottoneLive />
             <BottoneNotifiche />
             <BottoneProfilo />
           </View>
@@ -176,6 +198,9 @@ export default function TabsLayout() {
 }
 
 const styles = StyleSheet.create({
+  bottoneLive: { flexDirection: "row", alignItems: "center", gap: 4, marginRight: 12, paddingVertical: 4, paddingHorizontal: 8, borderRadius: 999, borderWidth: 1, borderColor: brand.colors.border, backgroundColor: brand.colors.surfaceSecondary },
+  bottoneLiveAcceso: { backgroundColor: brand.colors.error, borderColor: brand.colors.error },
+  bottoneLiveTesto: { fontSize: 11, fontWeight: "800", letterSpacing: 0.5 },
   badgeNotifiche: { position: "absolute", top: -4, right: -4, backgroundColor: brand.colors.error, borderRadius: 8, minWidth: 16, height: 16, alignItems: "center", justifyContent: "center", paddingHorizontal: 3 },
   badgeNotificheTesto: { color: "#fff", fontSize: 9, fontWeight: "800" },
   banner: { flexDirection: "row", alignItems: "center", gap: 6, maxWidth: 220 },

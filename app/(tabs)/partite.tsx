@@ -302,7 +302,7 @@ export default function Partite() {
                 </View>
               ))}
             </View>
-            <Text style={styles.titoloPopup}>Quale analisi vuoi vedere?</Text>
+            {(puoVedereAnalisi || puoScrivere) && <Text style={styles.titoloPopup}>Quale analisi vuoi vedere?</Text>}
             <View style={{ gap: 8, marginTop: 8 }}>
               {puoVedereAnalisi && (
                 <Pressable style={styles.bottone} onPress={() => { const m = menuPartita!.match; setMenuPartita(null); router.push(`/analisi-partita/${m.id}`); }}>
