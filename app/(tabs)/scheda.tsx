@@ -26,7 +26,7 @@ export default function SchedaPersonale() {
       <Text style={styles.nota}>
         Gli esercizi assegnati dall'allenatore sulle aree da migliorare. Segna le sedute svolte man mano: serve a te per non perdere il filo e allo staff per capire come sta andando.
       </Text>
-      <PianiIndividuali teamId={team.id} athleteId={atletaId} nomePersona="" ruolo={null} modificabile={false} />
+      <PianiIndividuali teamId={team.id} athleteId={atletaId} nomePersona="" ruolo={null} modificabile={false} sempreEsploso />
     </ScrollView>
   );
 }

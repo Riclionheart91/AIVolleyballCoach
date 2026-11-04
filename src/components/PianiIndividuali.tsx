@@ -28,8 +28,10 @@ const ETICHETTE_QUANDO: Record<string, string> = {
  * la persona interessata — è lei a sapere se l'ha fatto, e passare
  * dall'allenatore vanificherebbe il senso del lavoro autonomo.
  */
-export function PianiIndividuali({ teamId, athleteId, nomePersona, ruolo, modificabile }: {
+export function PianiIndividuali({ teamId, athleteId, nomePersona, ruolo, modificabile, sempreEsploso = false }: {
   teamId: string; athleteId: string; nomePersona: string; ruolo: string | null; modificabile: boolean;
+  /** Tutti i piani restano aperti con i loro esercizi e non si possono chiudere (scheda personale di chi gioca). */
+  sempreEsploso?: boolean;
 }) {
   const [piani, setPiani] = useState<PianoIndividuale[]>([]);
   const [espanso, setEspanso] = useState<string | null>(null);
@@ -52,14 +54,24 @@ export function PianiIndividuali({ teamId, athleteId, nomePersona, ruolo, modifi
 
   const carica = useCallback(async () => {
     setCaricamento(true);
-    try { setPiani(await elencaPianiIndividuali(athleteId)); }
+    try {
+      const lista = await elencaPianiIndividuali(athleteId);
+      setPiani(lista);
+      if (sempreEsploso) {
+        // Tutti i piani aperti: si leggono gli esercizi e le spunte di ognuno (le spunte sono per esercizio, quindi un solo elenco).
+        const letti = await Promise.all(lista.map(async (p) => ({ es: await elencaEserciziPiano(p.id), sv: await svolgimentiDellaSettimana(p.id) })));
+        setEsercizi(letti.flatMap((r) => r.es));
+        setSvolgimentiSettimana(Object.assign({}, ...letti.map((r) => r.sv)));
+      }
+    }
     catch (e) { avvisa("Errore", (e as Error).message); }
     finally { setCaricamento(false); }
-  }, [athleteId]);
+  }, [athleteId, sempreEsploso]);
 
   useFocusEffect(useCallback(() => { carica(); }, [carica]));
 
   async function apri(pianoId: string) {
+    if (sempreEsploso) return;
     if (espanso === pianoId) { setEspanso(null); return; }
     setEspanso(pianoId);
     try {
@@ -263,7 +275,7 @@ export function PianiIndividuali({ teamId, athleteId, nomePersona, ruolo, modifi
           : 0;
         return (
           <View key={p.id} style={[styles.card, p.stato !== "attivo" && styles.cardSpenta]}>
-            <Pressable onPress={() => apri(p.id)}>
+            <Pressable onPress={() => apri(p.id)} disabled={sempreEsploso}>
               <View style={styles.rigaTitolo}>
                 <Text style={styles.titolo}>{p.titolo}</Text>
                 <Text style={styles.percentuale}>{percentuale}%</Text>
@@ -284,9 +296,9 @@ export function PianiIndividuali({ teamId, athleteId, nomePersona, ruolo, modifi
               </Pressable>
             )}
 
-            {espanso === p.id && (
+            {(sempreEsploso || espanso === p.id) && (
               <View style={styles.dettaglioPiano}>
-                {esercizi.map((pe) => (
+                {esercizi.filter((pe) => !sempreEsploso || pe.piano_id === p.id).map((pe) => (
                   <View key={pe.id} style={styles.rigaEsercizio}>
                     {/* Una spunta per ciascuna delle sedute settimanali
                         previste: con una sola non si distingueva la
