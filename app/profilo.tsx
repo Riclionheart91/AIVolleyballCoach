@@ -85,6 +85,7 @@ export default function Profilo() {
     { chiave: "gestione", icona: "people-outline", colore: brand.colors.brand, testo: "Gestione squadra e accessi", vai: () => router.push("/gestione-squadra") },
     { chiave: "pianificazione", icona: "calendar-outline", colore: brand.colors.brandSecondary, testo: "Pianificazione annuale (cicli)", vai: () => router.push("/pianificazione-annuale") },
     { chiave: "individuali", icona: "locate-outline", colore: brand.colors.success, testo: "Esercizi individuali (piani e gruppi)", vai: () => router.push("/esercizi-individuali") },
+    { chiave: "tempo-di-gioco", icona: "time-outline", colore: brand.colors.warning, testo: "Tempo di gioco delle atlete", vai: () => router.push("/tempo-di-gioco") },
     { chiave: "campionati", icona: "trophy-outline", colore: brand.colors.warning, testo: "Campionati", vai: () => router.push("/campionati") },
   ] : [];
 

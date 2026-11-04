@@ -7,13 +7,14 @@ import { confermaAzione, avvisa } from "@/src/lib/confermaAzione";
 import { SchedaRendimento } from "@/src/components/SchedaRendimento";
 import { CaricoAllenamento } from "@/src/components/CaricoAllenamento";
 import { PianiIndividuali } from "@/src/components/PianiIndividuali";
+import { TempoDiGiocoAtleta } from "@/src/components/TempoDiGioco";
 import { TitoloGrande } from "@/src/components/TitoloGrande";
 import { brand, ruoliCampo } from "@/src/config";
 import type { Athlete, RuoloCampo } from "@/src/types/database";
 
 export default function SchedaAtleta() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { team, puoScrivere } = useAuth();
+  const { team, puoScrivere, puoVedereAnalisi } = useAuth();
   const [atleta, setAtleta] = useState<Athlete | null>(null);
   const [inModifica, setInModifica] = useState(false);
   const [anagraficaAperta, setAnagraficaAperta] = useState(true);
@@ -214,6 +215,8 @@ export default function SchedaAtleta() {
                 <RigaSolaLettura etichetta="Note" valore={atleta.note_personali} ultima />
               </View>
             )}
+
+            <TempoDiGiocoAtleta teamId={atleta.team_id} athleteId={atleta.id} mostraConfronto={puoScrivere || puoVedereAnalisi} />
 
             <CaricoAllenamento athleteId={atleta.id} />
 
