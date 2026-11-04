@@ -254,7 +254,7 @@ export default function PreparaPartita() {
             </Text>
             {nConvocateGioco === MAX_CONVOCATE && nLiberiConvocati === 1 && (
               <Text style={styles.avvisoRegolamento}>
-                ⚠ 12 atlete più 1 solo Libero (13 a referto) non è una composizione ammessa dalle norme dei campionati giovanili FIPAV: indica anche il secondo Libero oppure togli una convocata.
+                ⚠ 12 atlete più 1 solo Libero (13 a referto) non è una composizione ammessa dal regolamento 2026/2027 (PGS e norme dei campionati di categoria): indica anche il secondo Libero oppure togli una convocata.
               </Text>
             )}
             <Pressable style={styles.bottoneSecondario} onPress={salvaConvocati} disabled={salvandoConvocati || convocateIds.size === 0}>
