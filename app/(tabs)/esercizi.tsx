@@ -9,6 +9,7 @@ import { FabAggiungi } from "@/src/components/Fab";
 import { CreaEsercizio } from "@/src/components/CreaEsercizio";
 import { avvisa } from "@/src/lib/confermaAzione";
 import { brand, fasiAllenamento } from "@/src/config";
+import { TitoloGrande } from "@/src/components/TitoloGrande";
 import type { Exercise } from "@/src/types/database";
 
 const SENZA_CATEGORIA = "Senza categoria";
@@ -163,32 +164,35 @@ export default function Esercizi() {
 
   return (
     <View style={styles.container}>
-      <View style={styles.barraRicerca}>
-        <TextInput
-          style={styles.inputRicerca}
-          placeholder={`Cerca tra ${esercizi.length} esercizi…`}
-          placeholderTextColor={brand.colors.muted}
-          value={ricerca}
-          onChangeText={setRicerca}
-        />
-        {!!ricerca && <Pressable onPress={() => setRicerca("")} hitSlop={10}><Text style={styles.pulisci}>✕</Text></Pressable>}
-      </View>
-
-      <View style={styles.rigaRaggruppa}>
-        <Pressable onPress={() => setRaggruppaPerFase(true)} style={[styles.chipRaggruppa, raggruppaPerFase && styles.chipRaggruppaAttivo]}>
-          <Text style={[styles.chipTesto, raggruppaPerFase && styles.chipTestoAttivo]}>Per fase</Text>
-        </Pressable>
-        <Pressable onPress={() => setRaggruppaPerFase(false)} style={[styles.chipRaggruppa, !raggruppaPerFase && styles.chipRaggruppaAttivo]}>
-          <Text style={[styles.chipTesto, !raggruppaPerFase && styles.chipTestoAttivo]}>Per categoria</Text>
-        </Pressable>
-      </View>
-
       <SectionList
         sections={sezioni}
         keyExtractor={(r) => r.id}
         stickySectionHeadersEnabled
-        contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 100 }}
+        contentContainerStyle={styles.contenuto}
         refreshControl={<RefreshControl refreshing={caricamento} onRefresh={carica} tintColor={brand.colors.brand} />}
+        ListHeaderComponent={
+          <View style={{ gap: 12, marginBottom: 8 }}>
+            <TitoloGrande titolo="Esercizi" />
+            <View style={styles.segmenti}>
+              <Pressable onPress={() => setRaggruppaPerFase(true)} style={[styles.segmento, raggruppaPerFase && styles.segmentoAttivo]}>
+                <Text style={[styles.segmentoTesto, raggruppaPerFase && styles.segmentoTestoAttivo]}>Per fase</Text>
+              </Pressable>
+              <Pressable onPress={() => setRaggruppaPerFase(false)} style={[styles.segmento, !raggruppaPerFase && styles.segmentoAttivo]}>
+                <Text style={[styles.segmentoTesto, !raggruppaPerFase && styles.segmentoTestoAttivo]}>Per categoria</Text>
+              </Pressable>
+            </View>
+            <View style={styles.barraRicerca}>
+              <TextInput
+                style={styles.inputRicerca}
+                placeholder={`Cerca tra ${esercizi.length} esercizi…`}
+                placeholderTextColor={brand.colors.muted}
+                value={ricerca}
+                onChangeText={setRicerca}
+              />
+              {!!ricerca && <Pressable onPress={() => setRicerca("")} hitSlop={10} style={styles.tastoPulisci}><Text style={styles.pulisci}>✕</Text></Pressable>}
+            </View>
+          </View>
+        }
         ListEmptyComponent={!caricamento ? <Text style={styles.vuoto}>{ricerca ? "Nessun esercizio trovato." : "Nessun esercizio ancora. Usa il + qui sotto, oppure ✨ per farli proporre all'AI."}</Text> : null}
         renderSectionHeader={({ section }) => (
           <Pressable style={styles.intestazioneCategoria} onPress={() => commutaCategoria(section.titolo)}>
@@ -198,7 +202,7 @@ export default function Esercizi() {
             <Text style={styles.conteggioCategoria}>{section.totale}</Text>
           </Pressable>
         )}
-        renderItem={({ item }) => {
+        renderItem={({ item, index, section }) => {
           // Riga di sottogruppo (Battuta, Muro, Palleggio...): solo
           // un'intestazione, non ha una propria scheda da aprire.
           if (item.tipo === "sottogruppo") {
@@ -211,12 +215,19 @@ export default function Esercizi() {
           }
           const es = item.es;
           const aperta = descrizioneAperta === es.id;
+          // Le righe consecutive formano un'unica scheda raggruppata.
+          const precedente = index > 0 ? section.data[index - 1] : undefined;
+          const successivo = index < section.data.length - 1 ? section.data[index + 1] : undefined;
+          const primaDelGruppo = !precedente || precedente.tipo !== "esercizio";
+          const ultimaDelGruppo = !successivo || successivo.tipo !== "esercizio";
           return (
-            <View style={styles.riga}>
+            <View style={[styles.rigaContenitore, primaDelGruppo && styles.rigaPrima, ultimaDelGruppo && styles.rigaUltima]}>
+              {!primaDelGruppo && <View style={styles.separatore} />}
               {/* Un tocco apre la descrizione sul posto (serve durante
                   l'allenamento), la freccia porta alla scheda completa
                   per modificarla. */}
               <Pressable style={styles.rigaTesta} onPress={() => setDescrizioneAperta(aperta ? null : es.id)}>
+                <View style={styles.tileEsercizio}><Text style={styles.tileEsercizioTesto}>{es.nome.trim().charAt(0).toUpperCase()}</Text></View>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.rigaNome}>{es.nome}</Text>
                   <Text style={styles.rigaSotto}>
@@ -249,7 +260,7 @@ export default function Esercizi() {
           <View style={styles.cartaPopup}>
             <View style={styles.intestazionePopup}>
               <Text style={styles.titoloPopup}>Nuovo esercizio</Text>
-              <Pressable onPress={() => setPopupCreazioneAperto(false)}><Text style={styles.chiudiPopup}>✕</Text></Pressable>
+              <Pressable onPress={() => setPopupCreazioneAperto(false)} style={styles.tastoChiudiPopup}><Text style={styles.chiudiPopup}>✕</Text></Pressable>
             </View>
             {team && (
               <CreaEsercizio
@@ -269,32 +280,40 @@ export default function Esercizi() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: brand.colors.surface },
-  barraRicerca: { flexDirection: "row", alignItems: "center", gap: 8, margin: 16, marginBottom: 8, backgroundColor: brand.colors.surfaceSecondary, borderRadius: 10, paddingHorizontal: 12 },
-  inputRicerca: { flex: 1, color: brand.colors.onSurface, paddingVertical: 10 },
+  contenuto: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 100, width: "100%", maxWidth: 900, alignSelf: "center" },
+  segmenti: { flexDirection: "row", backgroundColor: brand.colors.surfaceTertiary, borderRadius: 12, padding: 2 },
+  segmento: { flex: 1, minHeight: 40, borderRadius: 10, alignItems: "center", justifyContent: "center" },
+  segmentoAttivo: { backgroundColor: brand.colors.brand },
+  segmentoTesto: { color: brand.colors.onSurfaceSecondary, fontSize: 14, fontWeight: "600" },
+  segmentoTestoAttivo: { color: "#000", fontWeight: "700" },
+  barraRicerca: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: brand.colors.surfaceTertiary, borderRadius: 12, paddingHorizontal: 12, minHeight: 44 },
+  inputRicerca: { flex: 1, color: brand.colors.onSurface, paddingVertical: 10, fontSize: 16 },
+  tastoPulisci: { width: 44, height: 44, alignItems: "center", justifyContent: "center", marginRight: -12 },
   pulisci: { color: brand.colors.muted, fontSize: 16 },
-  intestazioneCategoria: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", backgroundColor: brand.colors.surface, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: brand.colors.border },
-  titoloCategoria: { color: brand.colors.brandSecondary, fontSize: 13, fontWeight: "800", textTransform: "uppercase" },
-  rigaSottogruppo: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingTop: 10, paddingBottom: 4, minHeight: 32 },
-  titoloSottogruppoCatalogo: { color: brand.colors.muted, fontSize: 11, fontWeight: "700", textTransform: "uppercase" },
-  conteggioSottogruppo: { color: brand.colors.muted, fontSize: 11, fontWeight: "700" },
-  conteggioCategoria: { color: brand.colors.muted, fontSize: 12, fontWeight: "700" },
-  riga: { paddingLeft: 14, borderBottomWidth: 1, borderBottomColor: brand.colors.border },
-  rigaTesta: { flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 12, minHeight: 56 },
-  rigaDescrizioneEstesa: { color: brand.colors.onSurfaceSecondary, fontSize: 14, lineHeight: 21, paddingBottom: 12, paddingRight: 12 },
-  tastoScheda: { width: 36, height: 36, alignItems: "center", justifyContent: "center" },
-  tastoSchedaTesto: { color: brand.colors.brand, fontSize: 22, fontWeight: "700" },
-  rigaNome: { color: brand.colors.onSurface, fontSize: 15 },
-  rigaRaggruppa: { flexDirection: "row", gap: 8, paddingHorizontal: 16, paddingBottom: 8 },
-  chipRaggruppa: { paddingVertical: 8, paddingHorizontal: 14, borderRadius: 16, backgroundColor: brand.colors.surfaceSecondary },
-  chipRaggruppaAttivo: { backgroundColor: brand.colors.brand },
-  rigaSotto: { color: brand.colors.brandSecondary, fontSize: 11, marginTop: 1 },
-  rigaDescrizione: { color: brand.colors.muted, fontSize: 12, marginTop: 2 },
+  intestazioneCategoria: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", backgroundColor: brand.colors.surface, paddingTop: 12, paddingBottom: 8, minHeight: 48 },
+  titoloCategoria: { color: brand.colors.onSurface, fontSize: 22, fontWeight: "700", letterSpacing: -0.3 },
+  conteggioCategoria: { color: brand.colors.muted, fontSize: 14, fontWeight: "700" },
+  rigaSottogruppo: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingTop: 8, paddingBottom: 6, minHeight: 44 },
+  titoloSottogruppoCatalogo: { color: brand.colors.muted, fontSize: 13, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.6 },
+  conteggioSottogruppo: { color: brand.colors.muted, fontSize: 13, fontWeight: "700" },
+  rigaContenitore: { backgroundColor: brand.colors.surfaceSecondary },
+  rigaPrima: { borderTopLeftRadius: 18, borderTopRightRadius: 18, overflow: "hidden" },
+  rigaUltima: { borderBottomLeftRadius: 18, borderBottomRightRadius: 18, overflow: "hidden", marginBottom: 6 },
+  separatore: { height: 1, backgroundColor: brand.colors.border, marginLeft: 72 },
+  rigaTesta: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 10, paddingHorizontal: 14, minHeight: 64 },
+  tileEsercizio: { width: 46, height: 46, borderRadius: 11, backgroundColor: brand.colors.surfaceTertiary, alignItems: "center", justifyContent: "center" },
+  tileEsercizioTesto: { color: brand.colors.brand, fontSize: 20, fontWeight: "700" },
+  rigaDescrizioneEstesa: { color: brand.colors.onSurfaceSecondary, fontSize: 14, lineHeight: 21, paddingBottom: 12, paddingHorizontal: 14 },
+  tastoScheda: { width: 44, height: 44, alignItems: "center", justifyContent: "center", marginRight: -8 },
+  tastoSchedaTesto: { color: brand.colors.brand, fontSize: 24, fontWeight: "700" },
+  rigaNome: { color: brand.colors.onSurface, fontSize: 16, fontWeight: "600" },
+  rigaSotto: { color: brand.colors.brandSecondary, fontSize: 13, marginTop: 1 },
+  rigaDescrizione: { color: brand.colors.muted, fontSize: 13, marginTop: 2 },
   vuoto: { color: brand.colors.muted, textAlign: "center", marginTop: 32 },
-  chipTesto: { color: brand.colors.onSurfaceSecondary, fontSize: 12 },
-  chipTestoAttivo: { color: "#000", fontWeight: "700" },
   sfondoPopup: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "flex-end" },
-  cartaPopup: { backgroundColor: brand.colors.surfaceSecondary, borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, gap: 10, maxHeight: "88%" },
+  cartaPopup: { backgroundColor: brand.colors.surfaceSecondary, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, gap: 12, maxHeight: "88%", width: "100%", maxWidth: 640, alignSelf: "center" },
   intestazionePopup: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  titoloPopup: { color: brand.colors.onSurface, fontSize: 16, fontWeight: "700" },
+  titoloPopup: { color: brand.colors.onSurface, fontSize: 22, fontWeight: "700" },
   chiudiPopup: { color: brand.colors.muted, fontSize: 18 },
+  tastoChiudiPopup: { width: 44, height: 44, alignItems: "center", justifyContent: "center", marginRight: -12 },
 });

@@ -10,6 +10,13 @@ import type { Athlete, RuoloCampo } from "@/src/types/database";
 import { avvisa } from "@/src/lib/confermaAzione";
 import { MessaggioWhatsApp } from "@/src/components/MessaggioWhatsApp";
 import { promemoriaSporteasy } from "@/src/lib/messaggiWhatsApp";
+import { TitoloGrande } from "@/src/components/TitoloGrande";
+
+/** Testo dentro l'avatar: il numero di maglia, o le iniziali se manca. */
+function testoAvatar(a: Athlete): string {
+  if (a.numero_maglia) return String(a.numero_maglia);
+  return `${(a.nome ?? "").trim().charAt(0)}${(a.cognome ?? "").trim().charAt(0)}`.toUpperCase();
+}
 
 export default function Atlete() {
   const { team, puoScrivere } = useAuth();
@@ -52,13 +59,22 @@ export default function Atlete() {
       <FlatList
         data={atlete}
         keyExtractor={(a) => a.id}
-        contentContainerStyle={{ padding: 16, paddingBottom: 100, gap: 4 }}
+        contentContainerStyle={styles.contenuto}
         refreshControl={<RefreshControl refreshing={caricamento} onRefresh={carica} tintColor={brand.colors.brand} />}
         ListHeaderComponent={
           <>
+            <TitoloGrande
+              titolo="Rosa"
+              sottotitolo={team ? `${team.nome} · ${atlete.length} ${atlete.length === 1 ? "atleta" : "atlete"}` : undefined}
+            />
             {puoScrivere && (
               <Pressable style={styles.bottoneReminder} onPress={() => setReminderSporteasy(true)}>
-                <Text style={styles.bottoneReminderTesto}>💬 Ricorda alle atlete di aggiornare la scheda su SportEasy</Text>
+                <View style={styles.iconaReminder}><Text style={styles.iconaReminderTesto}>💬</Text></View>
+                <View style={{ flex: 1, gap: 1 }}>
+                  <Text style={styles.bottoneReminderTitolo}>Promemoria SportEasy</Text>
+                  <Text style={styles.bottoneReminderSotto}>Ricorda alle atlete di aggiornare la scheda su SportEasy</Text>
+                </View>
+                <Text style={styles.chevron}>›</Text>
               </Pressable>
             )}
             {puoScrivere && (
@@ -66,20 +82,43 @@ export default function Atlete() {
                 <Text style={styles.rigaEspandiTesto}>{mostraArchiviate ? "▾" : "▸"} Rosa archiviate ({archiviate.length})</Text>
               </Pressable>
             )}
-            {mostraArchiviate && archiviate.map((a) => (
-              <View key={a.id} style={styles.rigaArchiviata}>
-                <Text style={styles.rigaNome}>{a.nome} {a.cognome}</Text>
-                <Pressable onPress={() => ripristina(a.id)}><Text style={styles.rigaInvitoTesto}>Ripristina</Text></Pressable>
+            {mostraArchiviate && archiviate.length > 0 && (
+              <View style={[styles.scheda, { marginBottom: 16 }]}>
+                {archiviate.map((a, i) => (
+                  <View key={a.id}>
+                    {i > 0 && <View style={styles.separatore} />}
+                    <View style={styles.rigaArchiviata}>
+                      <View style={[styles.avatar, styles.avatarSpento]}><Text style={[styles.avatarTesto, { color: brand.colors.muted }]}>{testoAvatar(a)}</Text></View>
+                      <Text style={[styles.rigaNome, { flex: 1 }]} numberOfLines={1}>{a.nome} {a.cognome}</Text>
+                      <Pressable onPress={() => ripristina(a.id)} style={styles.bottoneRipristina}>
+                        <Text style={styles.bottoneRipristinaTesto}>Ripristina</Text>
+                      </Pressable>
+                    </View>
+                  </View>
+                ))}
               </View>
-            ))}
+            )}
           </>
         }
         ListEmptyComponent={!caricamento ? <Text style={styles.vuoto}>Nessuna atleta ancora. Usa il pulsante + qui sotto.</Text> : null}
-        renderItem={({ item }) => (
-          <Pressable style={styles.riga} onPress={() => router.push(`/atleta/${item.id}`)}>
-            <Text style={styles.rigaNome}>{item.nome} {item.cognome}</Text>
-            {!!item.ruolo_campo && <Text style={styles.rigaSotto}>{item.ruolo_campo}{item.numero_maglia ? ` — n. ${item.numero_maglia}` : ""}</Text>}
-          </Pressable>
+        renderItem={({ item, index }) => (
+          <View
+            style={[
+              styles.rigaContenitore,
+              index === 0 && styles.rigaPrima,
+              index === atlete.length - 1 && styles.rigaUltima,
+            ]}
+          >
+            {index > 0 && <View style={styles.separatore} />}
+            <Pressable style={styles.riga} onPress={() => router.push(`/atleta/${item.id}`)}>
+              <View style={styles.avatar}><Text style={styles.avatarTesto}>{testoAvatar(item)}</Text></View>
+              <View style={{ flex: 1, gap: 1 }}>
+                <Text style={styles.rigaNome} numberOfLines={1}>{item.nome} {item.cognome}</Text>
+                {!!item.ruolo_campo && <Text style={styles.rigaSotto}>{item.ruolo_campo}{item.numero_maglia ? ` — n. ${item.numero_maglia}` : ""}</Text>}
+              </View>
+              <Text style={styles.chevron}>›</Text>
+            </Pressable>
+          </View>
         )}
       />
 
@@ -124,26 +163,37 @@ export default function Atlete() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: brand.colors.surface },
-  form: { gap: 8, backgroundColor: brand.colors.surfaceSecondary, padding: 12, borderRadius: 12, marginBottom: 12 },
-  input: { backgroundColor: brand.colors.surfaceTertiary, color: brand.colors.onSurface, borderRadius: 8, padding: 10 },
-  etichettaCampo: { color: brand.colors.muted, fontSize: 12, marginTop: 2 },
-  bottone: { backgroundColor: brand.colors.brand, padding: 10, borderRadius: 8, alignItems: "center" },
-  bottoneTesto: { color: "#000", fontWeight: "700" },
-  riga: { paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: brand.colors.border },
+  contenuto: { padding: 16, paddingBottom: 100, width: "100%", maxWidth: 900, alignSelf: "center" },
+  input: { backgroundColor: brand.colors.surfaceTertiary, color: brand.colors.onSurface, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, minHeight: 44, fontSize: 16 },
+  etichettaCampo: { color: brand.colors.muted, fontSize: 13, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.6, marginTop: 2 },
+  bottone: { backgroundColor: brand.colors.brand, paddingVertical: 12, paddingHorizontal: 20, minHeight: 44, borderRadius: 999, alignItems: "center", justifyContent: "center" },
+  bottoneTesto: { color: "#000", fontWeight: "700", fontSize: 16 },
+  scheda: { backgroundColor: brand.colors.surfaceSecondary, borderRadius: 18, overflow: "hidden" },
+  rigaContenitore: { backgroundColor: brand.colors.surfaceSecondary },
+  rigaPrima: { borderTopLeftRadius: 18, borderTopRightRadius: 18, overflow: "hidden" },
+  rigaUltima: { borderBottomLeftRadius: 18, borderBottomRightRadius: 18, overflow: "hidden" },
+  separatore: { height: 1, backgroundColor: brand.colors.border, marginLeft: 72 },
+  riga: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 8, paddingHorizontal: 14, minHeight: 60 },
+  avatar: { width: 44, height: 44, borderRadius: 22, backgroundColor: brand.colors.surfaceTertiary, alignItems: "center", justifyContent: "center" },
+  avatarSpento: { opacity: 0.7 },
+  avatarTesto: { color: brand.colors.brand, fontSize: 17, fontWeight: "700" },
   rigaNome: { color: brand.colors.onSurface, fontSize: 16, fontWeight: "600" },
   rigaSotto: { color: brand.colors.muted, fontSize: 13 },
+  chevron: { color: brand.colors.muted, fontSize: 24, fontWeight: "600" },
   vuoto: { color: brand.colors.muted, textAlign: "center", marginTop: 32 },
-  bottoneReminder: { backgroundColor: brand.colors.surfaceSecondary, borderWidth: 1, borderColor: brand.colors.border, borderRadius: 10, padding: 12, marginBottom: 8 },
-  bottoneReminderTesto: { color: brand.colors.onSurface, fontSize: 13, fontWeight: "600" },
-  rigaEspandi: { paddingVertical: 4 },
-  rigaEspandiTesto: { color: brand.colors.brandSecondary, fontSize: 13, fontWeight: "600" },
-  rigaArchiviata: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: 6 },
+  bottoneReminder: { flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: brand.colors.surfaceSecondary, borderWidth: 1, borderColor: brand.colors.border, borderRadius: 16, paddingVertical: 12, paddingHorizontal: 14, marginBottom: 8, minHeight: 60 },
+  iconaReminder: { width: 38, height: 38, borderRadius: 10, backgroundColor: "rgba(50,173,230,0.16)", alignItems: "center", justifyContent: "center" },
+  iconaReminderTesto: { fontSize: 18 },
+  bottoneReminderTitolo: { color: brand.colors.onSurface, fontSize: 15, fontWeight: "600" },
+  bottoneReminderSotto: { color: brand.colors.muted, fontSize: 12.5 },
+  rigaEspandi: { minHeight: 44, justifyContent: "center", marginBottom: 4 },
+  rigaEspandiTesto: { color: brand.colors.brandSecondary, fontSize: 14, fontWeight: "600" },
+  rigaArchiviata: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 8, paddingHorizontal: 14, minHeight: 60 },
+  bottoneRipristina: { backgroundColor: brand.colors.surfaceTertiary, borderRadius: 999, minHeight: 44, paddingHorizontal: 16, alignItems: "center", justifyContent: "center" },
+  bottoneRipristinaTesto: { color: brand.colors.onSurface, fontSize: 14, fontWeight: "600" },
   selettoreRiga: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  chip: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 16, backgroundColor: brand.colors.surfaceTertiary },
+  chip: { paddingHorizontal: 14, minHeight: 44, borderRadius: 999, backgroundColor: brand.colors.surfaceTertiary, alignItems: "center", justifyContent: "center" },
   chipAttivo: { backgroundColor: brand.colors.brand },
-  chipTesto: { color: brand.colors.onSurfaceSecondary, fontSize: 13 },
+  chipTesto: { color: brand.colors.onSurfaceSecondary, fontSize: 14, fontWeight: "600" },
   chipTestoAttivo: { color: "#000", fontWeight: "700" },
-  rigaInvito: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: 6 },
-  rigaInvitoTesto: { color: brand.colors.brandSecondary, fontSize: 13, fontWeight: "600" },
-  rigaInvitoAnnulla: { color: brand.colors.error, fontSize: 13, fontWeight: "600" },
 });

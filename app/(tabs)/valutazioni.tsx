@@ -19,13 +19,20 @@ import { SchedaRendimento } from "@/src/components/SchedaRendimento";
 import { brand, fondamentali, uiStrings } from "@/src/config";
 import type { Athlete, Evaluation, EvaluationProposal, Fondamentale } from "@/src/types/database";
 import { avvisa } from "@/src/lib/confermaAzione";
+import { TitoloGrande } from "@/src/components/TitoloGrande";
+
+/** Testo dentro l'avatar: il numero di maglia, o le iniziali se manca. */
+function testoAvatar(numero: number | string | null | undefined, nome?: string | null, cognome?: string | null): string {
+  if (numero) return String(numero);
+  return `${(nome ?? "").trim().charAt(0)}${(cognome ?? "").trim().charAt(0)}`.toUpperCase();
+}
 
 export default function Valutazioni() {
   const { team, puoScrivere, ruolo, atletaId } = useAuth();
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.contenuto}>
-      <Text style={styles.titolo}>{uiStrings.valutazioni.title}</Text>
+      <TitoloGrande titolo={uiStrings.valutazioni.title} />
 
       {puoScrivere && team && <SezioneCicloValutazione teamId={team.id} />}
       {puoScrivere && <SezioneValutazioneCoach teamId={team!.id} />}
@@ -65,38 +72,44 @@ function SezioneCicloValutazione({ teamId }: { teamId: string }) {
   const daMostrare = mostraTutte ? daValutare : daValutare.slice(0, 5);
 
   return (
-    <View style={styles.cardAndamento}>
-      <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-        <Text style={styles.sottotitoloSezione}>Da valutare ({daValutare.length})</Text>
-        <Pressable onPress={() => setCadenzaInModifica(!cadenzaInModifica)}>
-          <Text style={styles.linkCadenza}>Cadenza</Text>
+    <View style={{ gap: 10 }}>
+      <View style={styles.rigaIntestazione}>
+        <Text style={styles.titoloSezione}>Da valutare ({daValutare.length})</Text>
+        <Pressable onPress={() => setCadenzaInModifica(!cadenzaInModifica)} style={styles.bottoneSecondarioPill}>
+          <Text style={styles.bottoneSecondarioPillTesto}>Cadenza</Text>
         </Pressable>
       </View>
 
       {daValutare.length > 0 && <RinvioPromemoria teamId={teamId} tipo="valutazioni" />}
 
       {cadenzaInModifica && (
-        <View style={styles.rigaCadenza}>
+        <View style={[styles.scheda, styles.rigaCadenza]}>
           <TextInput style={styles.inputCadenza} keyboardType="numeric" value={cadenza} onChangeText={setCadenza} />
-          <Text style={styles.vuoto}>giorni tra una valutazione e l'altra</Text>
-          <Pressable onPress={salvaCadenza}><Text style={styles.linkCadenza}>Salva</Text></Pressable>
+          <Text style={[styles.vuoto, { flex: 1 }]}>giorni tra una valutazione e l'altra</Text>
+          <Pressable onPress={salvaCadenza} style={styles.bottoneSecondarioPill}><Text style={styles.bottoneSecondarioPillTesto}>Salva</Text></Pressable>
         </View>
       )}
 
       {daValutare.length === 0 ? (
-        <Text style={styles.vuoto}>Sono tutti valutati di recente.</Text>
+        <View style={[styles.scheda, { padding: 16 }]}><Text style={styles.vuoto}>Sono tutti valutati di recente.</Text></View>
       ) : (
         <>
-          {daMostrare.map((a) => (
-            <View key={a.athlete_id} style={styles.rigaAndamento}>
-              <Text style={styles.rigaAndamentoTesto}>{a.numero_maglia ? `#${a.numero_maglia} ` : ""}{a.nome} {a.cognome}</Text>
-              <Text style={[styles.rigaAndamentoValore, a.giorni_dall_ultima === null && styles.valoreMaiValutata]}>
-                {a.giorni_dall_ultima === null ? "mai valutata" : `${a.giorni_dall_ultima} gg fa`}
-              </Text>
-            </View>
-          ))}
+          <View style={styles.scheda}>
+            {daMostrare.map((a, i) => (
+              <View key={a.athlete_id}>
+                {i > 0 && <View style={[styles.separatore, { marginLeft: 66 }]} />}
+                <View style={styles.rigaAtleta}>
+                  <View style={styles.avatar}><Text style={styles.avatarTesto}>{testoAvatar(a.numero_maglia, a.nome, a.cognome)}</Text></View>
+                  <Text style={styles.nomeAtleta} numberOfLines={1}>{a.nome} {a.cognome}</Text>
+                  <Text style={[styles.rigaAndamentoValore, a.giorni_dall_ultima === null && styles.valoreMaiValutata]}>
+                    {a.giorni_dall_ultima === null ? "mai valutata" : `${a.giorni_dall_ultima} gg fa`}
+                  </Text>
+                </View>
+              </View>
+            ))}
+          </View>
           {daValutare.length > 5 && (
-            <Pressable onPress={() => setMostraTutte(!mostraTutte)}>
+            <Pressable onPress={() => setMostraTutte(!mostraTutte)} style={styles.linkRiga}>
               <Text style={styles.linkCadenza}>{mostraTutte ? "Mostra meno" : `Mostra tutte (${daValutare.length})`}</Text>
             </Pressable>
           )}
@@ -184,75 +197,86 @@ function SezioneValutazioneCoach({ teamId }: { teamId: string }) {
   }
 
   return (
-    <View style={{ gap: 12 }}>
-      <View style={styles.selettoreRiga}>
+    <View style={{ gap: 16 }}>
+      <View style={[styles.scheda, { padding: 16, gap: 12 }]}>
         <FlatList
           horizontal
           data={atlete}
           keyExtractor={(a) => a.id}
           showsHorizontalScrollIndicator={false}
           renderItem={({ item }) => (
-            <Pressable onPress={() => setAtletaSelId(item.id)} style={[styles.chip, atletaSelId === item.id && styles.chipAttivo]}>
+            <Pressable onPress={() => setAtletaSelId(item.id)} hitSlop={4} style={[styles.chip, atletaSelId === item.id && styles.chipAttivo]}>
               <Text style={[styles.chipTesto, atletaSelId === item.id && styles.chipTestoAttivo]}>{item.nome} {item.cognome}</Text>
             </Pressable>
           )}
         />
-      </View>
 
-      <View style={styles.selettoreRiga}>
-        {fondamentali.map((f) => (
-          <Pressable key={f} onPress={() => setFondamentale(f)} style={[styles.chip, fondamentale === f && styles.chipAttivo]}>
-            <Text style={[styles.chipTesto, fondamentale === f && styles.chipTestoAttivo]}>{f}</Text>
-          </Pressable>
-        ))}
-      </View>
-
-      <TextInput style={styles.inputPunteggio} placeholder="Punteggio (1-10)" placeholderTextColor={brand.colors.muted} keyboardType="numeric" value={punteggio} onChangeText={onPunteggioModificato} />
-
-      <TextInput
-        style={[styles.input, { minHeight: 52, textAlignVertical: "top" }]}
-        multiline
-        placeholder="Contesto per l'AI (facoltativo): es. rientra da infortunio, ha cambiato ruolo, ultime settimane con poche presenze"
-        placeholderTextColor={brand.colors.muted}
-        maxLength={500} value={istruzioniExtra}
-        onChangeText={setIstruzioniExtra}
-      />
-
-      <View style={styles.azioni}>
-        <Pressable style={styles.bottonePrimario} onPress={onRegistra} disabled={!punteggio}>
-          <Text style={styles.bottonePrimarioTesto}>Registra valutazione</Text>
-        </Pressable>
-        <Pressable style={styles.bottoneAI} onPress={onSuggerisciAI} disabled={generandoAI || !atletaSelId}>
-          {generandoAI ? <ActivityIndicator color={brand.colors.brand} /> : <Text style={styles.bottoneAITesto}>{uiStrings.valutazioni.aiButton}</Text>}
-        </Pressable>
-      </View>
-
-      {messaggioAI && (
-        <Text style={[styles.messaggio, messaggioAI.tipo === "errore" && styles.messaggioErrore, messaggioAI.tipo === "ok" && styles.messaggioOk]}>{messaggioAI.testo}</Text>
-      )}
-
-      <Pressable style={styles.rigaEspandi} onPress={() => setMostraProposteInAttesa(!mostraProposteInAttesa)}>
-        <Text style={styles.rigaEspandiTesto}>{mostraProposteInAttesa ? "▾" : "▸"} {uiStrings.valutazioni.pendingSection} ({proposteInAttesa.length})</Text>
-      </Pressable>
-
-      {mostraProposteInAttesa && (
-        <View>
-          {proposteInAttesa.length === 0 && <Text style={styles.vuoto}>Nessuna proposta in attesa.</Text>}
-          {proposteInAttesa.map((item) => {
-            const atleta = atlete.find((a) => a.id === item.athlete_id);
-            return (
-              <View key={item.id} style={styles.cardProposta}>
-                <Text style={styles.cardPropostaTitolo}>{atleta ? `${atleta.nome} ${atleta.cognome}` : "Atleta"} — {item.fondamentale}: {item.valore_proposto}</Text>
-                {!!item.motivazione && <Text style={styles.cardPropostaMotivazione}>{item.motivazione}</Text>}
-                <View style={styles.azioniProposta}>
-                  <Pressable style={styles.bottoneSecondario} onPress={() => onDecidiDallaLista(item)}><Text style={styles.bottoneSecondarioTesto}>Approva</Text></Pressable>
-                  <Pressable style={styles.bottoneSecondarioRigetta} onPress={() => onRigettaDallaLista(item)}><Text style={styles.bottoneSecondarioRigettaTesto}>Rigetta</Text></Pressable>
-                </View>
-              </View>
-            );
-          })}
+        <View style={styles.selettoreRiga}>
+          {fondamentali.map((f) => (
+            <Pressable key={f} onPress={() => setFondamentale(f)} hitSlop={4} style={[styles.chip, fondamentale === f && styles.chipAttivo]}>
+              <Text style={[styles.chipTesto, fondamentale === f && styles.chipTestoAttivo]}>{f}</Text>
+            </Pressable>
+          ))}
         </View>
-      )}
+
+        <TextInput style={styles.inputPunteggio} placeholder="Punteggio (1-10)" placeholderTextColor={brand.colors.muted} keyboardType="numeric" value={punteggio} onChangeText={onPunteggioModificato} />
+
+        <TextInput
+          style={[styles.input, { minHeight: 52, textAlignVertical: "top" }]}
+          multiline
+          placeholder="Contesto per l'AI (facoltativo): es. rientra da infortunio, ha cambiato ruolo, ultime settimane con poche presenze"
+          placeholderTextColor={brand.colors.muted}
+          maxLength={500} value={istruzioniExtra}
+          onChangeText={setIstruzioniExtra}
+        />
+
+        <View style={styles.azioni}>
+          <Pressable style={styles.bottonePrimario} onPress={onRegistra} disabled={!punteggio}>
+            <Text style={styles.bottonePrimarioTesto}>Registra valutazione</Text>
+          </Pressable>
+          <Pressable style={styles.bottoneAI} onPress={onSuggerisciAI} disabled={generandoAI || !atletaSelId}>
+            {generandoAI ? <ActivityIndicator color={brand.colors.brand} /> : <Text style={styles.bottoneAITesto}>{uiStrings.valutazioni.aiButton}</Text>}
+          </Pressable>
+        </View>
+
+        {messaggioAI && (
+          <Text style={[styles.messaggio, messaggioAI.tipo === "errore" && styles.messaggioErrore, messaggioAI.tipo === "ok" && styles.messaggioOk]}>{messaggioAI.testo}</Text>
+        )}
+      </View>
+
+      <View style={{ gap: 10 }}>
+        <Pressable style={styles.rigaEspandi} onPress={() => setMostraProposteInAttesa(!mostraProposteInAttesa)}>
+          <Text style={styles.titoloSezione}>{mostraProposteInAttesa ? "▾" : "▸"} {uiStrings.valutazioni.pendingSection}</Text>
+          <View style={styles.badge}><Text style={styles.badgeTesto}>{proposteInAttesa.length}</Text></View>
+        </Pressable>
+
+        {mostraProposteInAttesa && (
+          <View style={styles.scheda}>
+            {proposteInAttesa.length === 0 && <Text style={[styles.vuoto, { padding: 16 }]}>Nessuna proposta in attesa.</Text>}
+            {proposteInAttesa.map((item, i) => {
+              const atleta = atlete.find((a) => a.id === item.athlete_id);
+              return (
+                <View key={item.id}>
+                  {i > 0 && <View style={[styles.separatore, { marginLeft: 66 }]} />}
+                  <View style={styles.cardProposta}>
+                    <View style={styles.rigaAtletaSenzaPadding}>
+                      <View style={styles.avatar}><Text style={styles.avatarTesto}>{atleta ? testoAvatar(atleta.numero_maglia, atleta.nome, atleta.cognome) : "?"}</Text></View>
+                      <View style={{ flex: 1, gap: 1 }}>
+                        <Text style={styles.cardPropostaTitolo}>{atleta ? `${atleta.nome} ${atleta.cognome}` : "Atleta"} — {item.fondamentale}: {item.valore_proposto}</Text>
+                        {!!item.motivazione && <Text style={styles.cardPropostaMotivazione}>{item.motivazione}</Text>}
+                      </View>
+                    </View>
+                    <View style={styles.azioniProposta}>
+                      <Pressable style={styles.bottoneSecondario} onPress={() => onDecidiDallaLista(item)}><Text style={styles.bottoneSecondarioTesto}>Approva</Text></Pressable>
+                      <Pressable style={styles.bottoneSecondarioRigetta} onPress={() => onRigettaDallaLista(item)}><Text style={styles.bottoneSecondarioRigettaTesto}>Rigetta</Text></Pressable>
+                    </View>
+                  </View>
+                </View>
+              );
+            })}
+          </View>
+        )}
+      </View>
     </View>
   );
 }
@@ -269,23 +293,28 @@ function SezioneValutazionePersonale({ athleteId, teamId }: { athleteId: string;
       <SchedaRendimento athleteId={athleteId} modificabile={false} />
 
 
-      <Text style={[styles.sottotitoloSezione, { marginTop: 8 }]}>Storico per fondamentale</Text>
+      <Text style={[styles.titoloSezione, { marginTop: 8 }]}>Storico per fondamentale</Text>
       <View style={styles.selettoreRiga}>
         {fondamentali.map((f) => (
-          <Pressable key={f} onPress={() => setFondamentale(f)} style={[styles.chip, fondamentale === f && styles.chipAttivo]}>
+          <Pressable key={f} onPress={() => setFondamentale(f)} hitSlop={4} style={[styles.chip, fondamentale === f && styles.chipAttivo]}>
             <Text style={[styles.chipTesto, fondamentale === f && styles.chipTestoAttivo]}>{f}</Text>
           </Pressable>
         ))}
       </View>
       {valutazioni.length === 0 ? (
-        <Text style={styles.vuoto}>Nessuna valutazione ancora per questo fondamentale.</Text>
+        <View style={[styles.scheda, { padding: 16 }]}><Text style={styles.vuoto}>Nessuna valutazione ancora per questo fondamentale.</Text></View>
       ) : (
-        valutazioni.map((v) => (
-          <View key={v.id} style={styles.rigaAndamento}>
-            <Text style={styles.rigaAndamentoTesto}>{v.data_valutazione.slice(0, 10)}</Text>
-            <Text style={styles.rigaAndamentoValore}>{v.punteggio}</Text>
-          </View>
-        ))
+        <View style={styles.scheda}>
+          {valutazioni.map((v, i) => (
+            <View key={v.id}>
+              {i > 0 && <View style={[styles.separatore, { marginLeft: 16 }]} />}
+              <View style={styles.rigaAndamento}>
+                <Text style={styles.rigaAndamentoTesto}>{v.data_valutazione.slice(0, 10)}</Text>
+                <Text style={styles.rigaAndamentoValore}>{v.punteggio}</Text>
+              </View>
+            </View>
+          ))}
+        </View>
       )}
 
     </View>
@@ -308,69 +337,85 @@ function SezioneValutazionePresidente({ teamId }: { teamId: string }) {
 
   return (
     <View style={{ gap: 12 }}>
-      <Text style={styles.sottotitoloSezione}>Consultazione (sola lettura)</Text>
+      <Text style={styles.titoloSezione}>Consultazione (sola lettura)</Text>
       <View style={styles.selettoreRiga}>
         {atlete.map((a) => (
-          <Pressable key={a.id} onPress={() => setAtletaSelId(a.id)} style={[styles.chip, atletaSelId === a.id && styles.chipAttivo]}>
+          <Pressable key={a.id} onPress={() => setAtletaSelId(a.id)} hitSlop={4} style={[styles.chip, atletaSelId === a.id && styles.chipAttivo]}>
             <Text style={[styles.chipTesto, atletaSelId === a.id && styles.chipTestoAttivo]}>{a.nome} {a.cognome}</Text>
           </Pressable>
         ))}
       </View>
       <View style={styles.selettoreRiga}>
         {fondamentali.map((f) => (
-          <Pressable key={f} onPress={() => setFondamentale(f)} style={[styles.chip, fondamentale === f && styles.chipAttivo]}>
+          <Pressable key={f} onPress={() => setFondamentale(f)} hitSlop={4} style={[styles.chip, fondamentale === f && styles.chipAttivo]}>
             <Text style={[styles.chipTesto, fondamentale === f && styles.chipTestoAttivo]}>{f}</Text>
           </Pressable>
         ))}
       </View>
-      {valutazioni.map((v) => (
-        <View key={v.id} style={styles.rigaAndamento}>
-          <Text style={styles.rigaAndamentoTesto}>{v.data_valutazione.slice(0, 10)}</Text>
-          <Text style={styles.rigaAndamentoValore}>{v.punteggio}</Text>
+      {valutazioni.length > 0 && (
+        <View style={styles.scheda}>
+          {valutazioni.map((v, i) => (
+            <View key={v.id}>
+              {i > 0 && <View style={[styles.separatore, { marginLeft: 16 }]} />}
+              <View style={styles.rigaAndamento}>
+                <Text style={styles.rigaAndamentoTesto}>{v.data_valutazione.slice(0, 10)}</Text>
+                <Text style={styles.rigaAndamentoValore}>{v.punteggio}</Text>
+              </View>
+            </View>
+          ))}
         </View>
-      ))}
+      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  input: { backgroundColor: brand.colors.surfaceTertiary, color: brand.colors.onSurface, borderRadius: 8, padding: 10 },
+  input: { backgroundColor: brand.colors.surfaceTertiary, color: brand.colors.onSurface, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, minHeight: 44, fontSize: 16 },
   container: { flex: 1, backgroundColor: brand.colors.surface },
-  contenuto: { padding: 16, gap: 12, paddingBottom: 60 },
-  titolo: { color: brand.colors.onSurface, fontSize: 20, fontWeight: "700" },
-  sottotitoloSezione: { color: brand.colors.onSurface, fontSize: 14, fontWeight: "700" },
-  cardAndamento: { backgroundColor: brand.colors.surfaceSecondary, borderRadius: 12, padding: 12, gap: 6 },
-  rigaAndamento: { flexDirection: "row", justifyContent: "space-between", paddingVertical: 4, borderBottomWidth: 1, borderBottomColor: brand.colors.border },
-  rigaAndamentoTesto: { color: brand.colors.onSurfaceSecondary, fontSize: 13 },
-  rigaAndamentoValore: { color: brand.colors.brand, fontWeight: "700" },
+  contenuto: { padding: 16, gap: 20, paddingBottom: 60, width: "100%", maxWidth: 900, alignSelf: "center" },
+  titoloSezione: { color: brand.colors.onSurface, fontSize: 22, fontWeight: "700", letterSpacing: -0.3 },
+  scheda: { backgroundColor: brand.colors.surfaceSecondary, borderRadius: 18, overflow: "hidden" },
+  separatore: { height: 1, backgroundColor: brand.colors.border },
+  rigaIntestazione: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 8 },
+  rigaAtleta: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 8, paddingHorizontal: 14, minHeight: 60 },
+  rigaAtletaSenzaPadding: { flexDirection: "row", alignItems: "center", gap: 12 },
+  nomeAtleta: { flex: 1, color: brand.colors.onSurface, fontSize: 16, fontWeight: "600" },
+  avatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: brand.colors.surfaceTertiary, alignItems: "center", justifyContent: "center" },
+  avatarTesto: { color: brand.colors.brand, fontSize: 15, fontWeight: "700" },
+  rigaAndamento: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: 12, paddingHorizontal: 16, minHeight: 48 },
+  rigaAndamentoTesto: { color: brand.colors.onSurfaceSecondary, fontSize: 15 },
+  rigaAndamentoValore: { color: brand.colors.brand, fontWeight: "700", fontSize: 14 },
   valoreMaiValutata: { color: brand.colors.warning },
-  linkCadenza: { color: brand.colors.brandSecondary, fontSize: 12, fontWeight: "600" },
-  rigaCadenza: { flexDirection: "row", alignItems: "center", gap: 8 },
-  inputCadenza: { backgroundColor: brand.colors.surfaceTertiary, color: brand.colors.onSurface, borderRadius: 6, padding: 6, width: 50, textAlign: "center" },
-  rigaAndamentoN: { color: brand.colors.muted, fontWeight: "400", fontSize: 11 },
+  linkCadenza: { color: brand.colors.brandSecondary, fontSize: 14, fontWeight: "600" },
+  linkRiga: { minHeight: 44, justifyContent: "center" },
+  bottoneSecondarioPill: { backgroundColor: brand.colors.surfaceTertiary, borderRadius: 999, minHeight: 44, paddingHorizontal: 16, alignItems: "center", justifyContent: "center" },
+  bottoneSecondarioPillTesto: { color: brand.colors.onSurface, fontSize: 14, fontWeight: "600" },
+  rigaCadenza: { flexDirection: "row", alignItems: "center", gap: 10, padding: 12 },
+  inputCadenza: { backgroundColor: brand.colors.surfaceTertiary, color: brand.colors.onSurface, borderRadius: 10, padding: 8, minHeight: 44, width: 60, textAlign: "center", fontSize: 16, fontWeight: "700" },
   selettoreRiga: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  chip: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 16, backgroundColor: brand.colors.surfaceSecondary, marginRight: 6 },
+  chip: { paddingVertical: 6, paddingHorizontal: 14, minHeight: 36, borderRadius: 999, backgroundColor: brand.colors.surfaceTertiary, marginRight: 6, alignItems: "center", justifyContent: "center" },
   chipAttivo: { backgroundColor: brand.colors.brand },
-  chipTesto: { color: brand.colors.onSurfaceSecondary, fontSize: 13 },
+  chipTesto: { color: brand.colors.onSurfaceSecondary, fontSize: 14, fontWeight: "600" },
   chipTestoAttivo: { color: "#000", fontWeight: "700" },
-  inputPunteggio: { backgroundColor: brand.colors.surfaceSecondary, color: brand.colors.onSurface, borderRadius: 8, padding: 12, fontSize: 18, textAlign: "center" },
-  azioni: { flexDirection: "row", gap: 8 },
-  bottonePrimario: { flex: 1, backgroundColor: brand.colors.brand, padding: 12, borderRadius: 8, alignItems: "center" },
-  bottonePrimarioTesto: { color: "#000", fontWeight: "700" },
-  bottoneAI: { flex: 1, borderWidth: 1, borderColor: brand.colors.brandSecondary, padding: 12, borderRadius: 8, alignItems: "center" },
-  bottoneAITesto: { color: brand.colors.brandSecondary, fontWeight: "700" },
+  inputPunteggio: { backgroundColor: brand.colors.surfaceTertiary, color: brand.colors.onSurface, borderRadius: 12, padding: 12, minHeight: 48, fontSize: 18, textAlign: "center" },
+  azioni: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  bottonePrimario: { flexGrow: 1, flexBasis: 160, backgroundColor: brand.colors.brand, paddingVertical: 12, paddingHorizontal: 20, minHeight: 48, borderRadius: 999, alignItems: "center", justifyContent: "center" },
+  bottonePrimarioTesto: { color: "#000", fontWeight: "700", fontSize: 16 },
+  bottoneAI: { flexGrow: 1, flexBasis: 160, backgroundColor: brand.colors.surfaceTertiary, paddingVertical: 12, paddingHorizontal: 20, minHeight: 48, borderRadius: 999, alignItems: "center", justifyContent: "center" },
+  bottoneAITesto: { color: brand.colors.onSurface, fontWeight: "600", fontSize: 16 },
   messaggio: { color: brand.colors.muted, fontSize: 13 },
   messaggioOk: { color: brand.colors.success },
   messaggioErrore: { color: brand.colors.error },
-  rigaEspandi: { marginTop: 4 },
-  rigaEspandiTesto: { color: brand.colors.brandSecondary, fontSize: 13, fontWeight: "600" },
-  vuoto: { color: brand.colors.muted, fontSize: 13 },
-  cardProposta: { backgroundColor: brand.colors.surfaceSecondary, borderRadius: 10, padding: 12, marginTop: 8, gap: 6 },
-  cardPropostaTitolo: { color: brand.colors.onSurface, fontWeight: "600" },
-  cardPropostaMotivazione: { color: brand.colors.muted, fontSize: 12 },
+  rigaEspandi: { flexDirection: "row", alignItems: "center", gap: 8, minHeight: 44 },
+  badge: { minWidth: 22, height: 22, borderRadius: 11, paddingHorizontal: 6, backgroundColor: brand.colors.surfaceTertiary, alignItems: "center", justifyContent: "center" },
+  badgeTesto: { color: brand.colors.onSurface, fontSize: 12, fontWeight: "700" },
+  vuoto: { color: brand.colors.muted, fontSize: 14 },
+  cardProposta: { paddingVertical: 12, paddingHorizontal: 14, gap: 10 },
+  cardPropostaTitolo: { color: brand.colors.onSurface, fontSize: 16, fontWeight: "600" },
+  cardPropostaMotivazione: { color: brand.colors.muted, fontSize: 13 },
   azioniProposta: { flexDirection: "row", gap: 8 },
-  bottoneSecondario: { borderColor: brand.colors.success, borderWidth: 1, paddingVertical: 6, paddingHorizontal: 10, borderRadius: 8 },
-  bottoneSecondarioTesto: { color: brand.colors.success, fontWeight: "600", fontSize: 13 },
-  bottoneSecondarioRigetta: { borderColor: brand.colors.error, borderWidth: 1, paddingVertical: 6, paddingHorizontal: 10, borderRadius: 8 },
-  bottoneSecondarioRigettaTesto: { color: brand.colors.error, fontWeight: "600", fontSize: 13 },
+  bottoneSecondario: { flex: 1, backgroundColor: brand.colors.success, minHeight: 44, borderRadius: 999, alignItems: "center", justifyContent: "center" },
+  bottoneSecondarioTesto: { color: "#000", fontWeight: "700", fontSize: 14 },
+  bottoneSecondarioRigetta: { flex: 1, backgroundColor: brand.colors.surfaceTertiary, minHeight: 44, borderRadius: 999, alignItems: "center", justifyContent: "center" },
+  bottoneSecondarioRigettaTesto: { color: brand.colors.error, fontWeight: "600", fontSize: 14 },
 });
