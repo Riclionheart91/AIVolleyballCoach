@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import { View, Text, Pressable, StyleSheet, ScrollView, ActivityIndicator, Modal, FlatList, useWindowDimensions } from "react-native";
+import { View, Text, Pressable, StyleSheet, ScrollView, ActivityIndicator } from "react-native";
 import { useLocalSearchParams, useFocusEffect, router } from "expo-router";
 import { useAuth } from "@/src/context/AuthContext";
 import { elencaAtlete } from "@/src/services/athletes";
@@ -16,7 +16,7 @@ import {
   formazioneInizialeSet,
 } from "@/src/services/matches";
 import { confermaAzione, avvisa } from "@/src/lib/confermaAzione";
-import { Campo9x9, type OccupanteCampo } from "@/src/components/Campo9x9";
+import { CorreggiFormazione } from "@/src/components/CorreggiFormazione";
 import { brand } from "@/src/config";
 import { supabaseClient } from "@/src/lib/supabase";
 import type { Athlete, Match } from "@/src/types/database";
@@ -24,12 +24,6 @@ import type { Athlete, Match } from "@/src/types/database";
 export default function PreparaPartita() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { team } = useAuth();
-  const { width: larghezzaSchermo } = useWindowDimensions();
-  // Il campo qui non aveva mai un'altezza esplicita: si affidava a un
-  // flex:1 che, dentro una lista scorrevole, collassa quasi a zero.
-  // Un lato pari a gran parte della larghezza dello schermo lo rende
-  // ben visibile e più facile da toccare con precisione.
-  const latoCampo = Math.min(larghezzaSchermo - 32, 420);
   const [match, setMatch] = useState<Match | null>(null);
   const [setId, setSetId] = useState<string | null>(null);
   const [numeroSet, setNumeroSet] = useState(1);
@@ -39,7 +33,8 @@ export default function PreparaPartita() {
   const [posizioni, setPosizioni] = useState<Record<number, string>>({});
   // Formazione di partenza del set precedente (vuota al 1° set o se non disponibile).
   const [formazionePrecedente, setFormazionePrecedente] = useState<Record<number, string>>({});
-  const [posizioneInModifica, setPosizioneInModifica] = useState<number | null>(null);
+  // Schermata della formazione (la stessa della correzione a partita iniziata).
+  const [popupFormazione, setPopupFormazione] = useState(false);
   const [chiServe, setChiServe] = useState<"noi" | "avversario">("noi");
   const [chiServeRichiesto, setChiServeRichiesto] = useState(true); // false = auto-dedotto, non richiesto (set 2-4)
   const [mostraFormazione, setMostraFormazione] = useState(false); // "pulsante dedicato": la formazione si apre solo dopo averlo premuto
@@ -99,7 +94,10 @@ export default function PreparaPartita() {
       // I convocati si chiedono UNA SOLA VOLTA, all'avvio della partita
       // (set 1): dal secondo set in poi sono già fissati per l'intera
       // gara, si salta direttamente alla formazione.
-      if (numero > 1 && convocati.length > 0) setMostraFormazione(true);
+      if (numero > 1 && convocati.length > 0) {
+        setMostraFormazione(true);
+        if (Object.keys(posizioniIniziali).length === 0) setPopupFormazione(true);
+      }
     } catch (e) {
       avvisa("Errore", (e as Error).message);
     } finally {
@@ -136,7 +134,7 @@ export default function PreparaPartita() {
       // Passa subito alla formazione invece di lasciare la persona a
       // dover cercare il pulsante "2. Imposta formazione" — è il passo
       // naturale successivo, non serve chiederlo di nuovo.
-      if (convocateIds.size >= 6) setMostraFormazione(true);
+      if (convocateIds.size >= 6) { setMostraFormazione(true); setPopupFormazione(true); }
       else avvisa("Salvato", "Convocati aggiornati. Ne servono almeno 6 per passare alla formazione.");
     } catch (e) {
       avvisa("Errore convocati", (e as Error).message);
@@ -145,76 +143,7 @@ export default function PreparaPartita() {
     }
   }
 
-  const atleteConvocate = atlete.filter((a) => convocateIds.has(a.id));
-  // Il Libero non entra mai nella formazione INIZIALE: per regolamento
-  // entra solo durante il gioco, come rimpiazzo. Va quindi escluso qui
-  // a prescindere dalla posizione già occupata altrove.
-  const atleteDisponibiliPerPosizione = atleteConvocate.filter(
-    (a) => !liberoIds.has(a.id)
-      && !Object.entries(posizioni).some(([pos, athleteId]) => athleteId === a.id && Number(pos) !== posizioneInModifica),
-  );
-
-  const occupantiCampo: OccupanteCampo[] = Object.entries(posizioni).map(([pos, athleteId]) => {
-    const a = atlete.find((x) => x.id === athleteId);
-    return { posizione: Number(pos), cognome: a?.cognome ?? "?", numeroMaglia: a?.numero_maglia ?? null, ruolo: a?.ruolo_campo ?? null };
-  });
-
-  function assegnaPosizione(athleteId: string) {
-    if (posizioneInModifica === null) return;
-    setPosizioni((prev) => {
-      const nuovo = { ...prev };
-      for (const p of Object.keys(nuovo)) if (nuovo[Number(p)] === athleteId) delete nuovo[Number(p)];
-      nuovo[posizioneInModifica] = athleteId;
-      return nuovo;
-    });
-    setPosizioneInModifica(null);
-  }
-
-  /** Pulsante per singola casella: rimuove solo quella giocatrice, lasciando le altre posizioni intatte. */
-  function rimuoviPosizione(pos: number) {
-    setPosizioni((prev) => {
-      const nuovo = { ...prev };
-      delete nuovo[pos];
-      return nuovo;
-    });
-  }
-
-  /** Pulsante sopra lo schema: ripulisce l'intera formazione in un colpo solo. */
-  function svuotaFormazione() {
-    confermaAzione("Svuotare la formazione?", "Tutte le posizioni verranno rimosse.", "Svuota", () => setPosizioni({}), true);
-  }
-
-  /** Pulsante sopra lo schema: ruota l'intero schieramento di una posizione (stessa direzione oraria della rotazione automatica: 2→1, 1→6, 6→5, 5→4, 4→3, 3→2). Utile per impostare rapidamente formazioni "a scalare" senza riassegnare ogni casella a mano. */
-  function ruotaFormazioneDiUnaPosizione() {
-    setPosizioni((prev) => {
-      const nuovo: Record<number, string> = {};
-      if (prev[2]) nuovo[1] = prev[2];
-      if (prev[1]) nuovo[6] = prev[1];
-      if (prev[6]) nuovo[5] = prev[6];
-      if (prev[5]) nuovo[4] = prev[5];
-      if (prev[4]) nuovo[3] = prev[4];
-      if (prev[3]) nuovo[2] = prev[3];
-      return nuovo;
-    });
-  }
-
   const formazioneCompleta = Object.keys(posizioni).length === 6;
-
-  // La formazione precedente si può riproporre solo se è completa e
-  // tutti i suoi giocatori sono ancora tra i convocati (e non Liberi,
-  // che non partono mai in campo).
-  const formazionePrecedenteUtilizzabile =
-    Object.keys(formazionePrecedente).length === 6 &&
-    Object.values(formazionePrecedente).every((athleteId) => convocateIds.has(athleteId) && !liberoIds.has(athleteId));
-  const formazioneUgualeAPrecedente =
-    formazionePrecedenteUtilizzabile &&
-    Object.entries(formazionePrecedente).every(([pos, athleteId]) => posizioni[Number(pos)] === athleteId);
-
-  function usaFormazionePrecedente() {
-    setPosizioni({ ...formazionePrecedente });
-    setPosizioneInModifica(null);
-    setAvvisiFormazione([]);
-  }
 
   async function salvaFormazione(): Promise<boolean> {
     if (!setId || !formazioneCompleta) return false;
@@ -309,58 +238,34 @@ export default function PreparaPartita() {
         )}
 
         {!mostraFormazione ? (
-          <Pressable style={styles.bottoneApriFormazione} onPress={() => setMostraFormazione(true)} disabled={convocateIds.size < 6}>
+          <Pressable style={styles.bottoneApriFormazione} onPress={() => { setMostraFormazione(true); setPopupFormazione(true); }} disabled={convocateIds.size < 6}>
             <Text style={styles.bottoneApriFormazioneTesto}>{convocateIds.size < 6 ? `Servono almeno 6 convocati (${convocateIds.size}/6)` : "2. Imposta formazione iniziale →"}</Text>
           </Pressable>
         ) : (
           <View style={styles.card}>
-            <Text style={styles.sottotitolo}>2. Formazione iniziale (tocca una posizione)</Text>
-            <Text style={styles.nota}>Tocca una casella del campo, poi scegli chi mettere lì. La posizione 1 è la zona di battuta. Chi è già posizionato non compare più tra le scelte per un'altra casella. Chi gioca da Libero non compare qui: entra solo durante il gioco, come rimpiazzo.</Text>
-            {numeroSet > 1 && (
-              formazionePrecedenteUtilizzabile ? (
-                <Pressable
-                  onPress={usaFormazionePrecedente}
-                  disabled={formazioneUgualeAPrecedente}
-                  style={[styles.bottoneStessaFormazione, formazioneUgualeAPrecedente && styles.bottoneStessaFormazioneAttivo]}
-                >
-                  <Text style={styles.bottoneStessaFormazioneTesto}>
-                    {formazioneUgualeAPrecedente
-                      ? `✓ Stessa formazione di partenza del set ${numeroSet - 1}`
-                      : `↺ Usa la stessa formazione di partenza del set ${numeroSet - 1}`}
-                  </Text>
-                </Pressable>
-              ) : (
-                <Text style={styles.nota}>La formazione di partenza del set {numeroSet - 1} non è disponibile (set giocato prima che venisse registrata): impostala a mano.</Text>
-              )
-            )}
-            <View style={styles.rigaAzioniCampo}>
-              <Pressable onPress={svuotaFormazione} style={styles.bottoneAzioneCampo}><Text style={styles.bottoneAzioneCampoTesto}>🗑 Svuota tutto</Text></Pressable>
-              <Pressable onPress={ruotaFormazioneDiUnaPosizione} style={styles.bottoneAzioneCampo}><Text style={styles.bottoneAzioneCampoTesto}>↻ Ruota di 1</Text></Pressable>
-            </View>
-            <View style={{ width: latoCampo, height: latoCampo, alignSelf: "center" }}>
-              <Campo9x9 occupanti={occupantiCampo} onTapPosizione={(p) => setPosizioneInModifica(p)} onRimuoviPosizione={rimuoviPosizione} consentiPosizioniVuote />
-            </View>
-
-            <Text style={[styles.etichetta, { marginTop: 10 }]}>Chi serve per prima in questo set?</Text>
-            {chiServeRichiesto ? (
-              <View style={styles.selettoreRiga}>
-                {(["noi", "avversario"] as const).map((v) => (
-                  <Pressable key={v} onPress={() => setChiServe(v)} style={[styles.chip, chiServe === v && styles.chipAttivo]}>
-                    <Text style={[styles.chipTesto, chiServe === v && styles.chipTestoAttivo]}>{v === "noi" ? "Noi" : "Loro"}</Text>
-                  </Pressable>
-                ))}
+            <Text style={styles.sottotitolo}>2. Formazione del set {numeroSet}</Text>
+            {formazioneCompleta ? (
+              <View style={{ gap: 4 }}>
+                {[1, 2, 3, 4, 5, 6].map((pos) => {
+                  const a = atlete.find((x) => x.id === posizioni[pos]);
+                  return (
+                    <Text key={pos} style={styles.rigaFormazione}>
+                      <Text style={styles.numeroPosizione}>{pos}{pos === 1 ? " (battuta)" : ""}  </Text>
+                      {a ? `${a.numero_maglia != null ? `#${a.numero_maglia} ` : ""}${a.cognome}` : "—"}
+                    </Text>
+                  );
+                })}
+                <Text style={styles.nota}>Batte per primo: {chiServe === "noi" ? "noi" : "loro"}.</Text>
               </View>
             ) : (
-              <Text style={styles.nota}>{chiServe === "noi" ? "Noi" : "Loro"} — dedotto in automatico dall'alternanza con il set precedente (non richiesto ai set 2-4 per regolamento; verrà richiesto di nuovo al 5° set).</Text>
+              <Text style={styles.nota}>Formazione incompleta ({Object.keys(posizioni).length}/6): impostala per poter avviare.</Text>
             )}
-
             {avvisiFormazione.map((a, i) => (
               <Text key={i} style={styles.avvisoRegolamento}>⚠ {a}</Text>
             ))}
-
-            {!formazioneCompleta && (
-              <Text style={styles.nota}>Formazione incompleta ({Object.keys(posizioni).length}/6): completala per poter avviare.</Text>
-            )}
+            <Pressable style={styles.bottoneSecondario} onPress={() => setPopupFormazione(true)}>
+              <Text style={styles.bottoneSecondarioTesto}>{formazioneCompleta ? "Modifica la formazione" : "Imposta la formazione"}</Text>
+            </Pressable>
           </View>
         )}
       </ScrollView>
@@ -378,24 +283,32 @@ export default function PreparaPartita() {
         </Pressable>
       </View>
 
-      <Modal visible={posizioneInModifica !== null} animationType="fade" transparent onRequestClose={() => setPosizioneInModifica(null)}>
-        <View style={styles.sfondoPopup}>
-          <View style={styles.cartaPopup}>
-            <Text style={styles.titoloPopup}>Chi va in posizione {posizioneInModifica}?</Text>
-            <FlatList
-              data={atleteDisponibiliPerPosizione}
-              keyExtractor={(a) => a.id}
-              renderItem={({ item }) => (
-                <Pressable style={styles.rigaSceltaAtleta} onPress={() => assegnaPosizione(item.id)}>
-                  <Text style={styles.rigaSceltaAtletaTesto}>{item.numero_maglia ? `#${item.numero_maglia} ` : ""}{item.nome} {item.cognome}{item.ruolo_campo ? ` · ${item.ruolo_campo}` : ""}</Text>
-                </Pressable>
-              )}
-              ListEmptyComponent={<Text style={styles.nota}>Sono già tutti posizionati altrove.</Text>}
-            />
-            <Pressable onPress={() => setPosizioneInModifica(null)}><Text style={styles.linkAnnulla}>Chiudi</Text></Pressable>
-          </View>
-        </View>
-      </Modal>
+      <CorreggiFormazione
+        modo="iniziale"
+        visibile={popupFormazione}
+        setId={setId ?? ""}
+        matchId={id ?? ""}
+        numeroSet={numeroSet}
+        atlete={atlete}
+        convocateIds={Array.from(convocateIds)}
+        liberiIds={liberoIds}
+        inCampo={[]}
+        chiServe={chiServe}
+        liberoInCampo={false}
+        puoCambiareDistinta={false}
+        posizioniIniziali={posizioni}
+        formazionePrecedente={formazionePrecedente}
+        notaChiBatte={chiServeRichiesto ? undefined : "Dedotto in automatico dall'alternanza con il set precedente (non richiesto ai set 2-4 per regolamento; verrà richiesto di nuovo al 5° set)."}
+        onSalva={async (nuove, chiBatte) => {
+          if (!setId) throw new Error("Il set non è ancora pronto: riprova tra un attimo.");
+          await impostaFormazioneIniziale(setId, Object.fromEntries(Object.entries(nuove).map(([p, a]) => [p, a])), chiBatte);
+          setPosizioni(nuove);
+          setChiServe(chiBatte);
+          setAvvisiFormazione((await verificaFormazione(setId)).map((x) => x.avviso));
+        }}
+        onChiudi={() => setPopupFormazione(false)}
+        onAggiornato={() => undefined}
+      />
     </View>
   );
 }
@@ -406,6 +319,8 @@ const styles = StyleSheet.create({
   card: { backgroundColor: brand.colors.surfaceSecondary, borderRadius: 12, padding: 14, gap: 8 },
   sottotitolo: { color: brand.colors.onSurface, fontSize: 15, fontWeight: "700" },
   nota: { color: brand.colors.muted, fontSize: 12 },
+  rigaFormazione: { color: brand.colors.onSurface, fontSize: 15, fontWeight: "600" },
+  numeroPosizione: { color: brand.colors.muted, fontSize: 12, fontWeight: "700" },
   avvisoRegolamento: { color: brand.colors.warning, fontSize: 12, lineHeight: 17 },
   etichetta: { color: brand.colors.onSurface, fontSize: 13, fontWeight: "600" },
   rigaConvocata: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: brand.colors.border },

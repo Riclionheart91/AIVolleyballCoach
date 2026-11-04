@@ -27,6 +27,21 @@ interface Props {
   onChiudi: () => void;
   /** Dopo ogni modifica: la schermata ricarica i dati della partita. */
   onAggiornato: () => void | Promise<void>;
+  /**
+   * "iniziale": e' la formazione di partenza di un set, scelta prima di iniziare (stessa schermata della correzione).
+   * Di default e' la correzione a partita iniziata.
+   */
+  modo?: "correzione" | "iniziale";
+  /** Solo "iniziale": posizioni gia' scelte (posizione -> id), da cui si riparte. */
+  posizioniIniziali?: Record<number, string>;
+  /** Solo "iniziale": salva la formazione (al posto della correzione). Se lancia un errore, il messaggio viene mostrato. */
+  onSalva?: (posizioni: Record<number, string>, chiBatte: "noi" | "avversario") => Promise<void>;
+  /** Solo "iniziale": formazione di partenza del set precedente, da riproporre con un tocco. */
+  formazionePrecedente?: Record<number, string>;
+  /** Solo "iniziale": avvisi di regolamento sulla formazione appena salvata. */
+  avvisi?: string[];
+  /** Solo "iniziale": spiegazione sotto la scelta di chi batte (es. quando e' dedotto dal set precedente). */
+  notaChiBatte?: string;
 }
 
 /**
@@ -34,7 +49,8 @@ interface Props {
  * punti e azioni gia' registrati; lo staff puo' anche aggiungere un Libero (per tutta la partita, fino a 2) e una convocata
  * dimenticata (solo nel primo set).
  */
-export function CorreggiFormazione({ visibile, setId, matchId, numeroSet, atlete, convocateIds, liberiIds, inCampo, chiServe, liberoInCampo, puoCambiareDistinta, onChiudi, onAggiornato }: Props) {
+export function CorreggiFormazione({ visibile, setId, matchId, numeroSet, atlete, convocateIds, liberiIds, inCampo, chiServe, liberoInCampo, puoCambiareDistinta, onChiudi, onAggiornato, modo = "correzione", posizioniIniziali, onSalva, formazionePrecedente, avvisi, notaChiBatte }: Props) {
+  const iniziale = modo === "iniziale";
   const [posizioni, setPosizioni] = useState<Record<number, string>>({});
   const [scelta, setScelta] = useState<number | null>(null);
   const [chiBatte, setChiBatte] = useState<"noi" | "avversario">("noi");
@@ -45,7 +61,8 @@ export function CorreggiFormazione({ visibile, setId, matchId, numeroSet, atlete
   useEffect(() => {
     if (!visibile) return;
     const p: Record<number, string> = {};
-    for (const r of inCampo) if (r.posizione) p[r.posizione] = r.athlete_id;
+    if (iniziale) Object.assign(p, posizioniIniziali ?? {});
+    else for (const r of inCampo) if (r.posizione) p[r.posizione] = r.athlete_id;
     setPosizioni(p);
     setScelta(null);
     setChiBatte(chiServe ?? "noi");
@@ -75,15 +92,21 @@ export function CorreggiFormazione({ visibile, setId, matchId, numeroSet, atlete
     if (!completa || salvataggio) return;
     setSalvataggio(true);
     try {
-      await correggiFormazione(setId, Object.fromEntries(Object.entries(posizioni).map(([p, a]) => [p, a])), chiBatte);
+      if (iniziale && onSalva) await onSalva(posizioni, chiBatte);
+      else await correggiFormazione(setId, Object.fromEntries(Object.entries(posizioni).map(([p, a]) => [p, a])), chiBatte);
       await onAggiornato();
       onChiudi();
     } catch (e) {
-      avvisa("Formazione non corretta", (e as Error).message);
+      avvisa(iniziale ? "Formazione non salvata" : "Formazione non corretta", (e as Error).message);
     } finally {
       setSalvataggio(false);
     }
   }
+
+  // Riproporre la formazione del set precedente: solo se e' completa e chi ci gioca e' ancora convocato e non Libero.
+  const precedenteUtilizzabile = iniziale && !!formazionePrecedente && Object.keys(formazionePrecedente).length === 6
+    && Object.values(formazionePrecedente).every((id) => convocateIds.includes(id) && !liberiIds.has(id));
+  const precedenteGiaScelta = precedenteUtilizzabile && Object.entries(formazionePrecedente!).every(([pos, id]) => posizioni[Number(pos)] === id);
 
   async function aggiungi(athleteId: string, comeLibero: boolean) {
     try {
@@ -105,10 +128,26 @@ export function CorreggiFormazione({ visibile, setId, matchId, numeroSet, atlete
         <View style={styles.carta}>
           <ScrollView contentContainerStyle={{ gap: 12 }} keyboardShouldPersistTaps="handled">
             <View style={styles.intestazione}>
-              <Text style={styles.titolo}>Correggi la formazione</Text>
+              <Text style={styles.titolo}>{iniziale ? `Formazione del Set ${numeroSet}` : "Correggi la formazione"}</Text>
               <Pressable onPress={onChiudi} hitSlop={12}><Text style={styles.chiudi}>✕</Text></Pressable>
             </View>
-            <Text style={styles.nota}>Rimette in campo chi indichi nelle posizioni indicate. Punti e azioni già registrati non cambiano e chi esce per correzione non conta come cambio.</Text>
+            <Text style={styles.nota}>
+              {iniziale
+                ? "Tocca una posizione sul campo e poi scegli chi la occupa. La posizione 1 è la battuta. Chi gioca da Libero non compare qui: entra solo durante il gioco."
+                : "Rimette in campo chi indichi nelle posizioni indicate. Punti e azioni già registrati non cambiano e chi esce per correzione non conta come cambio."}
+            </Text>
+
+            {precedenteUtilizzabile && (
+              <Pressable
+                disabled={precedenteGiaScelta}
+                onPress={() => { setPosizioni({ ...formazionePrecedente! }); setScelta(null); }}
+                style={[styles.chipAzione, { alignSelf: "stretch", alignItems: "center" }, precedenteGiaScelta && { opacity: 0.6 }]}
+              >
+                <Text style={styles.chipAzioneTesto}>
+                  {precedenteGiaScelta ? `✓ Stessa formazione di partenza del set ${numeroSet - 1}` : `↺ Usa la stessa formazione di partenza del set ${numeroSet - 1}`}
+                </Text>
+              </Pressable>
+            )}
 
             {liberoInCampo && (
               <View style={styles.avviso}>
@@ -130,7 +169,7 @@ export function CorreggiFormazione({ visibile, setId, matchId, numeroSet, atlete
               ))}
             </View>
 
-            <Text style={styles.sezione}>Chi batte adesso</Text>
+            <Text style={styles.sezione}>{iniziale ? "Chi batte per primo" : "Chi batte adesso"}</Text>
             <View style={styles.rigaChip}>
               {(["noi", "avversario"] as const).map((c) => (
                 <Pressable key={c} onPress={() => setChiBatte(c)} style={[styles.chip, chiBatte === c && styles.chipAttivo]}>
@@ -138,6 +177,8 @@ export function CorreggiFormazione({ visibile, setId, matchId, numeroSet, atlete
                 </Pressable>
               ))}
             </View>
+
+            {iniziale && !!notaChiBatte && <Text style={styles.nota}>{notaChiBatte}</Text>}
 
             {disponibili.length > 0 && (
               <>
@@ -155,6 +196,10 @@ export function CorreggiFormazione({ visibile, setId, matchId, numeroSet, atlete
             <Pressable disabled={!completa || salvataggio || liberoInCampo} onPress={salva} style={[styles.bottone, (!completa || salvataggio || liberoInCampo) && { opacity: 0.4 }]}>
               <Text style={styles.bottoneTesto}>{salvataggio ? "Un attimo…" : completa ? "Salva la formazione" : `Mancano ${6 - Object.keys(posizioni).length} posizioni`}</Text>
             </Pressable>
+
+            {(avvisi ?? []).map((a, i) => (
+              <Text key={i} style={styles.avvisoRegolamento}>⚠ {a}</Text>
+            ))}
 
             {puoCambiareDistinta && (
               <>
@@ -204,6 +249,7 @@ const styles = StyleSheet.create({
   chiudi: { color: brand.colors.muted, fontSize: 18 },
   nota: { color: brand.colors.muted, fontSize: 12, lineHeight: 17 },
   avviso: { backgroundColor: "rgba(255,215,0,0.15)", borderColor: brand.colors.warning, borderWidth: 1, borderRadius: 8, padding: 8 },
+  avvisoRegolamento: { color: brand.colors.warning, fontSize: 12, lineHeight: 17 },
   avvisoTesto: { color: brand.colors.warning, fontSize: 12, fontWeight: "700" },
   campo: { backgroundColor: "#1a3a2a", borderRadius: 12, borderWidth: 2, borderColor: brand.colors.brand, padding: 8, gap: 8 },
   rete: { color: "#fff", fontSize: 10, fontWeight: "700", letterSpacing: 2, textAlign: "center", borderBottomWidth: 3, borderBottomColor: "#fff", paddingBottom: 2 },
