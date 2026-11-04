@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { View, Text, Pressable, StyleSheet, ScrollView, ActivityIndicator } from "react-native";
 import { useLocalSearchParams, useFocusEffect, router } from "expo-router";
 import { useAuth } from "@/src/context/AuthContext";
@@ -11,9 +11,11 @@ import {
 import type { ValoreZona } from "@/src/components/ZoneCampo";
 import { GraficoAndamentoSet } from "@/src/components/GraficoAndamentoSet";
 import { costruisciAndamentoPerSet, seriePiuLunghe } from "@/src/lib/andamentoPunti";
-import { calcolaVoti, coloreVoto, MIN_AZIONI_VOTO } from "@/src/lib/votiPartita";
+import { calcolaVoti, coloreVoto, MIN_AZIONI_VOTO, type VotoFondamentale } from "@/src/lib/votiPartita";
 import { costruisciRivivi } from "@/src/lib/rivivi";
 import { esportaCsv, stampaScheda, type SchedaPartita } from "@/src/lib/esportaPartita";
+import { condividiRiepilogoPdf, scaricaRiepilogoPdf, type RiepilogoPartita } from "@/src/lib/riepilogoPartitaPdf";
+import { calcolaMetriche, caricaConfrontoPartite, type ConfrontoPartite } from "@/src/services/confrontoPartite";
 import { supabaseClient } from "@/src/lib/supabase";
 import { avvisa } from "@/src/lib/confermaAzione";
 import { brand } from "@/src/config";
@@ -89,6 +91,8 @@ export default function AnalisiPartita() {
   const [setRivivi, setSetRivivi] = useState<Set<string>>(new Set());
   const [mostraCalcoloVoto, setMostraCalcoloVoto] = useState(false);
   const [trendPersone, setTrendPersone] = useState<Record<string, AndamentoPersonaPartita[]>>({});
+  // Confronto con le ultime partite concluse della stessa squadra e stagione (null = non disponibile: la sezione resta nascosta).
+  const [confronto, setConfronto] = useState<ConfrontoPartite | null>(null);
 
   const carica = useCallback(async () => {
     if (!id || !team) return;
@@ -138,6 +142,18 @@ export default function AnalisiPartita() {
   }, [id, team]);
 
   useFocusEffect(useCallback(() => { carica(); }, [carica]));
+
+  // Il confronto si carica dopo la schermata, senza farla aspettare: se qualcosa non va la sezione non compare.
+  const societaIdSquadra = team?.societaId ?? null;
+  useEffect(() => {
+    let annullato = false;
+    setConfronto(null);
+    if (!match || eventiAndamento.length === 0 || partiteSquadra.length === 0) return;
+    caricaConfrontoPartite(match, partiteSquadra, societaIdSquadra, calcolaMetriche(eventiAndamento, servizioRicezione?.side_out_pct))
+      .then((c) => { if (!annullato) setConfronto(c); })
+      .catch(() => { /* sezione nascosta */ });
+    return () => { annullato = true; };
+  }, [match, eventiAndamento, partiteSquadra, servizioRicezione, societaIdSquadra]);
 
   function alternaDettaglio(athleteId: string) {
     setAperti((prev) => {
@@ -269,6 +285,89 @@ export default function AnalisiPartita() {
   function onStampa() {
     if (!match) return;
     if (!stampaScheda(costruisciScheda())) avvisa("Stampa non disponibile", "La stampa/PDF funziona dal browser. Se si è bloccata la finestra, consenti i popup per questo sito e riprova.");
+  }
+
+  /** Numero con una cifra decimale e la virgola, come si scrive in italiano. */
+  const decimale = (v: number) => v.toFixed(1).replace(".", ",");
+
+  /** Dati del "Riepilogo partita" in PDF: gli stessi numeri che si vedono a schermo. */
+  function costruisciRiepilogo(): RiepilogoPartita {
+    const m = calcolaMetriche(eventiAndamento, servizioRicezione?.side_out_pct);
+    const attacchi = conta((e) => e.skill === "Attacco");
+    const attacchiPunto = conta((e) => e.skill === "Attacco" && e.esito === "punto");
+    const servizi = conta((e) => e.skill === "Servizio");
+    const haEventi = eventiAndamento.length > 0;
+    const pct = (v: number | null) => (v === null ? "—" : `${Math.round(v)}%`);
+    const statistiche: RiepilogoPartita["statistiche"] = haEventi ? [
+      { etichetta: "Ricezione positiva", valore: pct(m.ricezionePositivaPct), dettaglio: ricezioniTot > 0 ? `${ricezioniPositive}/${ricezioniTot}` : undefined, percentuale: m.ricezionePositivaPct },
+      { etichetta: "Attacco efficace", valore: pct(m.attaccoEfficacePct), dettaglio: attacchi > 0 ? `${attacchiPunto}/${attacchi}` : undefined, percentuale: m.attaccoEfficacePct },
+      { etichetta: "Side-out", valore: pct(m.sideOutPct), percentuale: m.sideOutPct },
+      { etichetta: "Break-point", valore: servizioRicezione?.break_point_pct != null ? `${Math.round(Number(servizioRicezione.break_point_pct))}%` : "—", percentuale: servizioRicezione?.break_point_pct != null ? Number(servizioRicezione.break_point_pct) : null },
+      { etichetta: "Ace / errori servizio", valore: `${aceBattuta} / ${erroriBattuta}`, dettaglio: servizi > 0 ? `su ${servizi}` : undefined },
+      { etichetta: "Muri vincenti", valore: String(puntiMuro) },
+    ] : [];
+
+    const migliori: RiepilogoPartita["migliori"] = [];
+    for (const fond of ["Servizio", "Ricezione", "Attacco", "Muro", "Difesa"]) {
+      let meglio: { athleteId: string; f: VotoFondamentale } | null = null;
+      for (const v of Object.values(voti)) {
+        const f = v.fondamentali.find((x) => x.fondamentale === fond && x.azioni >= 3);
+        if (f && (!meglio || f.voto > meglio.f.voto || (f.voto === meglio.f.voto && f.azioni > meglio.f.azioni))) meglio = { athleteId: v.athlete_id, f };
+      }
+      if (!meglio) continue;
+      const f = meglio.f;
+      const extra = fond === "Servizio" ? `${f.punti} ace su ${f.azioni}`
+        : fond === "Ricezione" || fond === "Difesa" ? `${Math.round(((f.perfette + f.buone) / f.azioni) * 100)}% positive su ${f.azioni}`
+        : `${f.punti} punti, ${f.errori} errori su ${f.azioni}`;
+      migliori.push({ fondamentale: fond, nome: nomeAtleta(meglio.athleteId), dettaglio: `voto ${decimale(f.voto)} · ${extra}` });
+    }
+
+    return {
+      squadra: nomeNoi,
+      avversario: match!.avversario,
+      data: new Date(match!.data).toLocaleDateString("it-IT"),
+      luogo: match!.luogo === "casa" ? "Casa" : match!.luogo === "trasferta" ? "Trasferta" : null,
+      stato: match!.stato === "conclusa" ? "Finita" : match!.stato === "in_corso" ? "In corso" : "Da giocare",
+      setVintiNoi: vintiNoi,
+      setVintiLoro: vintiLoro,
+      setGiocati: setGiocati.map((x) => ({ numero: x.numero_set, noi: x.punti_noi, avv: x.punti_avversario })),
+      statistiche,
+      confronto: confronto && confronto.partiteConfrontate.length > 0 ? {
+        titolo: `Rispetto alle ultime ${confronto.partiteConfrontate.length} ${confronto.partiteConfrontate.length === 1 ? "partita" : "partite"}`,
+        righe: confronto.righe.map((r) => ({
+          etichetta: r.etichetta,
+          valore: r.valore === null ? "—" : `${Math.round(r.valore)}%`,
+          media: r.media === null ? "—" : `${Math.round(r.media)}%`,
+          differenza: r.differenza === null ? "" : `${r.differenza > 0 ? "+" : ""}${decimale(r.differenza)}`,
+          migliora: r.migliora,
+        })),
+        frase: confronto.frase,
+      } : null,
+      migliori,
+      migliorInCampo: migliore && migliore.voto != null ? { nome: nomeAtleta(migliore.athlete_id), voto: `voto ${decimale(migliore.voto)}` } : null,
+      andamento: setGiocati.map((x) => {
+        const punti = andamentoPerSet[x.id] ?? [];
+        const sr = seriePiuLunghe(punti);
+        return { numero: x.numero_set, noi: x.punti_noi, avv: x.punti_avversario, differenze: [0, ...punti.map((q) => q.noi - q.avv)], serieNoi: sr.noi, serieAvv: sr.avversario };
+      }),
+    };
+  }
+
+  /** "Riepilogo PDF": scarica il file da browser; nell'app apre la condivisione del testo. */
+  async function onRiepilogoPdf() {
+    if (!match) return;
+    const riepilogo = costruisciRiepilogo();
+    if (scaricaRiepilogoPdf(riepilogo)) return;
+    const esito = await condividiRiepilogoPdf(riepilogo);
+    if (esito === "errore") avvisa("Riepilogo non riuscito", "Non è stato possibile creare il PDF. Riprova.");
+  }
+
+  /** "Condividi": foglio di condivisione con il PDF allegato (chat, mail...); se il browser non lo permette scarica il file. */
+  async function onCondividiRiepilogo() {
+    if (!match) return;
+    const esito = await condividiRiepilogoPdf(costruisciRiepilogo());
+    if (esito === "scaricato") avvisa("Riepilogo scaricato", "Questo browser non può condividere il file direttamente: il PDF è stato scaricato, ora puoi allegarlo alla chat.");
+    else if (esito === "errore") avvisa("Condivisione non riuscita", "Non è stato possibile condividere il riepilogo. Riprova.");
   }
 
   /** Somma le righe per zona (di arrivo o di partenza) per un fondamentale. */
@@ -442,6 +541,15 @@ export default function AnalisiPartita() {
           </View>
         )}
 
+        <View style={styles.azioniRiepilogo}>
+          <Pressable testID="btn-riepilogo-pdf" onPress={onRiepilogoPdf} accessibilityRole="button" style={[styles.pillRiepilogo, styles.pillRiepilogoPrimaria]}>
+            <Text style={styles.pillRiepilogoTestoPrimaria}>Riepilogo PDF</Text>
+          </Pressable>
+          <Pressable testID="btn-condividi-riepilogo" onPress={onCondividiRiepilogo} accessibilityRole="button" style={styles.pillRiepilogo}>
+            <Text style={styles.pillRiepilogoTesto}>Condividi</Text>
+          </Pressable>
+        </View>
+
         {eventiAndamento.length > 0 && (
           <View style={styles.sezioneBlocco}>
             <Text style={styles.sezione}>Statistiche</Text>
@@ -467,6 +575,36 @@ export default function AnalisiPartita() {
               <StatDoppia etichetta="Errori nostri / punti diretti avversari" sx={erroriNostri} dx={puntiDirettiLoro} coloreSx={brand.colors.brand} coloreDx={brand.colors.brandSecondary} />
               <Text style={styles.dettaglioFondamentale}>"Errori nostri" sono quelli attribuiti a una giocatrice; "punti diretti avversari" sono i punti loro registrati senza un nostro errore specifico.</Text>
             </View>
+          </View>
+        )}
+
+        {confronto && confronto.righe.some((r) => r.valore !== null) && (
+          <View style={styles.sezioneBlocco}>
+            <Text style={styles.sezione}>Rispetto alle ultime partite</Text>
+            <Text style={styles.nota}>
+              Confronto con la media delle ultime {confronto.partiteConfrontate.length} {confronto.partiteConfrontate.length === 1 ? "partita conclusa" : "partite concluse"} della squadra in questa stagione. La differenza è in punti percentuali; per gli errori in servizio meno è meglio.
+            </Text>
+            <View style={styles.schedaLista}>
+              {confronto.righe.map((r, i) => {
+                const colore = r.migliora === null ? brand.colors.muted : r.migliora ? brand.colors.success : brand.colors.error;
+                const freccia = r.differenza === null || r.differenza === 0 ? "" : r.differenza > 0 ? "▲" : "▼";
+                return (
+                  <View key={r.chiave} style={[styles.rigaConfronto, i > 0 && styles.rigaConfrontoBordo]}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.confrontoEtichetta}>{r.etichetta}</Text>
+                      <Text style={styles.dettaglioPersona}>{r.media !== null ? `media ${Math.round(r.media)}%` : "nessun dato nelle altre partite"}</Text>
+                    </View>
+                    <Text style={styles.confrontoValore}>{r.valore !== null ? `${Math.round(r.valore)}%` : "—"}</Text>
+                    <Text style={[styles.confrontoDifferenza, { color: colore }]}>
+                      {r.differenza === null ? "—" : `${freccia} ${r.differenza > 0 ? "+" : ""}${decimale(r.differenza)}`.trim()}
+                    </Text>
+                  </View>
+                );
+              })}
+            </View>
+            {confronto.frase && (
+              <Text style={[styles.fraseConfronto, confronto.problemi.length > 0 && { color: brand.colors.error }]}>{confronto.frase}</Text>
+            )}
           </View>
         )}
 
@@ -822,5 +960,16 @@ const styles = StyleSheet.create({
   titoloSet: { color: brand.colors.onSurface, fontSize: 14, fontWeight: "700" },
   trendBox: { marginTop: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: brand.colors.border, gap: 4 },
   trendTitolo: { color: brand.colors.brandSecondary, fontSize: 11, fontWeight: "800", textTransform: "uppercase" },
+  azioniRiepilogo: { flexDirection: "row", gap: 10, flexWrap: "wrap" },
+  pillRiepilogo: { minHeight: 44, paddingHorizontal: 20, borderRadius: 999, backgroundColor: brand.colors.surfaceTertiary, alignItems: "center", justifyContent: "center" },
+  pillRiepilogoPrimaria: { backgroundColor: brand.colors.brand },
+  pillRiepilogoTesto: { color: brand.colors.onSurface, fontSize: 15, fontWeight: "700" },
+  pillRiepilogoTestoPrimaria: { color: "#000", fontSize: 15, fontWeight: "700" },
+  rigaConfronto: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 12, paddingHorizontal: 16, minHeight: 56 },
+  rigaConfrontoBordo: { borderTopWidth: 1, borderTopColor: brand.colors.border },
+  confrontoEtichetta: { color: brand.colors.onSurface, fontSize: 15, fontWeight: "600" },
+  confrontoValore: { color: brand.colors.onSurface, fontSize: 17, fontWeight: "800", minWidth: 52, textAlign: "right" },
+  confrontoDifferenza: { fontSize: 14, fontWeight: "800", minWidth: 78, textAlign: "right" },
+  fraseConfronto: { color: brand.colors.onSurfaceSecondary, fontSize: 14, fontWeight: "600", lineHeight: 20 },
   cellaTrend: { width: 42, textAlign: "right", fontSize: 11, fontWeight: "700", color: brand.colors.onSurfaceSecondary },
 });
