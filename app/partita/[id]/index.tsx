@@ -1,14 +1,13 @@
 import { IndicatoreScoutQr } from "@/src/components/IndicatoreScoutQr";
+import { StatoRete } from "@/src/components/StatoRete";
+import { avviaInvioAutomatico, codaVuota, dispositivoOffline, effettoInCoda, reteNonDisponibile, rimuoviUltimaVoce, svuotaOra, vociInCoda, statoCoda } from "@/src/lib/codaOffline";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { View, Text, Pressable, StyleSheet, ScrollView, Switch, Modal, ActivityIndicator, FlatList, useWindowDimensions } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useLocalSearchParams, useFocusEffect, router } from "expo-router";
+import { useLocalSearchParams, useFocusEffect, useNavigation, router } from "expo-router";
 import { useAuth } from "@/src/context/AuthContext";
 import { elencaAtlete } from "@/src/services/athletes";
 import {
-  annullaUltimoEvento,
-  annullaUltimoTimeout,
-  cambiaGiocatore,
   chiudiMatch,
   elencaConvocati,
   elencaEventiPartita,
@@ -19,20 +18,21 @@ import {
   elencaSet,
   elencaStoricoFormazioneSet,
   elencaTimeout,
-  impostaZoneEvento,
-  impostaCausaEvento,
   leggiRegolePunteggio,
   nuovoSet,
-  ruotaFormazioneManuale,
-  registraEvento,
-  registraTimeout,
-  faiUscireLibero,
-  impostaRegolaLibero,
+  registraEventoInCoda,
+  registraTimeoutInCoda,
+  annullaUltimoEventoInCoda,
+  annullaUltimoTimeoutInCoda,
+  ruotaFormazioneManualeInCoda,
+  cambiaGiocatoreInCoda,
+  rimpiazzaConLiberoInCoda,
+  faiUscireLiberoInCoda,
+  impostaRegolaLiberoInCoda,
   leggiRegolaLibero,
   type RegolaLibero,
   liberoInCampo,
   rendimentoRotazioniPartita,
-  rimpiazzaConLibero,
   type LiberoInCampo,
   type MatchTimeout,
   type RendimentoRotazionePartita,
@@ -61,6 +61,79 @@ import { VistaLiveLettura } from "@/src/components/VistaLiveLettura";
 import { statoPartitaLive } from "@/src/services/live";
 
 type Passo = "giocatrice" | "fondamentale" | "esito" | "zona";
+
+/** Punteggio del set con anche le azioni ancora in coda (non ancora inviate al database): il tabellone continua a funzionare senza rete. */
+function setConCoda(matchId: string, set: MatchSet | null): MatchSet | null {
+  if (!set) return set;
+  const e = effettoInCoda(matchId, set.id);
+  if (e.noi === 0 && e.avv === 0) return set;
+  return { ...set, punti_noi: Math.max(0, set.punti_noi + e.noi), punti_avversario: Math.max(0, set.punti_avversario + e.avv) };
+}
+
+/** Elenco delle azioni con quelle in coda in cima (id "coda-...") e senza quelle che un "annulla" in coda sta per togliere. */
+function eventiConCoda(matchId: string, dalServer: MatchEvent[]): MatchEvent[] {
+  const voci = vociInCoda(matchId);
+  if (voci.length === 0) return dalServer;
+  const annulli = voci.filter((v) => v.tipo === "annulla_ultimo_evento").length;
+  const nuovi: MatchEvent[] = voci
+    .filter((v) => v.tipo === "registra_evento" && !v.parziale?.eventId)
+    .map((v) => ({
+      id: `coda-${v.id}`, match_id: matchId, set_id: v.args.setId as string, skill: v.args.skill as Skill, esito: (v.args.esito as Esito | null) ?? null,
+      athlete_id: (v.args.athleteId as string | null) ?? null, creato_il: new Date(v.creatoIl).toISOString(), creato_da: null,
+      qualita: (v.args.qualita as QualitaRicezione | null) ?? null, zona_arrivo: (v.args.zonaArrivo as number | null) ?? null, causa: (v.args.causa as CausaPunto | null) ?? null,
+    }))
+    .reverse();
+  return [...nuovi, ...dalServer.slice(annulli)];
+}
+
+/** Time-out con quelli in coda in fondo (id "coda-...") e senza quelli che un "annulla" in coda sta per togliere. */
+function timeoutConCoda(matchId: string, dalServer: MatchTimeout[]): MatchTimeout[] {
+  const voci = vociInCoda(matchId);
+  if (voci.length === 0) return dalServer;
+  let base = dalServer;
+  for (const v of voci) {
+    if (v.tipo !== "annulla_ultimo_timeout") continue;
+    const ultimo = [...base].reverse().find((t) => t.set_id === (v.args.setId as string) && !t.id.startsWith("coda-"));
+    if (ultimo) base = base.filter((t) => t.id !== ultimo.id);
+  }
+  const nuovi: MatchTimeout[] = voci.filter((v) => v.tipo === "registra_timeout").map((v) => ({
+    id: `coda-${v.id}`, match_id: matchId, set_id: v.args.setId as string, squadra: v.args.squadra as "noi" | "avversario",
+    punti_noi: Number(v.args.puntiNoi ?? 0), punti_avversario: Number(v.args.puntiAvv ?? 0), creato_il: new Date(v.creatoIl).toISOString(),
+  }));
+  return [...base, ...nuovi];
+}
+
+/** Punteggio di un set dopo un evento registrato (segno +1) o annullato (segno -1): stessa regola di applicaDelta. */
+function setDopoEvento(set: MatchSet, skill: Skill, esito: Esito | null, segno: 1 | -1): MatchSet {
+  const avv = skill === "Punto_avversario" || esito === "errore";
+  const nostro = skill === "Punto_nostro" || esito === "punto";
+  return {
+    ...set,
+    punti_avversario: avv ? Math.max(0, set.punti_avversario + segno) : set.punti_avversario,
+    punti_noi: nostro ? Math.max(0, set.punti_noi + segno) : set.punti_noi,
+  };
+}
+
+/**
+ * Prima di chiudere la partita o aprire un nuovo set le azioni in coda devono essere arrivate al database
+ * (altrimenti finirebbero in un set gia' chiuso o andrebbero perse). Prova a inviarle adesso; se non ci riesce avvisa.
+ */
+async function codaPronta(matchId: string, azione: string): Promise<boolean> {
+  if (codaVuota(matchId)) return true;
+  if (await svuotaOra(matchId)) return true;
+  const n = statoCoda(matchId).daInviare;
+  avvisa(
+    "Azioni ancora da inviare",
+    `Prima di ${azione} devono arrivare al database ${n} salvataggi fatti senza rete. Aspetta che torni il segnale (vicino al servizio compare "Tutto inviato") e riprova.`,
+  );
+  return false;
+}
+
+/** Senza rete le scritture restano in coda: per quelle che non si vedono subito sul tabellone si avvisa, cosi' non le si ripete. */
+function avvisaSeInCoda(matchId: string, accodato: boolean, cosa: string) {
+  // Se la rete c'e' e la scrittura aspetta solo il suo turno in coda non serve disturbare: parte entro un attimo.
+  if (accodato && (dispositivoOffline() || statoCoda(matchId).offline)) avvisa("Salvato sul dispositivo", `${cosa}: manca il segnale, viene inviato appena torna la rete. Non ripeterlo.`);
+}
 
 /** La modalita' "zone" (dove e' caduta la palla) si ricorda tra una partita e l'altra su questo dispositivo. */
 const CHIAVE_ZONE_ATTIVE = "scout_zone_attive";
@@ -179,7 +252,11 @@ export default function PartitaLive() {
 
   async function ruotaFormazione(indietro: boolean) {
     if (!setCorrente) return;
-    try { await ruotaFormazioneManuale(setCorrente.id, indietro); await carica(); }
+    try {
+      const r = await ruotaFormazioneManualeInCoda(setCorrente.match_id, setCorrente.id, indietro);
+      await carica();
+      avvisaSeInCoda(id, r.accodato, "La rotazione");
+    }
     catch (e) { avvisa("Rotazione non riuscita", (e as Error).message); }
   }
 
@@ -191,7 +268,10 @@ export default function PartitaLive() {
       `Il set ${setCorrente.numero_set} (${setCorrente.punti_noi}-${setCorrente.punti_avversario}) viene chiuso e se ne apre uno nuovo. Non si può tornare indietro.`,
       "Nuovo set",
       async () => {
-        try { await nuovoSet(match.id); await dopo(); }
+        try {
+          if (!(await codaPronta(match.id, "aprire un nuovo set"))) return;
+          await nuovoSet(match.id); await dopo();
+        }
         catch (e) { avvisa("Errore", (e as Error).message); }
       },
     );
@@ -268,7 +348,18 @@ export default function PartitaLive() {
     if (router.canGoBack()) router.back(); else router.replace("/(tabs)/partite");
   }, []);
 
-  const carica = useCallback(async () => {
+  // Ultimo stato letto dal database (senza le azioni in coda): serve a rimostrare il tabellone con le azioni in coda anche senza rete.
+  const setServer = useRef<MatchSet | null>(null);
+  const eventiServer = useRef<MatchEvent[] | null>(null);
+  const timeoutServer = useRef<MatchTimeout[] | null>(null);
+  const rileggiLocale = useCallback(() => {
+    if (!id) return;
+    if (eventiServer.current) setEventi(eventiConCoda(id, eventiServer.current));
+    if (timeoutServer.current) setTimeouts(timeoutConCoda(id, timeoutServer.current));
+    if (setServer.current) setSetCorrente(setConCoda(id, setServer.current));
+  }, [id]);
+
+  const caricaDaServer = useCallback(async () => {
     if (!id) return;
     if (modoLive) {
       try {
@@ -299,8 +390,11 @@ export default function PartitaLive() {
         setErroreOspite(null);
         setMatch(st.match);
         setNomeSquadraOspite(st.team_nome);
-        setSetCorrente(st.sets.find((s) => s.id === st.set_attivo_id) ?? null);
-        setEventi(st.eventi);
+        setServer.current = st.sets.find((s) => s.id === st.set_attivo_id) ?? null;
+        eventiServer.current = st.eventi;
+        timeoutServer.current = st.timeouts ?? [];
+        setSetCorrente(setConCoda(id, setServer.current));
+        setEventi(eventiConCoda(id, st.eventi));
         setAtlete(st.atlete);
         setConvocateIds(st.convocati.map((c) => c.athlete_id));
         setLiberiIds(new Set(st.convocati.filter((c) => c.is_libero).map((c) => c.athlete_id)));
@@ -308,7 +402,7 @@ export default function PartitaLive() {
         setFormazione(st.formazione.filter((f) => f.in_campo).sort((a, b) => (a.posizione ?? 0) - (b.posizione ?? 0)));
         setStoricoFormazione(st.formazione);
         setLibero(st.libero ?? null);
-        setTimeouts(st.timeouts ?? []);
+        setTimeouts(timeoutConCoda(id, st.timeouts ?? []));
         try { setRegolaLibero(await leggiRegolaLibero(id)); } catch { /* resta quella di prima */ }
         setPrecedente((st as unknown as { precedente?: { formazione: { athlete_id: string; posizione: number }[]; chi_ha_servito_per_primo: "noi" | "avversario" | null } }).precedente ?? null);
         setSetConclusi(st.sets);
@@ -325,18 +419,27 @@ export default function PartitaLive() {
           if (t.mio && attivoOspite) verificaFineSet(attivoOspite, st.match, st.sets, st.regole, true);
         } catch { /* se il turno non si legge si resta di sola lettura */ }
       } catch (e) {
-        setErroreOspite((e as Error).message);
+        // Senza rete si resta con quello che si vede (le azioni in coda partono appena torna il segnale).
+        if (!reteNonDisponibile(e)) setErroreOspite((e as Error).message);
       }
       return;
     }
-    const { data: m } = await supabaseClient.from("matches").select("*").eq("id", id).single();
+    // Senza rete non si rilegge niente: si resta con quello che si vede (punteggio compreso).
+    if (dispositivoOffline()) return;
+    const { data: m, error: erroreMatch } = await supabaseClient.from("matches").select("*").eq("id", id).single();
+    if (erroreMatch && reteNonDisponibile(erroreMatch)) return;
     setMatch(m ?? null);
     const set = await elencaSet(id);
     let regoleFresche = regolePunteggioRef.current;
     setSetConclusi(set);
-    const attivo = set.find((s) => !s.concluso) ?? set[set.length - 1] ?? null;
+    const attivoServer = set.find((s) => !s.concluso) ?? set[set.length - 1] ?? null;
+    // Il punteggio del server non include le azioni ancora in coda: si sommano, cosi' il tabellone non "torna indietro".
+    const attivo = setConCoda(id, attivoServer);
+    setServer.current = attivoServer;
     setSetCorrente(attivo);
-    setEventi(await elencaEventiPartita(id));
+    const eventiLetti = await elencaEventiPartita(id);
+    eventiServer.current = eventiLetti;
+    setEventi(eventiConCoda(id, eventiLetti));
     if (!puoScoutareDaRuolo) {
       try { setAzioniCronaca(await elencaTutteLeAzioniPartita(id)); } catch { /* resta la cronaca di prima */ }
     }
@@ -347,7 +450,9 @@ export default function PartitaLive() {
       setLiberiIds(new Set(convocati.filter((c) => c.is_libero).map((c) => c.athlete_id)));
       regoleFresche = await leggiRegolePunteggio(id);
       setRegolePunteggio(regoleFresche);
-      setTimeouts(await elencaTimeout(id));
+      const timeoutLetti = await elencaTimeout(id);
+      timeoutServer.current = timeoutLetti;
+      setTimeouts(timeoutConCoda(id, timeoutLetti));
       try { setRegolaLibero(await leggiRegolaLibero(id)); } catch { /* resta quella di prima */ }
     }
     if (attivo) {
@@ -360,7 +465,88 @@ export default function PartitaLive() {
     if (attivo && m && !modoOspite && puoScoutareDaRuolo) verificaFineSet(attivo, m, set, regoleFresche);
   }, [id, modoOspite, modoLive, puoScoutareDaRuolo]);
 
+  /** Come caricaDaServer, ma se manca la rete non e' un errore: resta quel che si vede (le scritture in coda partono da sole al ritorno del segnale). */
+  const carica = useCallback(async () => {
+    try { await caricaDaServer(); }
+    catch (e) { if (!reteNonDisponibile(e)) throw e; }
+    // Tabellone, ultime azioni e time-out mostrano sempre anche quel che e' ancora in coda.
+    rileggiLocale();
+  }, [caricaDaServer, rileggiLocale]);
+
   useFocusEffect(useCallback(() => { carica(); }, [carica]));
+
+  // Coda offline: al ritorno della rete (e con tentativi periodici) le scritture rimaste in coda partono da sole, in ordine.
+  useEffect(() => {
+    if (!id || modoLive) return;
+    return avviaInvioAutomatico(id, {
+      // Una voce appena arrivata al database entra nell'ultimo stato noto: se la rete cade subito dopo, il tabellone non torna indietro.
+      quandoInviata: (voce) => {
+        const a = voce.args;
+        if (voce.tipo === "registra_evento") {
+          const skill = a.skill as Skill;
+          const esito = (a.esito as Esito | null) ?? null;
+          if (setServer.current?.id === a.setId) setServer.current = setDopoEvento(setServer.current, skill, esito, 1);
+          if (eventiServer.current && !eventiServer.current.some((x) => x.id === voce.parziale?.eventId)) {
+            eventiServer.current = [{
+              id: (voce.parziale?.eventId as string | undefined) ?? `temp-${voce.id}`, match_id: id, set_id: a.setId as string, skill, esito,
+              athlete_id: (a.athleteId as string | null) ?? null, creato_il: new Date(voce.creatoIl).toISOString(), creato_da: null,
+              qualita: (a.qualita as QualitaRicezione | null) ?? null, zona_arrivo: (a.zonaArrivo as number | null) ?? null, causa: (a.causa as CausaPunto | null) ?? null,
+            }, ...eventiServer.current];
+          }
+        } else if (voce.tipo === "annulla_ultimo_evento") {
+          if (voce.effetto && setServer.current?.id === voce.effetto.setId) {
+            setServer.current = { ...setServer.current, punti_noi: Math.max(0, setServer.current.punti_noi + voce.effetto.noi), punti_avversario: Math.max(0, setServer.current.punti_avversario + voce.effetto.avv) };
+          }
+          if (eventiServer.current) eventiServer.current = eventiServer.current.slice(1);
+        } else if (voce.tipo === "registra_timeout" && timeoutServer.current) {
+          timeoutServer.current = [...timeoutServer.current, {
+            id: `temp-${voce.id}`, match_id: id, set_id: a.setId as string, squadra: a.squadra as "noi" | "avversario",
+            punti_noi: Number(a.puntiNoi ?? 0), punti_avversario: Number(a.puntiAvv ?? 0), creato_il: new Date(voce.creatoIl).toISOString(),
+          }];
+        } else if (voce.tipo === "annulla_ultimo_timeout" && timeoutServer.current) {
+          const ultimo = [...timeoutServer.current].reverse().find((t) => t.set_id === a.setId);
+          if (ultimo) timeoutServer.current = timeoutServer.current.filter((t) => t.id !== ultimo.id);
+        }
+      },
+      quandoSvuotata: () => { carica(); },
+      quandoScartata: (descrizione, messaggio) => {
+        avvisa("Azione non accettata", `${descrizione}: ${messaggio}`);
+        carica();
+      },
+    });
+  }, [id, modoLive, carica]);
+
+  // Uscendo con salvataggi ancora in coda (cambio pagina o chiusura della scheda) si avvisa: potrebbero andare persi.
+  const navigazione = useNavigation();
+  useEffect(() => {
+    if (!id || modoLive) return;
+    const g = globalThis as any;
+    const primaDiChiudere = (ev: any) => {
+      if (codaVuota(id)) return undefined;
+      try { ev.preventDefault?.(); ev.returnValue = "Ci sono azioni non ancora inviate."; } catch { /* ignorato */ }
+      return "Ci sono azioni non ancora inviate.";
+    };
+    try { g.addEventListener?.("beforeunload", primaDiChiudere); } catch { /* niente finestra */ }
+    let sgancia: (() => void) | undefined;
+    try {
+      sgancia = (navigazione as any)?.addListener?.("beforeRemove", (e: any) => {
+        if (codaVuota(id)) return;
+        e.preventDefault();
+        const n = statoCoda(id).daInviare;
+        confermaAzione(
+          "Azioni non ancora inviate",
+          `${n} ${n === 1 ? "salvataggio è rimasto" : "salvataggi sono rimasti"} solo su questo dispositivo perché manca il segnale. Se esci e chiudi l'app potrebbero andare persi: restando qui partono da soli appena torna la rete.`,
+          "Esci lo stesso",
+          () => (navigazione as any).dispatch(e.data.action),
+          true,
+        );
+      });
+    } catch { /* senza navigazione non si blocca nulla */ }
+    return () => {
+      try { g.removeEventListener?.("beforeunload", primaDiChiudere); } catch { /* ignorato */ }
+      try { sgancia?.(); } catch { /* ignorato */ }
+    };
+  }, [id, modoLive, navigazione]);
 
   // Schemi di gioco della squadra (ricezione, difesa, copertura): se non
   // ci sono o non si riesce a leggerli si resta sulle posizioni di rotazione.
@@ -455,6 +641,7 @@ export default function PartitaLive() {
       finita ? (comeOspite ? "Ho capito" : "Chiudi partita") : "Prossimo set",
       async () => {
         try {
+          if (!(await codaPronta(m.id, finita ? "chiudere la partita" : "passare al prossimo set"))) return;
           if (comeOspite) {
             // Lo scout ospite non chiude la partita: apre il set successivo e inserisce la formazione.
             if (finita) avvisa("Partita finita", "La partita la chiude l'allenatore.");
@@ -548,18 +735,19 @@ export default function PartitaLive() {
     setMostraTuttiFondamentali(false);
 
     try {
-      const nuovoId = await registraEvento(match.id, setCorrente.id, skill, esito, athleteId, qualita);
-      if (causa) {
-        try { await impostaCausaEvento(nuovoId, causa); }
-        catch (errCausa) { console.warn("Motivo del punto non salvato:", (errCausa as Error).message); }
-      }
       // Zone (solo con la modalita' attiva): l'arrivo e' quello toccato, la partenza dell'attacco e' la posizione di rotazione di chi attacca.
+      let partenza: number | null = null;
+      let arrivo: number | null = null;
       if (zoneAttive && (skill === "Servizio" || skill === "Attacco")) {
-        const partenza = skill === "Attacco" ? (formazione.find((f) => f.athlete_id === athleteId)?.posizione ?? null) : null;
-        if (zonaArrivo !== null || partenza !== null) {
-          try { await impostaZoneEvento(nuovoId, zonaArrivo, partenza); }
-          catch (errZone) { console.warn("Zone non salvate:", (errZone as Error).message); }
-        }
+        partenza = skill === "Attacco" ? (formazione.find((f) => f.athlete_id === athleteId)?.posizione ?? null) : null;
+        arrivo = zonaArrivo;
+      }
+      // Senza rete l'azione resta in coda e parte da sola appena torna il segnale; il punteggio mostrato e' gia' aggiornato in locale.
+      const r = await registraEventoInCoda({ matchId: match.id, setId: setCorrente.id, skill, esito, athleteId, qualita, causa, zonaArrivo: arrivo, zonaPartenza: partenza });
+      if (!r.accodato) {
+        // Salvata subito: l'ultimo stato noto del database la include (serve se subito dopo la rete cade).
+        if (setServer.current?.id === setCorrente.id) setServer.current = setDopoEvento(setServer.current, skill, esito, 1);
+        if (eventiServer.current) eventiServer.current = [provvisorio, ...eventiServer.current];
       }
       carica();
     } catch (e) {
@@ -571,12 +759,68 @@ export default function PartitaLive() {
     }
   }
 
+  /** Time-out: senza rete resta in coda ma si vede subito nel conteggio (TO). */
+  async function chiamaTimeout(squadra: "noi" | "avversario") {
+    if (!match || !setCorrente) return;
+    try {
+      const r = await registraTimeoutInCoda(match.id, setCorrente.id, squadra, { noi: setCorrente.punti_noi, avv: setCorrente.punti_avversario });
+      if (!r.accodato && timeoutServer.current) {
+        timeoutServer.current = [...timeoutServer.current, {
+          id: `temp-${Date.now()}`, match_id: match.id, set_id: setCorrente.id, squadra,
+          punti_noi: setCorrente.punti_noi, punti_avversario: setCorrente.punti_avversario, creato_il: new Date().toISOString(),
+        }];
+      }
+      setPopupTimeout(false);
+      carica();
+    } catch (e) { avvisa("Time-out non registrato", (e as Error).message); }
+  }
+
+  async function togliUltimoTimeout() {
+    if (!match || !setCorrente) return;
+    try {
+      const ultimoTo = timeoutSet[timeoutSet.length - 1];
+      if (ultimoTo && ultimoTo.id.startsWith("coda-")) {
+        // Time-out non ancora inviato: basta toglierlo dalla coda.
+        if (!rimuoviUltimaVoce(match.id, "registra_timeout", ultimoTo.id.slice(5))) { avvisa("Un attimo", "Sto ancora inviando questo time-out: riprova fra qualche secondo."); return; }
+      } else {
+        const r = await annullaUltimoTimeoutInCoda(match.id, setCorrente.id);
+        if (!r.accodato && timeoutServer.current) {
+          const dalServer = [...timeoutServer.current].reverse().find((t) => t.set_id === setCorrente.id);
+          if (dalServer) timeoutServer.current = timeoutServer.current.filter((t) => t.id !== dalServer.id);
+        }
+      }
+      carica();
+    } catch (e) { avvisa("Impossibile annullare", (e as Error).message); }
+  }
+
   async function onAnnulla() {
     if (!match || eventi.length === 0) return;
     const ultimo = eventi[0];
+    // Un'azione non ancora inviata (in coda) si annulla togliendola dalla coda: al database non arriva mai.
+    const provvisoria = ultimo.id.startsWith("coda-") || ultimo.id.startsWith("temp-");
+    if (provvisoria) {
+      if (rimuoviUltimaVoce(match.id, "registra_evento", ultimo.id.startsWith("coda-") ? ultimo.id.slice(5) : undefined)) {
+        setEventi((prev) => prev.slice(1));
+        applicaDelta(ultimo.skill, ultimo.esito, -1);
+        carica();
+        return;
+      }
+      if (statoCoda(match.id).inInvio) {
+        avvisa("Un attimo", "Sto ancora inviando questa azione: riprova fra qualche secondo.");
+        return;
+      }
+    }
     setEventi((prev) => prev.slice(1));
     applicaDelta(ultimo.skill, ultimo.esito, -1);
-    try { await annullaUltimoEvento(match.id); carica(); }
+    try {
+      const r = await annullaUltimoEventoInCoda(match.id, { set_id: ultimo.set_id, skill: ultimo.skill, esito: ultimo.esito });
+      if (!r.accodato) {
+        if (setServer.current?.id === ultimo.set_id) setServer.current = setDopoEvento(setServer.current, ultimo.skill, ultimo.esito, -1);
+        if (eventiServer.current) eventiServer.current = eventiServer.current.slice(1);
+      }
+      carica();
+      if (r.accodato) avvisaSeInCoda(id, true, "L'annullamento");
+    }
     catch (e) { carica(); avvisa("Errore", (e as Error).message); }
   }
 
@@ -609,7 +853,10 @@ export default function PartitaLive() {
   function onChiudiPartita() {
     if (!match) return;
     confermaAzione("Chiudere la partita?", "Non potrai più registrare eventi.", "Chiudi", async () => {
-      try { await chiudiMatch(match.id); router.replace("/(tabs)/partite"); } catch (e) { avvisa("Errore", (e as Error).message); }
+      try {
+        if (!(await codaPronta(match.id, "chiudere la partita"))) return;
+        await chiudiMatch(match.id); router.replace("/(tabs)/partite");
+      } catch (e) { avvisa("Errore", (e as Error).message); }
     }, true);
   }
 
@@ -618,9 +865,10 @@ export default function PartitaLive() {
     if (!setCorrente || !atletaSelId) return;
     setPopupCambio(false);
     try {
-      await cambiaGiocatore(setCorrente.id, atletaSelId, entrante.id);
+      const r = await cambiaGiocatoreInCoda(setCorrente.match_id, setCorrente.id, atletaSelId, entrante.id);
       setAtletaSelId(null);
       carica();
+      avvisaSeInCoda(id, r.accodato, "Il cambio");
     } catch (e) { avvisa("Cambio non riuscito", (e as Error).message); }
   }
 
@@ -642,9 +890,10 @@ export default function PartitaLive() {
   async function faiEntrareLibero(liberoId: string, titolareId: string) {
     if (!setCorrente) return;
     try {
-      await rimpiazzaConLibero(setCorrente.id, liberoId, titolareId);
+      const r = await rimpiazzaConLiberoInCoda(setCorrente.match_id, setCorrente.id, liberoId, titolareId);
       chiudiPopupLibero();
       carica();
+      avvisaSeInCoda(id, r.accodato, "L'entrata del Libero");
     } catch (e) { avvisa("Errore", (e as Error).message); }
   }
 
@@ -652,10 +901,11 @@ export default function PartitaLive() {
   async function liberoLasciaIlCampo() {
     if (!setCorrente) return;
     try {
-      await faiUscireLibero(setCorrente.id);
+      const r = await faiUscireLiberoInCoda(setCorrente.match_id, setCorrente.id);
       setPopupCambioLibero(false);
       setAtletaSelId(null);
       carica();
+      avvisaSeInCoda(id, r.accodato, "L'uscita del Libero");
     } catch (e) { avvisa("Errore", (e as Error).message); }
   }
 
@@ -664,13 +914,14 @@ export default function PartitaLive() {
     if (!setCorrente || !libero) return;
     const titolareId = libero.titolare_id;
     try {
-      await faiUscireLibero(setCorrente.id);
-      await rimpiazzaConLibero(setCorrente.id, nuovoLiberoId, titolareId);
+      await faiUscireLiberoInCoda(setCorrente.match_id, setCorrente.id);
+      const r = await rimpiazzaConLiberoInCoda(setCorrente.match_id, setCorrente.id, nuovoLiberoId, titolareId);
       // Il nuovo Libero resta quello della partita, sugli stessi centrali.
-      if (match && regolaLibero) { try { await impostaRegolaLibero(match.id, nuovoLiberoId, regolaLibero.titolare_1, regolaLibero.titolare_2); } catch { /* la regola si puo' reimpostare */ } }
+      if (match && regolaLibero) { try { await impostaRegolaLiberoInCoda(match.id, nuovoLiberoId, regolaLibero.titolare_1, regolaLibero.titolare_2); } catch { /* la regola si puo' reimpostare */ } }
       setPopupCambioLibero(false);
       setAtletaSelId(null);
       carica();
+      avvisaSeInCoda(id, r.accodato, "Il cambio del Libero");
     } catch (e) {
       carica();
       avvisa("Cambio del Libero non riuscito", (e as Error).message);
@@ -880,7 +1131,8 @@ export default function PartitaLive() {
   async function faiEntrareLiberoRegola(titolareId: string) {
     if (!setCorrente || !liberoDellaPartita) return;
     try {
-      await rimpiazzaConLibero(setCorrente.id, liberoDellaPartita, titolareId);
+      // Senza rete l'entrata resta in coda (una sola, anche se il banner si riattiva): niente avviso, e' automatica.
+      await rimpiazzaConLiberoInCoda(setCorrente.match_id, setCorrente.id, liberoDellaPartita, titolareId);
       carica();
     } catch (e) { carica(); avvisa("Libero", (e as Error).message); }
   }
@@ -898,10 +1150,11 @@ export default function PartitaLive() {
   async function salvaRegolaLibero() {
     if (!match) return;
     try {
-      await impostaRegolaLibero(match.id, bozzaRegola.libero, bozzaRegola.centrali[0] ?? null, bozzaRegola.centrali[1] ?? null);
+      const r = await impostaRegolaLiberoInCoda(match.id, bozzaRegola.libero, bozzaRegola.centrali[0] ?? null, bozzaRegola.centrali[1] ?? null);
       setPopupRegolaLibero(false);
       setRientroRifiutato([]);
       carica();
+      avvisaSeInCoda(id, r.accodato, "La regola del Libero");
     } catch (e) { avvisa("Libero non impostato", (e as Error).message); }
   }
 
@@ -1092,7 +1345,7 @@ export default function PartitaLive() {
         <Text style={[styles.punteggio, { fontSize: orizzontale ? d(26) : 24 }]}>{setCorrente.punti_noi}-{setCorrente.punti_avversario}</Text>
         {!orizzontale && (
           <Text style={styles.nota} numberOfLines={1}>
-            🏐 {setCorrente.squadra_al_servizio === "noi" ? (alServizio ? etichettaAtleta(alServizio.athlete_id) : "noi") : "loro"}
+            <StatoRete matchId={match.id} />🏐 {setCorrente.squadra_al_servizio === "noi" ? (alServizio ? etichettaAtleta(alServizio.athlete_id) : "noi") : "loro"}
           </Text>
         )}
       </View>
@@ -1153,7 +1406,7 @@ export default function PartitaLive() {
         </View>
         {orizzontale && (
           <Text style={styles.nota} numberOfLines={1}>
-            servizio: {setCorrente.squadra_al_servizio === "noi" ? (alServizio ? etichettaAtleta(alServizio.athlete_id) : "noi") : "loro"}
+            <StatoRete matchId={match.id} />servizio: {setCorrente.squadra_al_servizio === "noi" ? (alServizio ? etichettaAtleta(alServizio.athlete_id) : "noi") : "loro"}
           </Text>
         )}
         {puoScoutare && (
@@ -1539,28 +1792,19 @@ export default function PartitaLive() {
             </Text>
             <Pressable
               style={styles.rigaScelta}
-              onPress={async () => {
-                try { await registraTimeout(setCorrente.id, "noi"); setPopupTimeout(false); carica(); }
-                catch (e) { avvisa("Time-out non registrato", (e as Error).message); }
-              }}
+              onPress={() => chiamaTimeout("noi")}
             >
               <Text style={styles.rigaSceltaTesto}>⏱ Time-out NOSTRO{timeoutNoi >= 2 ? " (già 2 chiamati)" : ""}</Text>
             </Pressable>
             <Pressable
               style={styles.rigaScelta}
-              onPress={async () => {
-                try { await registraTimeout(setCorrente.id, "avversario"); setPopupTimeout(false); carica(); }
-                catch (e) { avvisa("Time-out non registrato", (e as Error).message); }
-              }}
+              onPress={() => chiamaTimeout("avversario")}
             >
               <Text style={styles.rigaSceltaTesto}>⏱ Time-out LORO{timeoutLoro >= 2 ? " (già 2 chiamati)" : ""}</Text>
             </Pressable>
             {timeoutSet.length > 0 && (
               <Pressable
-                onPress={async () => {
-                  try { await annullaUltimoTimeout(setCorrente.id); carica(); }
-                  catch (e) { avvisa("Impossibile annullare", (e as Error).message); }
-                }}
+                onPress={togliUltimoTimeout}
               >
                 <Text style={styles.chiudiPopup}>↩ Annulla l'ultimo time-out registrato</Text>
               </Pressable>
@@ -1695,7 +1939,7 @@ export default function PartitaLive() {
                   style={styles.bottoneSecondario}
                   onPress={async () => {
                     if (!setCorrente) return;
-                    try { await faiUscireLibero(setCorrente.id); setPopupLibero(false); carica(); }
+                    try { const r = await faiUscireLiberoInCoda(setCorrente.match_id, setCorrente.id); setPopupLibero(false); carica(); avvisaSeInCoda(id, r.accodato, "L'uscita del Libero"); }
                     catch (e) { avvisa("Errore", (e as Error).message); }
                   }}
                 >

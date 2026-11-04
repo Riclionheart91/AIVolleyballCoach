@@ -2,6 +2,7 @@ import { supabaseClient } from "@/src/lib/supabase";
 import { messaggioErroreRouter } from "@/src/services/aiProviders";
 import { supabase as cfg } from "@/src/config";
 import { calcolaVoti } from "@/src/lib/votiPartita";
+import { eseguiOAccoda, erroreRitentabile, idEventiNostri, registraEsecutore, ricordaIdEvento, type EffettoPunteggio, type VoceCoda } from "@/src/lib/codaOffline";
 import type { CausaPunto, Esito, Match, MatchConvocato, MatchEvent, MatchSet, MatchSetLineup, QualitaRicezione, Skill } from "@/src/types/database";
 
 export async function elencaPartite(teamId: string): Promise<Match[]> {
@@ -553,4 +554,120 @@ export async function generaCommentoPartitaAI(teamId: string, match: Match, sets
   if (data?.errore) return { errore: true, messaggio: [data.messaggio, data.dettagli].filter(Boolean).join("\n\n") };
   const testo = String(data?.testo ?? "").trim();
   return testo ? { errore: false, testo } : { errore: true, messaggio: "L'AI non ha restituito nessun testo." };
+}
+
+
+// ---------------------------------------------------------------------------
+// Scritture dello scouting con coda offline (vedi src/lib/codaOffline.ts)
+// ---------------------------------------------------------------------------
+// Le funzioni sopra restano com'erano. Queste hanno lo stesso effetto, ma se la
+// scrittura fallisce per mancanza di rete la mettono in coda e la reinviano in
+// ordine appena torna il segnale. Restituiscono { accodato }: true = salvata solo
+// in locale, da inviare. Gli errori di validazione/permessi vengono rilanciati.
+
+export interface RisultatoScritturaInCoda { accodato: boolean }
+
+/** Effetto di un evento sul punteggio del set (stessa regola della schermata): segno +1 per registrare, -1 per annullare. */
+export function effettoPunteggioEvento(setId: string, skill: Skill, esito: Esito | null, segno: 1 | -1): EffettoPunteggio | undefined {
+  const avv = skill === "Punto_avversario" || esito === "errore";
+  const nostro = skill === "Punto_nostro" || esito === "punto";
+  if (!avv && !nostro) return undefined;
+  return { setId, noi: nostro ? segno : 0, avv: avv ? segno : 0 };
+}
+
+/**
+ * Cerca sul database un evento identico a quello della voce, creato nella finestra del suo primo tentativo
+ * e non salvato da questo dispositivo: vuol dire che l'invio era arrivato ma la risposta si e' persa.
+ * Il confronto usa l'orologio del dispositivo e quello del server: con orologi molto sfasati puo' sbagliare.
+ */
+async function eventoGiaArrivato(voce: VoceCoda): Promise<string | null> {
+  const a = voce.args;
+  try {
+    const da = new Date(voce.primoTentativoIl - 3000).toISOString();
+    const a_ = new Date(voce.ultimoTentativoIl + 60000).toISOString();
+    const { data, error } = await supabaseClient.from("match_events").select("id, esito, athlete_id")
+      .eq("match_id", voce.matchId).eq("set_id", a.setId as string).eq("skill", a.skill as Skill)
+      .gte("creato_il", da).lte("creato_il", a_);
+    if (error) throw error;
+    const nostri = idEventiNostri(voce.matchId);
+    const trovato = (data ?? []).find((e) => !nostri.has(e.id) && (e.esito ?? null) === ((a.esito as Esito | null) ?? null) && (e.athlete_id ?? null) === ((a.athleteId as string | null) ?? null));
+    return trovato ? trovato.id : null;
+  } catch (e) {
+    if (erroreRitentabile(e)) throw e; // senza rete non si puo' ne' controllare ne' inviare: si riprova dopo
+    return null;
+  }
+}
+
+registraEsecutore("registra_evento", async (a, ctx) => {
+  const matchId = a.matchId as string;
+  let eventId = ctx.voce.parziale?.eventId as string | undefined;
+  if (!eventId && ctx.voce.ambiguo) eventId = (await eventoGiaArrivato(ctx.voce)) ?? undefined;
+  if (!eventId) eventId = await registraEvento(matchId, a.setId as string, a.skill as Skill, (a.esito as Esito | null) ?? null, (a.athleteId as string | null) ?? null, (a.qualita as QualitaRicezione | null) ?? null);
+  if (ctx.voce.parziale?.eventId !== eventId) { ricordaIdEvento(matchId, eventId); ctx.salvaParziale({ eventId }); }
+  if (a.causa && !ctx.voce.parziale?.causaFatta) {
+    try { await impostaCausaEvento(eventId, a.causa as CausaPunto); }
+    catch (e) { if (erroreRitentabile(e)) throw e; console.warn("Motivo del punto non salvato:", (e as Error).message); }
+    ctx.salvaParziale({ causaFatta: true });
+  }
+  if ((a.zonaArrivo != null || a.zonaPartenza != null) && !ctx.voce.parziale?.zoneFatte) {
+    try { await impostaZoneEvento(eventId, (a.zonaArrivo as number | null) ?? null, (a.zonaPartenza as number | null) ?? null); }
+    catch (e) { if (erroreRitentabile(e)) throw e; console.warn("Zone non salvate:", (e as Error).message); }
+    ctx.salvaParziale({ zoneFatte: true });
+  }
+  return eventId;
+});
+registraEsecutore("annulla_ultimo_evento", (a) => annullaUltimoEvento(a.matchId as string));
+registraEsecutore("registra_timeout", (a) => registraTimeout(a.setId as string, a.squadra as "noi" | "avversario"));
+registraEsecutore("annulla_ultimo_timeout", (a) => annullaUltimoTimeout(a.setId as string));
+registraEsecutore("ruota_formazione", (a) => ruotaFormazioneManuale(a.setId as string, !!a.indietro));
+registraEsecutore("cambia_giocatore", (a) => cambiaGiocatore(a.setId as string, a.uscente as string, a.entrante as string));
+registraEsecutore("rimpiazza_con_libero", (a) => rimpiazzaConLibero(a.setId as string, a.liberoId as string, a.titolareId as string));
+registraEsecutore("fai_uscire_libero", (a) => faiUscireLibero(a.setId as string));
+registraEsecutore("imposta_regola_libero", (a) => impostaRegolaLibero(a.matchId as string, (a.liberoId as string | null) ?? null, (a.titolare1 as string | null) ?? null, (a.titolare2 as string | null) ?? null));
+
+async function inCodaSenzaRisultato(matchId: string, tipo: string, args: Record<string, unknown>, descrizione: string, opz: { senzaDoppioni?: boolean; effetto?: EffettoPunteggio } = {}): Promise<RisultatoScritturaInCoda> {
+  const r = await eseguiOAccoda(matchId, tipo, args, { descrizione, ...opz });
+  return { accodato: r.accodato };
+}
+
+/** Come registraEvento (+ motivo del punto e zone), ma senza rete l'azione va in coda. */
+export async function registraEventoInCoda(p: {
+  matchId: string; setId: string; skill: Skill; esito: Esito | null; athleteId: string | null;
+  qualita?: QualitaRicezione | null; causa?: CausaPunto | null; zonaArrivo?: number | null; zonaPartenza?: number | null;
+}): Promise<RisultatoScritturaInCoda> {
+  return inCodaSenzaRisultato(
+    p.matchId, "registra_evento",
+    { matchId: p.matchId, setId: p.setId, skill: p.skill, esito: p.esito, athleteId: p.athleteId, qualita: p.qualita ?? null, causa: p.causa ?? null, zonaArrivo: p.zonaArrivo ?? null, zonaPartenza: p.zonaPartenza ?? null },
+    `Azione ${p.skill}`,
+    { effetto: effettoPunteggioEvento(p.setId, p.skill, p.esito, 1) },
+  );
+}
+
+/** Come annullaUltimoEvento; `evento` (l'ultimo mostrato) serve a correggere il punteggio in locale finche' non e' inviato. */
+export function annullaUltimoEventoInCoda(matchId: string, evento?: { set_id: string; skill: Skill; esito: Esito | null }): Promise<RisultatoScritturaInCoda> {
+  return inCodaSenzaRisultato(matchId, "annulla_ultimo_evento", { matchId }, "Annulla ultima azione",
+    { effetto: evento ? effettoPunteggioEvento(evento.set_id, evento.skill, evento.esito, -1) : undefined });
+}
+
+/** `punti` e' il punteggio del momento: serve solo a mostrare il time-out in locale finche' non e' inviato (il database registra il suo). */
+export function registraTimeoutInCoda(matchId: string, setId: string, squadra: "noi" | "avversario", punti: { noi: number; avv: number }): Promise<RisultatoScritturaInCoda> {
+  return inCodaSenzaRisultato(matchId, "registra_timeout", { setId, squadra, puntiNoi: punti.noi, puntiAvv: punti.avv }, "Time-out");
+}
+export function annullaUltimoTimeoutInCoda(matchId: string, setId: string): Promise<RisultatoScritturaInCoda> {
+  return inCodaSenzaRisultato(matchId, "annulla_ultimo_timeout", { setId }, "Annulla time-out");
+}
+export function ruotaFormazioneManualeInCoda(matchId: string, setId: string, indietro = false): Promise<RisultatoScritturaInCoda> {
+  return inCodaSenzaRisultato(matchId, "ruota_formazione", { setId, indietro }, indietro ? "Rotazione indietro" : "Rotazione");
+}
+export function cambiaGiocatoreInCoda(matchId: string, setId: string, uscente: string, entrante: string): Promise<RisultatoScritturaInCoda> {
+  return inCodaSenzaRisultato(matchId, "cambia_giocatore", { setId, uscente, entrante }, "Cambio giocatore");
+}
+export function rimpiazzaConLiberoInCoda(matchId: string, setId: string, liberoId: string, titolareId: string): Promise<RisultatoScritturaInCoda> {
+  return inCodaSenzaRisultato(matchId, "rimpiazza_con_libero", { setId, liberoId, titolareId }, "Entra il Libero", { senzaDoppioni: true });
+}
+export function faiUscireLiberoInCoda(matchId: string, setId: string): Promise<RisultatoScritturaInCoda> {
+  return inCodaSenzaRisultato(matchId, "fai_uscire_libero", { setId }, "Esce il Libero", { senzaDoppioni: true });
+}
+export function impostaRegolaLiberoInCoda(matchId: string, liberoId: string | null, titolare1: string | null, titolare2: string | null): Promise<RisultatoScritturaInCoda> {
+  return inCodaSenzaRisultato(matchId, "imposta_regola_libero", { matchId, liberoId, titolare1, titolare2 }, "Regola del Libero");
 }
