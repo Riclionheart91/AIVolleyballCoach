@@ -3,6 +3,14 @@ import { View, Text, Pressable, StyleSheet, ScrollView, ActivityIndicator } from
 import { router, useFocusEffect } from "expo-router";
 import { elencaPartiteLive, type PartitaLive } from "@/src/services/live";
 import { brand } from "@/src/config";
+import { TitoloGrande } from "@/src/components/TitoloGrande";
+
+/** Iniziali del nome di una squadra, per il cerchio al posto dello stemma. */
+function iniziali(nome: string): string {
+  const parti = nome.trim().split(/\s+/).filter(Boolean);
+  if (parti.length === 0) return "?";
+  return (parti.length === 1 ? parti[0].slice(0, 2) : parti[0][0] + parti[1][0]).toUpperCase();
+}
 
 const INTERVALLO_MS = 10000;
 
@@ -24,14 +32,12 @@ export default function ElencoLive() {
 
   return (
     <View style={s.container}>
-      <View style={s.header}>
-        <Pressable onPress={() => { if (router.canGoBack()) router.back(); else router.replace("/"); }} hitSlop={12}>
-          <Text style={s.indietro}>← Indietro</Text>
+      <ScrollView contentContainerStyle={s.contenuto}>
+        <Pressable onPress={() => { if (router.canGoBack()) router.back(); else router.replace("/"); }} hitSlop={12} style={s.tastoIndietro}>
+          <Text style={s.indietro}>‹ Indietro</Text>
         </Pressable>
-        <Text style={s.titolo}>Partite in corso</Text>
-      </View>
+        <TitoloGrande titolo="Partite in corso" />
 
-      <ScrollView contentContainerStyle={{ padding: 16, gap: 12, paddingBottom: 60 }}>
         {partite === null && <ActivityIndicator color={brand.colors.brand} />}
         {errore && <Text style={s.errore}>Non riesco ad aggiornare l'elenco ({errore}). Riprovo…</Text>}
         {partite !== null && partite.length === 0 && !errore && (
@@ -40,14 +46,24 @@ export default function ElencoLive() {
         {(partite ?? []).map((p) => (
           <Pressable key={p.match_id} style={s.card} onPress={() => router.push(`/partita/${p.match_id}?live=1`)}>
             <View style={s.rigaTesta}>
-              <View style={s.live}><Text style={s.liveTesto}>● LIVE</Text></View>
-              <Text style={s.nota} numberOfLines={1}>{p.team_nome}</Text>
+              <View style={s.live}>
+                <View style={s.puntoLive} />
+                <Text style={s.liveTesto}>IN DIRETTA</Text>
+              </View>
+              <Text style={s.nota} numberOfLines={1}>Set {p.set_corrente}</Text>
             </View>
             <View style={s.rigaPunteggio}>
-              <Text style={s.nomi} numberOfLines={1}>{p.team_nome} – {p.avversario}</Text>
-              <View style={{ alignItems: "flex-end" }}>
-                <Text style={s.punteggio}>{p.punti_noi}-{p.punti_avversario}</Text>
-                <Text style={s.nota}>Set {p.set_corrente} · set vinti {p.set_vinti_noi}-{p.set_vinti_avversario}</Text>
+              <View style={s.squadra}>
+                <View style={[s.stemma, { backgroundColor: brand.colors.surfaceTertiary }]}><Text style={[s.stemmaTesto, { color: brand.colors.brand }]}>{iniziali(p.team_nome)}</Text></View>
+                <Text style={s.nomi} numberOfLines={2}>{p.team_nome}</Text>
+              </View>
+              <View style={{ alignItems: "center" }}>
+                <Text style={s.punteggio}>{p.punti_noi} – {p.punti_avversario}</Text>
+                <Text style={s.nota}>set vinti {p.set_vinti_noi}-{p.set_vinti_avversario}</Text>
+              </View>
+              <View style={s.squadra}>
+                <View style={[s.stemma, { backgroundColor: brand.colors.border }]}><Text style={[s.stemmaTesto, { color: brand.colors.onSurfaceSecondary }]}>{iniziali(p.avversario)}</Text></View>
+                <Text style={s.nomi} numberOfLines={2}>{p.avversario}</Text>
               </View>
             </View>
           </Pressable>
@@ -59,16 +75,20 @@ export default function ElencoLive() {
 
 const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: brand.colors.surface },
-  header: { flexDirection: "row", alignItems: "center", gap: 16, padding: 16, borderBottomWidth: 1, borderBottomColor: brand.colors.border },
-  indietro: { color: brand.colors.brand, fontWeight: "700", fontSize: 15 },
-  titolo: { color: brand.colors.onSurface, fontSize: 17, fontWeight: "700" },
+  contenuto: { padding: 16, gap: 14, paddingBottom: 60, width: "100%", maxWidth: 900, alignSelf: "center" },
+  tastoIndietro: { minHeight: 44, justifyContent: "center", alignSelf: "flex-start" },
+  indietro: { color: brand.colors.brand, fontWeight: "600", fontSize: 17 },
   errore: { color: brand.colors.warning, fontSize: 13 },
   nota: { color: brand.colors.muted, fontSize: 13 },
-  card: { backgroundColor: brand.colors.surfaceSecondary, borderRadius: 12, padding: 14, gap: 10, borderWidth: 1, borderColor: brand.colors.border },
-  rigaTesta: { flexDirection: "row", alignItems: "center", gap: 10 },
-  live: { backgroundColor: brand.colors.error, borderRadius: 999, paddingVertical: 3, paddingHorizontal: 10 },
-  liveTesto: { color: "#fff", fontSize: 11, fontWeight: "800" },
-  rigaPunteggio: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 },
-  nomi: { flex: 1, color: brand.colors.onSurface, fontSize: 16, fontWeight: "700" },
-  punteggio: { color: brand.colors.brand, fontSize: 30, fontWeight: "800" },
+  card: { backgroundColor: brand.colors.surfaceSecondary, borderRadius: 22, padding: 16, gap: 14, borderWidth: 1, borderColor: brand.colors.border },
+  rigaTesta: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
+  live: { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: brand.colors.error, borderRadius: 999, paddingVertical: 5, paddingHorizontal: 11 },
+  puntoLive: { width: 6, height: 6, borderRadius: 3, backgroundColor: "#fff" },
+  liveTesto: { color: "#fff", fontSize: 11, fontWeight: "800", letterSpacing: 0.6 },
+  rigaPunteggio: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
+  squadra: { flex: 1, alignItems: "center", gap: 6 },
+  stemma: { width: 52, height: 52, borderRadius: 26, alignItems: "center", justifyContent: "center" },
+  stemmaTesto: { fontSize: 17, fontWeight: "800" },
+  nomi: { color: brand.colors.onSurface, fontSize: 14, fontWeight: "700", textAlign: "center" },
+  punteggio: { color: brand.colors.onSurface, fontSize: 40, fontWeight: "800", letterSpacing: -1, lineHeight: 46 },
 });

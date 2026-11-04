@@ -12,7 +12,15 @@ import { cambiaCodiceScout, elencaScoutAnonimi, escludiScoutAnonimo, linkScout, 
 import { CodiceQr } from "@/src/components/CodiceQr";
 import { IndicatoreScoutQr } from "@/src/components/IndicatoreScoutQr";
 import { MessaggioWhatsApp } from "@/src/components/MessaggioWhatsApp";
+import { TitoloGrande } from "@/src/components/TitoloGrande";
 import { commentoPartita, inviaLinkScout } from "@/src/lib/messaggiWhatsApp";
+
+/** Iniziali del nome di una squadra, per il cerchio al posto dello stemma. */
+function iniziali(nome: string): string {
+  const parti = nome.trim().split(/\s+/).filter(Boolean);
+  if (parti.length === 0) return "?";
+  return (parti.length === 1 ? parti[0].slice(0, 2) : parti[0][0] + parti[1][0]).toUpperCase();
+}
 
 export default function Partite() {
   const { team, puoScrivere, isSuperuser, puoVedereAnalisi } = useAuth();
@@ -274,6 +282,23 @@ export default function Partite() {
     }
   }
 
+  // Partite raggruppate per giorno, nello stesso ordine dell'elenco (dalla piu' vicina a oggi).
+  const gruppi = (() => {
+    const mappa = new Map<string, { chiave: string; etichetta: string; partite: Match[] }>();
+    for (const p of elenco) {
+      const d = new Date(p.data);
+      const chiave = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+      let g = mappa.get(chiave);
+      if (!g) {
+        g = { chiave, etichetta: d.toLocaleDateString("it-IT", { weekday: "long", day: "numeric", month: "long" }), partite: [] };
+        mappa.set(chiave, g);
+      }
+      g.partite.push(p);
+    }
+    return Array.from(mappa.values());
+  })();
+  const inDiretta = visibili.filter((m) => m.stato === "in_corso");
+
   return (
     <View style={styles.container}>
       {team && whatsappPartita && (
@@ -407,14 +432,49 @@ export default function Partite() {
       </Modal>
 
       <FlatList
-        data={elenco}
-        keyExtractor={(m) => m.id}
-        contentContainerStyle={{ paddingBottom: 60 }}
+        data={gruppi}
+        keyExtractor={(g) => g.chiave}
+        contentContainerStyle={styles.contenuto}
         ListHeaderComponent={
           <View style={{ gap: 16, marginBottom: 12 }}>
+            <TitoloGrande titolo="Partite" />
+
+            {inDiretta.map((m) => {
+              const nomeNoi = team?.nome ?? "Noi";
+              const competizione = campionati.find((c) => c.id === m.campionato_id)?.nome ?? (m.tipo_gara === "campionato" ? "Campionato" : "Amichevole");
+              return (
+                <View key={m.id} style={styles.cardLive}>
+                  <View style={styles.cardLiveTesta}>
+                    <Text style={styles.cardLiveCompetizione} numberOfLines={1}>{competizione.toUpperCase()}</Text>
+                    <View style={styles.pillolaLive}>
+                      <View style={styles.puntoLive} />
+                      <Text style={styles.pillolaLiveTesto}>IN DIRETTA</Text>
+                    </View>
+                  </View>
+                  <View style={styles.cardLiveCentro}>
+                    <View style={styles.squadraLive}>
+                      <View style={[styles.stemma, styles.stemmaNoi]}><Text style={[styles.stemmaTesto, { color: brand.colors.brand }]}>{iniziali(nomeNoi)}</Text></View>
+                      <Text style={styles.squadraLiveNome} numberOfLines={2}>{nomeNoi}</Text>
+                    </View>
+                    <View style={{ alignItems: "center" }}>
+                      <Text style={styles.punteggioLive}>{m.set_vinti_noi} – {m.set_vinti_avversario}</Text>
+                      <Text style={styles.nota}>Set vinti</Text>
+                    </View>
+                    <View style={styles.squadraLive}>
+                      <View style={[styles.stemma, styles.stemmaAvversario]}><Text style={[styles.stemmaTesto, { color: brand.colors.onSurfaceSecondary }]}>{iniziali(m.avversario)}</Text></View>
+                      <Text style={styles.squadraLiveNome} numberOfLines={2}>{m.avversario}</Text>
+                    </View>
+                  </View>
+                  <Pressable style={styles.bottonePrincipale} onPress={() => apriPartita(m)}>
+                    <Text style={styles.bottonePrincipaleTesto}>{puoScrivere ? "Apri la partita" : "Guarda la diretta"}</Text>
+                  </Pressable>
+                </View>
+              );
+            })}
 
       {puoScrivere && (
         <>
+          <Text style={styles.sezionePiccola}>Nuova partita</Text>
           <View style={styles.form}>
             <TextInput style={styles.input} placeholder="Avversario" placeholderTextColor={brand.colors.muted} value={avversario} onChangeText={setAvversario} />
             <View style={styles.selettoreRiga}>
@@ -442,7 +502,7 @@ export default function Partite() {
                 )}
               </View>
             )}
-            <Pressable style={styles.bottone} onPress={nuovaPartita} disabled={!avversario.trim()}>
+            <Pressable style={[styles.bottone, !avversario.trim() && { opacity: 0.5 }]} onPress={nuovaPartita} disabled={!avversario.trim()}>
               <Text style={styles.bottoneTesto}>Crea partita (poi convocati e formazione)</Text>
             </Pressable>
           </View>
@@ -454,7 +514,7 @@ export default function Partite() {
 
       {andamento.length > 0 && (
         <View style={styles.cardAndamento}>
-          <Pressable onPress={() => setMostraAndamento(!mostraAndamento)}>
+          <Pressable onPress={() => setMostraAndamento(!mostraAndamento)} style={styles.rigaToccabile}>
             <Text style={styles.sottotitoloSezione}>{mostraAndamento ? "▾" : "▸"} Rendimento medio per fondamentale</Text>
           </Pressable>
           {mostraAndamento && andamento.slice(0, 8).map((v, i) => (
@@ -467,7 +527,7 @@ export default function Partite() {
       )}
 
       {nascoste.length > 0 && (
-        <Pressable style={styles.chip} onPress={() => setMostraPassate(!mostraPassate)}>
+        <Pressable style={[styles.chip, { alignSelf: "flex-start" }]} onPress={() => setMostraPassate(!mostraPassate)}>
           <Text style={styles.chipTesto}>{mostraPassate ? "Nascondi le partite passate" : `Mostra le partite passate (${nascoste.length})`}</Text>
         </Pressable>
       )}
@@ -475,76 +535,110 @@ export default function Partite() {
         }
         refreshControl={<RefreshControl refreshing={caricamento} onRefresh={carica} tintColor={brand.colors.brand} />}
         ListEmptyComponent={!caricamento ? <Text style={styles.vuoto}>Nessuna partita ancora.</Text> : null}
-        renderItem={({ item }) => (
-          <Pressable style={styles.card} onPress={() => apriPartita(item)}>
-            <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
-              <Text style={styles.cardTitolo}>vs {item.avversario}</Text>
-              <Text style={[styles.badge, item.stato === "in_corso" && styles.badgeInCorso, item.stato === "programmata" && styles.badgeProgrammata]}>
-                {item.stato === "programmata" ? "da preparare" : item.stato}
-              </Text>
+        renderItem={({ item: gruppo }) => (
+          <View style={styles.gruppo}>
+            <Text style={styles.etichettaGruppo}>{gruppo.etichetta}</Text>
+            <View style={styles.schedaGruppo}>
+              {gruppo.partite.map((item, indice) => {
+                const nomeNoi = team?.nome ?? "Noi";
+                const inCasa = item.luogo === "casa";
+                const prima = inCasa ? nomeNoi : item.avversario;
+                const seconda = inCasa ? item.avversario : nomeNoi;
+                const ora = new Date(item.data);
+                const oraTesto = ora.getHours() === 0 && ora.getMinutes() === 0 ? "—" : ora.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" });
+                const vinta = item.set_vinti_noi > item.set_vinti_avversario;
+                const haAzioni = puoEliminare || (puoVedereAnalisi && item.stato !== "programmata");
+                return (
+                  <View key={item.id}>
+                    {indice > 0 && <View style={styles.separatore} />}
+                    <Pressable style={styles.rigaPartita} onPress={() => apriPartita(item)}>
+                      <Text style={styles.oraPartita}>{oraTesto}</Text>
+                      <View style={{ flex: 1, gap: 2 }}>
+                        <Text style={[styles.squadraRiga, inCasa && styles.squadraNostra]} numberOfLines={1}>{prima}</Text>
+                        <Text style={[styles.squadraRiga, styles.squadraSeconda, !inCasa && styles.squadraNostra]} numberOfLines={1}>{seconda}</Text>
+                        <Text style={styles.cardSotto} numberOfLines={1}>{item.tipo_gara}{item.sporteasy_uid ? " · da SportEasy" : ""}</Text>
+                      </View>
+                      <View style={{ alignItems: "flex-end", gap: 2 }}>
+                        {item.stato === "conclusa" ? (
+                          <Text style={[styles.risultatoRiga, { color: vinta ? brand.colors.success : brand.colors.error }]}>{item.set_vinti_noi} – {item.set_vinti_avversario}</Text>
+                        ) : item.stato === "in_corso" ? (
+                          <Text style={[styles.badge, styles.badgeInCorso]}>In corso</Text>
+                        ) : (
+                          <Text style={[styles.badge, styles.badgeProgrammata]}>Da preparare</Text>
+                        )}
+                        <Text style={[styles.luogoRiga, inCasa && { color: brand.colors.success }]}>{inCasa ? "Casa" : "Trasferta"}</Text>
+                      </View>
+                    </Pressable>
+                    {haAzioni && (
+                      <View style={styles.azioniPartita}>
+                        {puoScrivere && (
+                          <View style={styles.selettoreRiga}>
+                            {(["casa", "trasferta"] as const).map((l) => (
+                              <Pressable key={l} onPress={() => item.luogo !== l && onCambiaLuogo(item.id, l)} hitSlop={{ top: 6, bottom: 6 }} style={[styles.pillola, item.luogo === l && styles.chipAttivo]}>
+                                <Text style={[styles.pillolaTesto, item.luogo === l && styles.chipTestoAttivo]}>{l === "casa" ? "🏠 Casa" : "🚌 Trasferta"}</Text>
+                              </Pressable>
+                            ))}
+                          </View>
+                        )}
+                        {puoScrivere && (
+                          <Pressable onPress={() => setPickerCampionatoMatchId(pickerCampionatoMatchId === item.id ? null : item.id)} hitSlop={{ top: 8, bottom: 8 }}>
+                            <Text style={styles.linkCampionato}>
+                              Campionato: {campionati.find((c) => c.id === item.campionato_id)?.nome ?? "nessuno (amichevole)"} — tocca per cambiare
+                            </Text>
+                          </Pressable>
+                        )}
+                        {pickerCampionatoMatchId === item.id && (
+                          <View style={styles.selettoreRiga}>
+                            <Pressable onPress={() => onScegliCampionato(item.id, null)} hitSlop={{ top: 6, bottom: 6 }} style={[styles.pillola, !item.campionato_id && styles.chipAttivo]}>
+                              <Text style={[styles.pillolaTesto, !item.campionato_id && styles.chipTestoAttivo]}>Amichevole</Text>
+                            </Pressable>
+                            {campionati.map((c) => (
+                              <Pressable key={c.id} onPress={() => onScegliCampionato(item.id, c.id)} hitSlop={{ top: 6, bottom: 6 }} style={[styles.pillola, item.campionato_id === c.id && styles.chipAttivo]}>
+                                <Text style={[styles.pillolaTesto, item.campionato_id === c.id && styles.chipTestoAttivo]}>{c.nome}</Text>
+                              </Pressable>
+                            ))}
+                          </View>
+                        )}
+                        {puoScrivere && (
+                          <Pressable onPress={() => chiediConversioneInAllenamento(item)} hitSlop={{ top: 8, bottom: 8 }}>
+                            <Text style={styles.linkConverti}>È un allenamento — spostalo</Text>
+                          </Pressable>
+                        )}
+                        {puoEliminare && item.stato === "in_corso" && <IndicatoreScoutQr matchId={item.id} />}
+                        {puoVedereAnalisi && item.stato !== "programmata" && (
+                          <View style={styles.selettoreRiga}>
+                            <Pressable onPress={() => router.push(`/analisi-partita/${item.id}`)} hitSlop={{ top: 6, bottom: 6 }} style={styles.pillola}>
+                              <Text style={styles.pillolaTestoLink}>📈 Analisi completa</Text>
+                            </Pressable>
+                            <Pressable onPress={() => apriRotazioni(item)} hitSlop={{ top: 6, bottom: 6 }} style={styles.pillola}>
+                              <Text style={styles.pillolaTestoLink}>📊 Rotazioni</Text>
+                            </Pressable>
+                          </View>
+                        )}
+                        {puoEliminare && (
+                          <View style={styles.selettoreRiga}>
+                            {item.stato !== "conclusa" && (
+                              <Pressable onPress={() => apriOspiti(item)} hitSlop={{ top: 6, bottom: 6 }} style={styles.bottoneOspite}>
+                                <Text style={styles.bottoneOspiteTesto}>📋 Scout con QR</Text>
+                              </Pressable>
+                            )}
+                            {item.stato === "in_corso" && (
+                              <Pressable onPress={() => chiediAzzeramento(item)} hitSlop={{ top: 6, bottom: 6 }} style={styles.bottoneAzzera}>
+                                <Text style={styles.bottoneAzzeraTesto}>↺ Azzera partita (solo 1° set)</Text>
+                              </Pressable>
+                            )}
+                            <Pressable onPress={() => chiediEliminazione(item)} hitSlop={{ top: 6, bottom: 6 }} style={styles.bottoneElimina}>
+                              <Text style={styles.bottoneEliminaTesto}>🗑 Elimina partita</Text>
+                            </Pressable>
+                          </View>
+                        )}
+                      </View>
+                    )}
+                  </View>
+                );
+              })}
             </View>
-            <Text style={styles.cardSotto}>{new Date(item.data).toLocaleDateString("it-IT")} — {item.luogo} — {item.tipo_gara}{item.sporteasy_uid ? " · da SportEasy" : ""}</Text>
-            {puoScrivere && (
-              <View style={styles.selettoreRiga}>
-                {(["casa", "trasferta"] as const).map((l) => (
-                  <Pressable key={l} onPress={() => item.luogo !== l && onCambiaLuogo(item.id, l)} style={[styles.chip, item.luogo === l && styles.chipAttivo]}>
-                    <Text style={[styles.chipTesto, item.luogo === l && styles.chipTestoAttivo]}>{l === "casa" ? "🏠 Casa" : "🚌 Trasferta"}</Text>
-                  </Pressable>
-                ))}
-              </View>
-            )}
-            {puoScrivere && (
-              <Pressable onPress={() => setPickerCampionatoMatchId(pickerCampionatoMatchId === item.id ? null : item.id)}>
-                <Text style={styles.linkCampionato}>
-                  Campionato: {campionati.find((c) => c.id === item.campionato_id)?.nome ?? "nessuno (amichevole)"} — tocca per cambiare
-                </Text>
-              </Pressable>
-            )}
-            {pickerCampionatoMatchId === item.id && (
-              <View style={styles.selettoreRiga}>
-                <Pressable onPress={() => onScegliCampionato(item.id, null)} style={[styles.chip, !item.campionato_id && styles.chipAttivo]}>
-                  <Text style={[styles.chipTesto, !item.campionato_id && styles.chipTestoAttivo]}>Amichevole</Text>
-                </Pressable>
-                {campionati.map((c) => (
-                  <Pressable key={c.id} onPress={() => onScegliCampionato(item.id, c.id)} style={[styles.chip, item.campionato_id === c.id && styles.chipAttivo]}>
-                    <Text style={[styles.chipTesto, item.campionato_id === c.id && styles.chipTestoAttivo]}>{c.nome}</Text>
-                  </Pressable>
-                ))}
-              </View>
-            )}
-            {puoScrivere && (
-              <Pressable onPress={() => chiediConversioneInAllenamento(item)}>
-                <Text style={styles.linkConverti}>È un allenamento — spostalo</Text>
-              </Pressable>
-            )}
-            {puoEliminare && item.stato === "in_corso" && <IndicatoreScoutQr matchId={item.id} />}
-            {item.stato === "conclusa" && <Text style={styles.cardRisultato}>Set: {item.set_vinti_noi} - {item.set_vinti_avversario}</Text>}
-            {puoVedereAnalisi && item.stato !== "programmata" && (
-              <View style={{ flexDirection: "row", gap: 16 }}>
-                <Pressable onPress={() => router.push(`/analisi-partita/${item.id}`)}>
-                  <Text style={styles.linkCampionato}>📈 Analisi completa</Text>
-                </Pressable>
-                <Pressable onPress={() => apriRotazioni(item)}>
-                  <Text style={styles.linkCampionato}>📊 Rotazioni</Text>
-                </Pressable>
-              </View>
-            )}
-            {puoEliminare && item.stato !== "conclusa" && (
-              <Pressable onPress={() => apriOspiti(item)} hitSlop={8} style={styles.bottoneOspite}>
-                <Text style={styles.bottoneOspiteTesto}>📋 Scout con QR</Text>
-              </Pressable>
-            )}
-            {puoEliminare && item.stato === "in_corso" && (
-              <Pressable onPress={() => chiediAzzeramento(item)} hitSlop={8} style={styles.bottoneAzzera}>
-                <Text style={styles.bottoneAzzeraTesto}>↺ Azzera partita (solo 1° set)</Text>
-              </Pressable>
-            )}
-            {puoEliminare && (
-              <Pressable onPress={() => chiediEliminazione(item)} hitSlop={8} style={styles.bottoneElimina}>
-                <Text style={styles.bottoneEliminaTesto}>🗑 Elimina partita</Text>
-              </Pressable>
-            )}
-          </Pressable>
+          </View>
         )}
       />
     </View>
@@ -552,53 +646,78 @@ export default function Partite() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: brand.colors.surface, padding: 16, gap: 16 },
-  form: { gap: 8, backgroundColor: brand.colors.surfaceSecondary, padding: 12, borderRadius: 12 },
-  input: { backgroundColor: brand.colors.surfaceTertiary, color: brand.colors.onSurface, borderRadius: 8, padding: 10 },
+  container: { flex: 1, backgroundColor: brand.colors.surface, paddingHorizontal: 16, paddingTop: 8 },
+  contenuto: { paddingBottom: 60, width: "100%", maxWidth: 900, alignSelf: "center" },
+  sezionePiccola: { color: brand.colors.muted, fontSize: 13, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.6, paddingLeft: 4, marginBottom: -8 },
+  form: { gap: 10, backgroundColor: brand.colors.surfaceSecondary, padding: 16, borderRadius: 18 },
+  input: { backgroundColor: brand.colors.surfaceTertiary, color: brand.colors.onSurface, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10, minHeight: 44, fontSize: 16 },
   nota: { color: brand.colors.muted, fontSize: 12 },
-  bottone: { backgroundColor: brand.colors.brand, padding: 10, borderRadius: 8, alignItems: "center", flex: 1 },
-  bottoneTesto: { color: "#000", fontWeight: "700" },
-  bottoneSecondario: { borderColor: brand.colors.brand, borderWidth: 1, padding: 10, borderRadius: 8, alignItems: "center", flex: 1 },
-  bottoneSecondarioTesto: { color: brand.colors.brand, fontWeight: "600" },
+  bottone: { backgroundColor: brand.colors.brand, paddingHorizontal: 16, paddingVertical: 10, minHeight: 44, borderRadius: 999, alignItems: "center", justifyContent: "center", flex: 1 },
+  bottoneTesto: { color: "#000", fontWeight: "700", fontSize: 15 },
+  bottoneSecondario: { backgroundColor: brand.colors.surfaceTertiary, paddingHorizontal: 16, paddingVertical: 10, minHeight: 44, borderRadius: 999, alignItems: "center", justifyContent: "center", flex: 1 },
+  bottoneSecondarioTesto: { color: brand.colors.onSurface, fontWeight: "600", fontSize: 15 },
+  bottonePrincipale: { backgroundColor: brand.colors.brand, minHeight: 44, borderRadius: 999, alignItems: "center", justifyContent: "center", paddingHorizontal: 16 },
+  bottonePrincipaleTesto: { color: "#000", fontWeight: "700", fontSize: 15 },
   selettoreRiga: { flexDirection: "row", gap: 8, flexWrap: "wrap" },
-  chip: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 16, backgroundColor: brand.colors.surfaceTertiary },
+  chip: { paddingVertical: 10, paddingHorizontal: 16, minHeight: 44, justifyContent: "center", borderRadius: 999, backgroundColor: brand.colors.surfaceTertiary },
   chipAttivo: { backgroundColor: brand.colors.brand },
-  chipTesto: { color: brand.colors.onSurfaceSecondary, fontSize: 13 },
+  chipTesto: { color: brand.colors.onSurfaceSecondary, fontSize: 14 },
   chipTestoAttivo: { color: "#000", fontWeight: "700" },
-  rigaEspandi: { paddingVertical: 2 },
-  rigaEspandiTesto: { color: brand.colors.brandSecondary, fontSize: 13, fontWeight: "600" },
+  pillola: { paddingVertical: 6, paddingHorizontal: 12, minHeight: 32, justifyContent: "center", borderRadius: 999, backgroundColor: brand.colors.surfaceTertiary },
+  pillolaTesto: { color: brand.colors.onSurfaceSecondary, fontSize: 13 },
+  pillolaTestoLink: { color: brand.colors.onSurface, fontSize: 13, fontWeight: "600" },
   erroreTesto: { color: brand.colors.error, fontSize: 12 },
-  rigaClassificazione: { color: brand.colors.onSurfaceSecondary, fontSize: 12 },
-  tagPartita: { color: brand.colors.brand, fontWeight: "700" },
-  tagAllenamento: { color: brand.colors.brandSecondary, fontWeight: "700" },
-  cardAndamento: { backgroundColor: brand.colors.surfaceSecondary, borderRadius: 12, padding: 12, gap: 6 },
-  sottotitoloSezione: { color: brand.colors.onSurface, fontSize: 14, fontWeight: "700" },
-  rigaAndamento: { flexDirection: "row", justifyContent: "space-between", paddingVertical: 4, borderBottomWidth: 1, borderBottomColor: brand.colors.border },
+  cardAndamento: { backgroundColor: brand.colors.surfaceSecondary, borderRadius: 18, padding: 16, gap: 6 },
+  rigaToccabile: { minHeight: 44, justifyContent: "center" },
+  sottotitoloSezione: { color: brand.colors.onSurface, fontSize: 15, fontWeight: "700" },
+  rigaAndamento: { flexDirection: "row", justifyContent: "space-between", paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: brand.colors.border },
   rigaAndamentoTesto: { color: brand.colors.onSurfaceSecondary, fontSize: 12, flex: 1, marginRight: 8 },
   rigaAndamentoValore: { color: brand.colors.brand, fontWeight: "700", fontSize: 12 },
-  card: { backgroundColor: brand.colors.surfaceSecondary, borderRadius: 12, padding: 14, marginBottom: 10, gap: 2 },
-  cardTitolo: { color: brand.colors.onSurface, fontSize: 16, fontWeight: "700" },
-  cardSotto: { color: brand.colors.muted, fontSize: 13 },
-  linkCampionato: { color: brand.colors.brandSecondary, fontSize: 12, fontWeight: "600", marginTop: 4 },
-  linkConverti: { color: brand.colors.muted, fontSize: 11, marginTop: 4 },
-  bottoneAzzera: { alignSelf: "flex-start", marginTop: 8, paddingVertical: 4, paddingHorizontal: 10, borderRadius: 8, borderWidth: 1, borderColor: brand.colors.muted },
+  cardLive: { backgroundColor: brand.colors.surfaceSecondary, borderRadius: 22, padding: 16, gap: 14, borderWidth: 1, borderColor: brand.colors.border },
+  cardLiveTesta: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 10 },
+  cardLiveCompetizione: { flex: 1, color: brand.colors.muted, fontSize: 12, fontWeight: "700", letterSpacing: 0.5 },
+  pillolaLive: { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: brand.colors.error, paddingVertical: 5, paddingHorizontal: 11, borderRadius: 999 },
+  puntoLive: { width: 6, height: 6, borderRadius: 3, backgroundColor: "#fff" },
+  pillolaLiveTesto: { color: "#fff", fontSize: 11, fontWeight: "800", letterSpacing: 0.6 },
+  cardLiveCentro: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
+  squadraLive: { flex: 1, alignItems: "center", gap: 6 },
+  squadraLiveNome: { color: brand.colors.onSurface, fontSize: 14, fontWeight: "700", textAlign: "center" },
+  stemma: { width: 52, height: 52, borderRadius: 26, alignItems: "center", justifyContent: "center" },
+  stemmaNoi: { backgroundColor: brand.colors.surfaceTertiary },
+  stemmaAvversario: { backgroundColor: brand.colors.border },
+  stemmaTesto: { fontSize: 17, fontWeight: "800" },
+  punteggioLive: { color: brand.colors.onSurface, fontSize: 44, fontWeight: "800", letterSpacing: -1, lineHeight: 50 },
+  gruppo: { marginBottom: 16, gap: 8 },
+  etichettaGruppo: { color: brand.colors.muted, fontSize: 13, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.6, paddingLeft: 4 },
+  schedaGruppo: { backgroundColor: brand.colors.surfaceSecondary, borderRadius: 18, overflow: "hidden" },
+  separatore: { height: 1, backgroundColor: brand.colors.border, marginLeft: 72 },
+  rigaPartita: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 12, paddingHorizontal: 14, minHeight: 56 },
+  oraPartita: { width: 46, color: brand.colors.muted, fontSize: 13, fontWeight: "700" },
+  squadraRiga: { color: brand.colors.onSurfaceSecondary, fontSize: 15, fontWeight: "500" },
+  squadraSeconda: {},
+  squadraNostra: { color: brand.colors.onSurface, fontWeight: "700" },
+  risultatoRiga: { fontSize: 17, fontWeight: "800" },
+  luogoRiga: { color: brand.colors.muted, fontSize: 12, fontWeight: "700" },
+  azioniPartita: { gap: 8, paddingLeft: 72, paddingRight: 14, paddingBottom: 12 },
+  cardSotto: { color: brand.colors.muted, fontSize: 12 },
+  linkCampionato: { color: brand.colors.brandSecondary, fontSize: 13, fontWeight: "600" },
+  linkConverti: { color: brand.colors.muted, fontSize: 12 },
+  bottoneAzzera: { paddingVertical: 6, paddingHorizontal: 12, minHeight: 32, justifyContent: "center", borderRadius: 999, borderWidth: 1, borderColor: brand.colors.muted },
   bottoneAzzeraTesto: { color: brand.colors.muted, fontSize: 12, fontWeight: "600" },
-  bottoneElimina: { alignSelf: "flex-start", marginTop: 8, paddingVertical: 4, paddingHorizontal: 10, borderRadius: 8, borderWidth: 1, borderColor: brand.colors.error },
-  bottoneOspite: { alignSelf: "flex-start", marginTop: 8, paddingVertical: 4, paddingHorizontal: 10, borderRadius: 8, borderWidth: 1, borderColor: brand.colors.brandSecondary },
+  bottoneElimina: { paddingVertical: 6, paddingHorizontal: 12, minHeight: 32, justifyContent: "center", borderRadius: 999, borderWidth: 1, borderColor: brand.colors.error },
+  bottoneOspite: { paddingVertical: 6, paddingHorizontal: 12, minHeight: 32, justifyContent: "center", borderRadius: 999, borderWidth: 1, borderColor: brand.colors.brandSecondary },
   bottoneOspiteTesto: { color: brand.colors.brandSecondary, fontSize: 12, fontWeight: "600" },
   bottoneEliminaTesto: { color: brand.colors.error, fontSize: 12, fontWeight: "600" },
-  cardRisultato: { color: brand.colors.brand, fontWeight: "700", marginTop: 4 },
-  badge: { color: brand.colors.muted, fontSize: 12, textTransform: "uppercase" },
-  badgeInCorso: { color: brand.colors.warning, fontWeight: "700" },
+  badge: { color: brand.colors.muted, fontSize: 12, textTransform: "uppercase", fontWeight: "700" },
+  badgeInCorso: { color: brand.colors.error, fontWeight: "800" },
   badgeProgrammata: { color: brand.colors.brandSecondary, fontWeight: "700" },
   vuoto: { color: brand.colors.muted, textAlign: "center", marginTop: 32 },
   sfondoPopup: { flex: 1, backgroundColor: "rgba(0,0,0,0.55)", justifyContent: "center", padding: 20 },
-  cartaPopup: { backgroundColor: brand.colors.surfaceSecondary, borderRadius: 16, padding: 18, gap: 10 },
-  sottotitoloPopup: { color: brand.colors.brandSecondary, fontSize: 12, fontWeight: "800", textTransform: "uppercase", marginTop: 4 },
-  titoloPopup: { color: brand.colors.onSurface, fontSize: 15, fontWeight: "700" },
-  chiudiPopup: { color: brand.colors.muted, fontSize: 13, textAlign: "center", paddingVertical: 6 },
-  rigaRotazione: { flexDirection: "row", justifyContent: "space-between", paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: brand.colors.border },
-  rigaRotazioneNome: { color: brand.colors.onSurfaceSecondary, fontSize: 12 },
-  rigaRotazioneSaldo: { color: brand.colors.success, fontSize: 12, fontWeight: "700" },
+  cartaPopup: { backgroundColor: brand.colors.surfaceSecondary, borderRadius: 22, padding: 20, gap: 10, width: "100%", maxWidth: 520, alignSelf: "center" },
+  titoloPopup: { color: brand.colors.onSurface, fontSize: 17, fontWeight: "700" },
+  chiudiPopup: { color: brand.colors.muted, fontSize: 15, textAlign: "center", paddingVertical: 12 },
+  rigaRotazione: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: brand.colors.border },
+  rigaRotazioneNome: { color: brand.colors.onSurfaceSecondary, fontSize: 13 },
+  rigaRotazioneSaldo: { color: brand.colors.success, fontSize: 13, fontWeight: "700" },
   saldoNegativo: { color: brand.colors.error },
 });
