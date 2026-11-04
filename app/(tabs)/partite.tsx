@@ -13,6 +13,7 @@ import { CodiceQr } from "@/src/components/CodiceQr";
 import { IndicatoreScoutQr } from "@/src/components/IndicatoreScoutQr";
 import { MessaggioWhatsApp } from "@/src/components/MessaggioWhatsApp";
 import { TitoloGrande } from "@/src/components/TitoloGrande";
+import { CondividiGenitori } from "@/src/components/CondividiGenitori";
 import { commentoPartita, inviaLinkScout } from "@/src/lib/messaggiWhatsApp";
 
 /** Iniziali del nome di una squadra, per il cerchio al posto dello stemma. */
@@ -406,6 +407,9 @@ export default function Partite() {
                 </View>
               </View>
             ) : null}
+            {ospitiPartita && (
+              <CondividiGenitori matchId={ospitiPartita.id} squadra={team?.nome} avversario={ospitiPartita.avversario} />
+            )}
             {anonimi.length > 0 && (
               <View>
                 <Text style={styles.nota}>Collegati col QR:</Text>
