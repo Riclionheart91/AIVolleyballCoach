@@ -577,7 +577,7 @@ export default function Partite() {
                   <View style={styles.schedaEvidenza}>
                     <View style={{ gap: 6 }}>
                       <Text style={styles.evidenzaQuando}>{etichettaQuando(m.data)}</Text>
-                      <Text style={styles.evidenzaTitolo}>{inCasa ? `${nomeNoi} – ${m.avversario}` : `${m.avversario} – ${nomeNoi}`}</Text>
+                      <Text style={styles.evidenzaTitolo} numberOfLines={3}>{inCasa ? `${nomeNoi} – ${m.avversario}` : `${m.avversario} – ${nomeNoi}`}</Text>
                       <Text style={styles.evidenzaSotto}>{competizione} · {inCasa ? "Casa" : "Trasferta"}</Text>
                       <Text style={[styles.badge, styles.badgeProgrammata, { alignSelf: "flex-start" }]}>Da preparare</Text>
                     </View>
@@ -704,7 +704,7 @@ const styles = StyleSheet.create({
   titoloSezioneGrande: { color: brand.colors.onSurface, fontSize: 22, fontWeight: "700", letterSpacing: -0.3 },
   schedaEvidenza: { backgroundColor: brand.colors.surfaceSecondary, borderWidth: 1, borderColor: brand.colors.border, borderRadius: 22, padding: 18, gap: 14 },
   evidenzaQuando: { color: brand.colors.brand, fontSize: 12, fontWeight: "700", letterSpacing: 0.8 },
-  evidenzaTitolo: { color: brand.colors.onSurface, fontSize: 24, fontWeight: "700", letterSpacing: -0.4 },
+  evidenzaTitolo: { color: brand.colors.onSurface, fontSize: 20, fontWeight: "700", letterSpacing: -0.3 },
   evidenzaSotto: { color: brand.colors.onSurfaceSecondary, fontSize: 14 },
   container: { flex: 1, backgroundColor: brand.colors.surface, paddingHorizontal: 16, paddingTop: 8 },
   contenuto: { paddingBottom: 60, width: "100%", maxWidth: 900, alignSelf: "center" },
