@@ -44,7 +44,7 @@ export default function SelezionaSquadra() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: brand.colors.surface },
   contenuto: { padding: 16, paddingBottom: 48, gap: 10, width: "100%", maxWidth: 900, alignSelf: "center" },
-  bottoneAggiungi: { alignSelf: "flex-start", minHeight: 44, paddingHorizontal: 18, borderRadius: 999, backgroundColor: brand.colors.brand, alignItems: "center", justifyContent: "center", marginBottom: 10 },
+  bottoneAggiungi: { alignSelf: "flex-start", minHeight: 36, paddingHorizontal: 16, borderRadius: 999, backgroundColor: brand.colors.brand, alignItems: "center", justifyContent: "center", marginBottom: 10 },
   bottoneAggiungiTesto: { color: "#000", fontWeight: "700", fontSize: 15 },
   card: { flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: brand.colors.surfaceSecondary, borderRadius: 18, paddingVertical: 14, paddingHorizontal: 16, minHeight: 60, borderWidth: 1, borderColor: "transparent" },
   cardAttiva: { borderColor: brand.colors.brand },

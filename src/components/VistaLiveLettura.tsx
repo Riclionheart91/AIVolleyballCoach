@@ -253,7 +253,7 @@ export function VistaLiveLettura(p: Props) {
 const s = StyleSheet.create({
   contenitore: { flex: 1, backgroundColor: brand.colors.surface },
   barra: { flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 16, paddingVertical: 8, width: "100%", maxWidth: 1200, alignSelf: "center" },
-  tastoEsci: { minHeight: 44, paddingHorizontal: 16, borderRadius: 999, backgroundColor: brand.colors.surfaceTertiary, alignItems: "center", justifyContent: "center" },
+  tastoEsci: { minHeight: 36, paddingHorizontal: 16, borderRadius: 999, backgroundColor: brand.colors.surfaceTertiary, alignItems: "center", justifyContent: "center" },
   tastoEsciTesto: { color: brand.colors.onSurface, fontWeight: "700", fontSize: 14 },
   titoloBarra: { flex: 1, color: brand.colors.onSurface, fontSize: 15, fontWeight: "700" },
   stato: { flexDirection: "row", alignItems: "center", gap: 6, paddingVertical: 5, paddingHorizontal: 12, borderRadius: 999 },
@@ -303,6 +303,6 @@ const s = StyleSheet.create({
   barraAttesa: { height: 6, borderRadius: 3, backgroundColor: brand.colors.surfaceTertiary, overflow: "hidden", marginTop: 6 },
   barraAttesaPiena: { height: 6, borderRadius: 3 },
   piede: { flexDirection: "row", gap: 8, padding: 16, width: "100%", maxWidth: 1200, alignSelf: "center" },
-  tastoPiede: { flex: 1, minHeight: 44, backgroundColor: brand.colors.surfaceTertiary, borderRadius: 999, paddingVertical: 12, alignItems: "center", justifyContent: "center" },
+  tastoPiede: { flex: 1, minHeight: 36, backgroundColor: brand.colors.surfaceTertiary, borderRadius: 999, paddingVertical: 6, alignItems: "center", justifyContent: "center" },
   tastoPiedeTesto: { color: brand.colors.onSurface, fontWeight: "700", fontSize: 14 },
 });

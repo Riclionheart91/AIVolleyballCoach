@@ -33,8 +33,7 @@ export default function Esercizi() {
 
   // Un'unica maschera di creazione (manuale o assistita dall'AI,
   // scelta dentro di essa), condivisa con la creazione al volo dal
-  // piano di una seduta: i due FAB qui sotto la aprono solo in una
-  // modalità di partenza diversa.
+  // piano di una seduta.
   const [popupCreazioneAperto, setPopupCreazioneAperto] = useState(false);
   const [modoCreazione, setModoCreazione] = useState<"manuale" | "ai">("manuale");
   const [atlete, setAtlete] = useState<Athlete[]>([]);
@@ -193,7 +192,7 @@ export default function Esercizi() {
             </View>
           </View>
         }
-        ListEmptyComponent={!caricamento ? <Text style={styles.vuoto}>{ricerca ? "Nessun esercizio trovato." : "Nessun esercizio ancora. Usa il + qui sotto, oppure ✨ per farli proporre all'AI."}</Text> : null}
+        ListEmptyComponent={!caricamento ? <Text style={styles.vuoto}>{ricerca ? "Nessun esercizio trovato." : "Nessun esercizio ancora. Usa il + qui sotto: puoi crearli a mano o farli proporre dall'AI."}</Text> : null}
         renderSectionHeader={({ section }) => (
           <Pressable style={styles.intestazioneCategoria} onPress={() => commutaCategoria(section.titolo)}>
             <Text style={styles.titoloCategoria}>
@@ -249,10 +248,7 @@ export default function Esercizi() {
       />
 
       {puoScrivere && (
-        <>
-          <FabAggiungi onPress={() => apriCreazione("ai")} posizione="secondaria" icona="✨" />
-          <FabAggiungi onPress={() => apriCreazione("manuale")} />
-        </>
+        <FabAggiungi onPress={() => apriCreazione("manuale")} />
       )}
 
       <Modal visible={popupCreazioneAperto} animationType="slide" transparent onRequestClose={() => setPopupCreazioneAperto(false)}>

@@ -157,9 +157,9 @@ const styles = StyleSheet.create({
   badge: { color: brand.colors.muted, fontSize: 12, textTransform: "uppercase", letterSpacing: 0.6 },
   badgeAttiva: { color: brand.colors.success, fontWeight: "700" },
   azioni: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 8 },
-  pillSecondaria: { backgroundColor: brand.colors.surfaceTertiary, paddingHorizontal: 20, borderRadius: 999, minHeight: 46, justifyContent: "center", alignItems: "center" },
+  pillSecondaria: { backgroundColor: brand.colors.surfaceTertiary, paddingHorizontal: 16, borderRadius: 999, minHeight: 36, justifyContent: "center", alignItems: "center" },
   pillSecondariaTesto: { color: brand.colors.onSurface, fontWeight: "600", fontSize: 15 },
-  pillDistruttiva: { backgroundColor: brand.colors.surfaceTertiary, paddingHorizontal: 20, borderRadius: 999, minHeight: 46, justifyContent: "center", alignItems: "center" },
+  pillDistruttiva: { backgroundColor: brand.colors.surfaceTertiary, paddingHorizontal: 16, borderRadius: 999, minHeight: 36, justifyContent: "center", alignItems: "center" },
   pillDistruttivaTesto: { color: brand.colors.error, fontWeight: "600", fontSize: 15 },
   vuoto: { color: brand.colors.muted, textAlign: "center", marginTop: 32 },
 });

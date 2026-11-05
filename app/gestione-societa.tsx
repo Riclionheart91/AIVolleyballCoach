@@ -31,6 +31,7 @@ import { invitoPresidenteLink, invitoStaffLink } from "@/src/lib/messaggiWhatsAp
 import { creaInvitoLink, linkInvito } from "@/src/services/teamInvites";
 import { creaInvitoPresidenteLink, linkInvitoPresidente } from "@/src/services/societa";
 import type { Athlete } from "@/src/types/database";
+import { Ionicons } from "@expo/vector-icons";
 
 /**
  * L'organico della società: qui il presidente vede tutte le squadre del
@@ -480,6 +481,7 @@ export default function GestioneSocieta() {
                   </Pressable>
                 )}
                 <Pressable style={styles.bottoneSecondarioDistruttivo} onPress={() => apriEliminazione(s)}>
+                  <Ionicons name="trash-outline" size={15} color={brand.colors.error} />
                   <Text style={styles.bottoneSecondarioDistruttivoTesto}>Elimina squadra</Text>
                 </Pressable>
               </View>
@@ -641,16 +643,16 @@ const styles = StyleSheet.create({
   dettaglioSquadra: { color: brand.colors.muted, fontSize: 14 },
   nota: { color: brand.colors.muted, fontSize: 13, lineHeight: 18 },
   input: { backgroundColor: brand.colors.surfaceTertiary, color: brand.colors.onSurface, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 12, minHeight: 44 },
-  bottone: { backgroundColor: brand.colors.brand, minHeight: 44, paddingHorizontal: 18, paddingVertical: 10, borderRadius: 999, alignItems: "center", justifyContent: "center" },
+  bottone: { backgroundColor: brand.colors.brand, minHeight: 42, paddingHorizontal: 16, paddingVertical: 6, borderRadius: 999, alignItems: "center", justifyContent: "center" },
   bottoneTesto: { color: "#000", fontWeight: "700" },
-  bottoneSecondario: { backgroundColor: brand.colors.surfaceTertiary, borderRadius: 999, minHeight: 44, paddingHorizontal: 16, alignItems: "center", justifyContent: "center" },
+  bottoneSecondario: { backgroundColor: brand.colors.surfaceTertiary, borderRadius: 999, minHeight: 36, paddingHorizontal: 16, alignItems: "center", justifyContent: "center" },
   bottoneSecondarioTesto: { color: brand.colors.onSurface, fontWeight: "600", fontSize: 14 },
-  bottoneSecondarioDistruttivo: { backgroundColor: brand.colors.surfaceTertiary, borderRadius: 999, minHeight: 44, paddingHorizontal: 16, alignItems: "center", justifyContent: "center" },
+  bottoneSecondarioDistruttivo: { flexDirection: "row", gap: 6, backgroundColor: brand.colors.surfaceTertiary, borderRadius: 999, minHeight: 36, paddingHorizontal: 16, alignItems: "center", justifyContent: "center" },
   bottoneSecondarioDistruttivoTesto: { color: brand.colors.error, fontWeight: "600", fontSize: 14 },
   bottoneRimuoviPresidente: { minHeight: 44, paddingHorizontal: 8, justifyContent: "center" },
   bottoneRimuoviPresidenteTesto: { color: brand.colors.error, fontWeight: "600", fontSize: 14 },
-  bottoneDistruttivoPieno: { backgroundColor: brand.colors.error, paddingHorizontal: 18, minHeight: 44, paddingVertical: 12, borderRadius: 999, alignItems: "center", justifyContent: "center" },
-  bottonePrimarioPieno: { backgroundColor: brand.colors.brand, paddingHorizontal: 18, minHeight: 44, paddingVertical: 12, borderRadius: 999, alignItems: "center", justifyContent: "center" },
+  bottoneDistruttivoPieno: { backgroundColor: brand.colors.error, paddingHorizontal: 16, minHeight: 36, paddingVertical: 6, borderRadius: 999, alignItems: "center", justifyContent: "center" },
+  bottonePrimarioPieno: { backgroundColor: brand.colors.brand, paddingHorizontal: 16, minHeight: 42, paddingVertical: 6, borderRadius: 999, alignItems: "center", justifyContent: "center" },
   badge: { color: brand.colors.muted, fontSize: 12, textTransform: "uppercase", fontWeight: "700" },
   badgeAttiva: { color: brand.colors.success },
   label: { color: brand.colors.muted, fontSize: 13, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.6, marginTop: 6 },

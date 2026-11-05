@@ -200,6 +200,6 @@ const styles = StyleSheet.create({
   valore: { color: brand.colors.onSurface, fontSize: 17, fontWeight: "700" },
   nota: { color: brand.colors.muted, fontSize: 13 },
   input: { backgroundColor: brand.colors.surfaceTertiary, color: brand.colors.onSurface, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 12, minHeight: 44, marginTop: 8 },
-  bottone: { backgroundColor: brand.colors.brand, paddingHorizontal: 18, minHeight: 44, justifyContent: "center", borderRadius: 999, alignItems: "center", marginTop: 8 },
+  bottone: { backgroundColor: brand.colors.brand, paddingHorizontal: 16, minHeight: 42, justifyContent: "center", borderRadius: 999, alignItems: "center", marginTop: 8 },
   bottoneTesto: { color: "#000", fontWeight: "700", fontSize: 15 },
 });

@@ -11,6 +11,7 @@ import { TempoDiGiocoAtleta } from "@/src/components/TempoDiGioco";
 import { TitoloGrande } from "@/src/components/TitoloGrande";
 import { brand, ruoliCampo } from "@/src/config";
 import type { Athlete, RuoloCampo } from "@/src/types/database";
+import { TastoCestino } from "@/src/components/TastoCestino";
 
 export default function SchedaAtleta() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -133,7 +134,7 @@ export default function SchedaAtleta() {
                 ) : (
                   <Pressable onPress={chiediRipristino} style={styles.pillSecondaria}><Text style={styles.pillSecondariaTesto}>Ripristina</Text></Pressable>
                 )}
-                <Pressable onPress={chiediEliminazione} style={styles.pillSecondaria}><Text style={styles.elimina}>Elimina</Text></Pressable>
+                <TastoCestino onPress={chiediEliminazione} />
               </View>
             )}
           </View>
@@ -278,10 +279,10 @@ const styles = StyleSheet.create({
   scroll: { padding: 16, paddingBottom: 48 },
   bersaglio: { minHeight: 44, justifyContent: "center" },
   indietro: { color: brand.colors.brand, fontWeight: "600", fontSize: 17 },
-  pillSecondaria: { minHeight: 44, paddingHorizontal: 16, borderRadius: 999, backgroundColor: brand.colors.surfaceTertiary, alignItems: "center", justifyContent: "center" },
+  pillSecondaria: { minHeight: 36, paddingHorizontal: 16, borderRadius: 999, backgroundColor: brand.colors.surfaceTertiary, alignItems: "center", justifyContent: "center" },
   pillSecondariaTesto: { color: brand.colors.onSurface, fontWeight: "600", fontSize: 15 },
   elimina: { color: brand.colors.error, fontWeight: "600", fontSize: 15 },
-  pillPrimaria: { flex: 1, minHeight: 44, borderRadius: 999, backgroundColor: brand.colors.brand, alignItems: "center", justifyContent: "center" },
+  pillPrimaria: { flex: 1, minHeight: 42, borderRadius: 999, backgroundColor: brand.colors.brand, alignItems: "center", justifyContent: "center" },
   pillPrimariaTesto: { color: "#000", fontSize: 16, fontWeight: "700" },
   rigaPulsanti: { flexDirection: "row", gap: 10 },
   badgeArchiviata: { color: brand.colors.warning, fontWeight: "700", fontSize: 12 },
@@ -300,10 +301,10 @@ const styles = StyleSheet.create({
   etichettaCampo: { color: brand.colors.muted, fontSize: 13, fontWeight: "600", textTransform: "uppercase", letterSpacing: 0.6 },
   input: { backgroundColor: brand.colors.surfaceSecondary, color: brand.colors.onSurface, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, minHeight: 44, fontSize: 16 },
   selettoreRiga: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  chip: { minHeight: 44, paddingHorizontal: 16, borderRadius: 999, backgroundColor: brand.colors.surfaceTertiary, alignItems: "center", justifyContent: "center" },
+  chip: { minHeight: 36, paddingHorizontal: 16, borderRadius: 999, backgroundColor: brand.colors.surfaceTertiary, alignItems: "center", justifyContent: "center" },
   chipAttivo: { backgroundColor: brand.colors.brand },
   chipTesto: { color: brand.colors.onSurfaceSecondary, fontSize: 14 },
   chipTestoAttivo: { color: "#000", fontWeight: "700" },
-  bottone: { backgroundColor: brand.colors.brand, minHeight: 44, paddingHorizontal: 16, borderRadius: 999, alignItems: "center", justifyContent: "center", marginTop: 8 },
+  bottone: { backgroundColor: brand.colors.brand, minHeight: 42, paddingHorizontal: 16, borderRadius: 999, alignItems: "center", justifyContent: "center", marginTop: 8 },
   bottoneTesto: { color: "#000", fontWeight: "700", fontSize: 16 },
 });

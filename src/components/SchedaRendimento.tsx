@@ -289,9 +289,9 @@ const styles = StyleSheet.create({
   cartaPopup: { backgroundColor: brand.colors.surfaceSecondary, borderRadius: 18, width: "100%", maxWidth: 520, alignSelf: "center", padding: 20, maxHeight: "85%" },
   titoloPopup: { color: brand.colors.onSurface, fontSize: 16, fontWeight: "700" },
   input: { backgroundColor: brand.colors.surfaceTertiary, color: brand.colors.onSurface, borderRadius: 8, padding: 12 },
-  bottone: { backgroundColor: brand.colors.brand, minHeight: 44, justifyContent: "center", paddingHorizontal: 16, borderRadius: 999, alignItems: "center" },
+  bottone: { backgroundColor: brand.colors.brand, minHeight: 42, justifyContent: "center", paddingHorizontal: 16, borderRadius: 999, alignItems: "center" },
   bottoneTesto: { color: "#000", fontWeight: "700" },
-  bottoneDistruttivo: { borderColor: brand.colors.error, borderWidth: 1, minHeight: 44, justifyContent: "center", paddingHorizontal: 16, borderRadius: 999, alignItems: "center" },
+  bottoneDistruttivo: { borderColor: brand.colors.error, borderWidth: 1, minHeight: 36, justifyContent: "center", paddingHorizontal: 16, borderRadius: 999, alignItems: "center" },
   bottoneDistruttivoTesto: { color: brand.colors.error, fontWeight: "700" },
   chiudi: { color: brand.colors.muted, fontSize: 13, textAlign: "center", paddingVertical: 14 },
 });

@@ -15,6 +15,7 @@ import { MessaggioWhatsApp } from "@/src/components/MessaggioWhatsApp";
 import { TitoloGrande } from "@/src/components/TitoloGrande";
 import { CondividiGenitori } from "@/src/components/CondividiGenitori";
 import { commentoPartita, inviaLinkScout } from "@/src/lib/messaggiWhatsApp";
+import { Ionicons } from "@expo/vector-icons";
 
 /** "OGGI · 21:00" oppure "GIO 5 NOV · 21:00" per la scheda in evidenza. */
 function etichettaQuando(iso: string): string {
@@ -382,7 +383,8 @@ export default function Partite() {
                     </Pressable>
                   )}
                   <Pressable onPress={() => chiediEliminazione(item)} hitSlop={{ top: 6, bottom: 6 }} style={styles.bottoneElimina}>
-                    <Text style={styles.bottoneEliminaTesto}>🗑 Elimina partita</Text>
+                    <Ionicons name="trash-outline" size={14} color={brand.colors.error} />
+                    <Text style={styles.bottoneEliminaTesto}>Elimina partita</Text>
                   </Pressable>
                 </View>
               )}
@@ -712,14 +714,14 @@ const styles = StyleSheet.create({
   form: { gap: 10, backgroundColor: brand.colors.surfaceSecondary, padding: 16, borderRadius: 18 },
   input: { backgroundColor: brand.colors.surfaceTertiary, color: brand.colors.onSurface, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10, minHeight: 44, fontSize: 16 },
   nota: { color: brand.colors.muted, fontSize: 12 },
-  bottone: { backgroundColor: brand.colors.brand, paddingHorizontal: 16, paddingVertical: 10, minHeight: 44, borderRadius: 999, alignItems: "center", justifyContent: "center", flex: 1 },
+  bottone: { backgroundColor: brand.colors.brand, paddingHorizontal: 16, paddingVertical: 6, minHeight: 42, borderRadius: 999, alignItems: "center", justifyContent: "center", flex: 1 },
   bottoneTesto: { color: "#000", fontWeight: "700", fontSize: 15 },
-  bottoneSecondario: { backgroundColor: brand.colors.surfaceTertiary, paddingHorizontal: 16, paddingVertical: 10, minHeight: 44, borderRadius: 999, alignItems: "center", justifyContent: "center", flex: 1 },
+  bottoneSecondario: { backgroundColor: brand.colors.surfaceTertiary, paddingHorizontal: 16, paddingVertical: 6, minHeight: 36, borderRadius: 999, alignItems: "center", justifyContent: "center", flex: 1 },
   bottoneSecondarioTesto: { color: brand.colors.onSurface, fontWeight: "600", fontSize: 15 },
-  bottonePrincipale: { backgroundColor: brand.colors.brand, minHeight: 44, borderRadius: 999, alignItems: "center", justifyContent: "center", paddingHorizontal: 16 },
+  bottonePrincipale: { backgroundColor: brand.colors.brand, minHeight: 42, borderRadius: 999, alignItems: "center", justifyContent: "center", paddingHorizontal: 16 },
   bottonePrincipaleTesto: { color: "#000", fontWeight: "700", fontSize: 15 },
   selettoreRiga: { flexDirection: "row", gap: 8, flexWrap: "wrap" },
-  chip: { paddingVertical: 10, paddingHorizontal: 16, minHeight: 44, justifyContent: "center", borderRadius: 999, backgroundColor: brand.colors.surfaceTertiary },
+  chip: { paddingVertical: 6, paddingHorizontal: 16, minHeight: 36, justifyContent: "center", borderRadius: 999, backgroundColor: brand.colors.surfaceTertiary },
   chipAttivo: { backgroundColor: brand.colors.brand },
   chipTesto: { color: brand.colors.onSurfaceSecondary, fontSize: 14 },
   chipTestoAttivo: { color: "#000", fontWeight: "700" },
@@ -765,7 +767,7 @@ const styles = StyleSheet.create({
   linkConverti: { color: brand.colors.muted, fontSize: 12 },
   bottoneAzzera: { paddingVertical: 6, paddingHorizontal: 12, minHeight: 32, justifyContent: "center", borderRadius: 999, borderWidth: 1, borderColor: brand.colors.muted },
   bottoneAzzeraTesto: { color: brand.colors.muted, fontSize: 12, fontWeight: "600" },
-  bottoneElimina: { paddingVertical: 6, paddingHorizontal: 12, minHeight: 32, justifyContent: "center", borderRadius: 999, borderWidth: 1, borderColor: brand.colors.error },
+  bottoneElimina: { flexDirection: "row", alignItems: "center", gap: 6, paddingVertical: 6, paddingHorizontal: 12, minHeight: 32, justifyContent: "center", borderRadius: 999, borderWidth: 1, borderColor: brand.colors.error },
   bottoneOspite: { paddingVertical: 6, paddingHorizontal: 12, minHeight: 32, justifyContent: "center", borderRadius: 999, borderWidth: 1, borderColor: brand.colors.brandSecondary },
   bottoneOspiteTesto: { color: brand.colors.brandSecondary, fontSize: 12, fontWeight: "600" },
   bottoneEliminaTesto: { color: brand.colors.error, fontSize: 12, fontWeight: "600" },

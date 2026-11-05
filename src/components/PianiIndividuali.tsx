@@ -15,6 +15,7 @@ import { SceltaAmbito } from "@/src/components/piani/SceltaAmbito";
 import type { Athlete } from "@/src/types/database";
 import { confermaAzione, avvisa } from "@/src/lib/confermaAzione";
 import { brand } from "@/src/config";
+import { TastoCestino } from "@/src/components/TastoCestino";
 
 const ETICHETTE_QUANDO: Record<string, string> = {
   riscaldamento: "nel riscaldamento",
@@ -353,9 +354,7 @@ export function PianiIndividuali({ teamId, athleteId, nomePersona, ruolo, modifi
                     <Pressable onPress={() => cambiaStato(p)}>
                       <Text style={styles.azione}>{p.stato === "attivo" ? "Concludi" : "Riattiva"}</Text>
                     </Pressable>
-                    <Pressable onPress={() => eliminaPiano(p)}>
-                      <Text style={styles.azioneDistruttiva}>Elimina</Text>
-                    </Pressable>
+                    <TastoCestino onPress={() => eliminaPiano(p)} />
                   </View>
                 )}
               </View>
@@ -501,7 +500,7 @@ const styles = StyleSheet.create({
   indicazioni: { color: brand.colors.onSurfaceSecondary, fontSize: 12, lineHeight: 17, marginTop: 2 },
   frequenza: { color: brand.colors.brandSecondary, fontSize: 11, marginTop: 2 },
   rigaModifica: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", columnGap: 16 },
-  bottoneAggiungi: { backgroundColor: brand.colors.surfaceTertiary, borderRadius: 999, minHeight: 44, paddingHorizontal: 16, alignItems: "center", justifyContent: "center" },
+  bottoneAggiungi: { backgroundColor: brand.colors.surfaceTertiary, borderRadius: 999, minHeight: 36, paddingHorizontal: 16, alignItems: "center", justifyContent: "center" },
   bottoneAggiungiTesto: { color: brand.colors.onSurface, fontWeight: "600" },
   sfondoModale: { flex: 1, backgroundColor: "rgba(0,0,0,0.55)", justifyContent: "center", padding: 16 },
   cartaModale: { backgroundColor: brand.colors.surfaceSecondary, borderRadius: 18, padding: 18, gap: 10, width: "100%", maxWidth: 560, alignSelf: "center" },
@@ -516,7 +515,7 @@ const styles = StyleSheet.create({
   rigaMembro: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 8, minHeight: 44, borderBottomWidth: 1, borderBottomColor: brand.colors.border },
   input: { backgroundColor: brand.colors.surfaceTertiary, color: brand.colors.onSurface, borderRadius: 12, padding: 12, minHeight: 56, textAlignVertical: "top" },
   rigaGenerazione: { flexDirection: "row", gap: 8 },
-  bottoneAI: { flex: 1, backgroundColor: brand.colors.surfaceTertiary, borderRadius: 999, minHeight: 44, paddingHorizontal: 12, alignItems: "center", justifyContent: "center" },
+  bottoneAI: { flex: 1, backgroundColor: brand.colors.surfaceTertiary, borderRadius: 999, minHeight: 36, paddingHorizontal: 12, alignItems: "center", justifyContent: "center" },
   bottoneAITesto: { color: brand.colors.onSurface, fontWeight: "700" },
   bottoneNota: { width: 44, height: 44, backgroundColor: brand.colors.surfaceTertiary, borderRadius: 999, alignItems: "center", justifyContent: "center" },
   bottoneNotaTesto: { color: brand.colors.onSurface, fontSize: 20, fontWeight: "700" },

@@ -13,6 +13,7 @@ import {
 } from "@/src/services/societa";
 import { confermaAzione, avvisa } from "@/src/lib/confermaAzione";
 import { brand } from "@/src/config";
+import { TastoCestino } from "@/src/components/TastoCestino";
 
 /**
  * Riservata all'amministratore della piattaforma (is_superuser): fonda
@@ -174,9 +175,7 @@ export default function CreaSocieta() {
                           <Text style={styles.dettaglioSquadra}>{p.nome}</Text>
                           {p.nome !== p.email && <Text style={styles.nota}>{p.email}</Text>}
                         </View>
-                        <Pressable onPress={() => onRimuoviPresidente(s.id, p)}>
-                          <Text style={styles.rimuoviTesto}>Rimuovi</Text>
-                        </Pressable>
+                        <TastoCestino etichetta="Rimuovi" onPress={() => onRimuoviPresidente(s.id, p)} />
                       </View>
                     ))
                   )}

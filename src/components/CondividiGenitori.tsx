@@ -163,7 +163,7 @@ export function CondividiGenitori({ matchId, squadra, avversario, nascosto, stil
 }
 
 const s = StyleSheet.create({
-  pulsante: { minHeight: 44, alignItems: "center", justifyContent: "center", borderRadius: 999, borderWidth: 1, borderColor: brand.colors.brand, paddingHorizontal: 18, paddingVertical: 10 },
+  pulsante: { minHeight: 36, alignItems: "center", justifyContent: "center", borderRadius: 999, borderWidth: 1, borderColor: brand.colors.brand, paddingHorizontal: 16, paddingVertical: 6 },
   pulsanteTesto: { color: brand.colors.brand, fontWeight: "700", fontSize: 15 },
   sfondo: { flex: 1, backgroundColor: "rgba(0,0,0,0.6)", justifyContent: "flex-end", alignItems: "center" },
   carta: { width: "100%", maxWidth: 520, maxHeight: "92%", backgroundColor: brand.colors.surfaceSecondary, borderTopLeftRadius: 22, borderTopRightRadius: 22, borderWidth: 1, borderColor: brand.colors.border },
@@ -174,9 +174,9 @@ const s = StyleSheet.create({
   link: { color: brand.colors.brandSecondary, fontSize: 12, textAlign: "center" },
   colonna: { gap: 10 },
   riga: { flexDirection: "row", gap: 10 },
-  primario: { minHeight: 48, borderRadius: 999, backgroundColor: brand.colors.brand, alignItems: "center", justifyContent: "center", paddingHorizontal: 20 },
+  primario: { minHeight: 44, borderRadius: 999, backgroundColor: brand.colors.brand, alignItems: "center", justifyContent: "center", paddingHorizontal: 20 },
   primarioTesto: { color: "#000", fontWeight: "700", fontSize: 16 },
-  secondario: { flex: 1, minHeight: 44, borderRadius: 999, backgroundColor: brand.colors.surfaceTertiary, alignItems: "center", justifyContent: "center", paddingHorizontal: 14 },
+  secondario: { flex: 1, minHeight: 36, borderRadius: 999, backgroundColor: brand.colors.surfaceTertiary, alignItems: "center", justifyContent: "center", paddingHorizontal: 14 },
   secondarioTesto: { color: brand.colors.onSurface, fontWeight: "600", fontSize: 15 },
   spento: { opacity: 0.5 },
   chiudi: { minHeight: 44, alignItems: "center", justifyContent: "center" },

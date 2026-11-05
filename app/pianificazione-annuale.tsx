@@ -26,6 +26,7 @@ import { elencaAtlete } from "@/src/services/athletes";
 import { confermaAzione, avvisa } from "@/src/lib/confermaAzione";
 import { brand, obiettiviFisici, obiettiviTattici, obiettiviTecnici } from "@/src/config";
 import type { BloccoPiano, PianoAnnuale, RiepilogoBlocco, TipoBlocco } from "@/src/types/database";
+import { TastoCestino } from "@/src/components/TastoCestino";
 
 const TIPI: TipoBlocco[] = ["preparazione_generale", "preparazione_specifica", "pre_competitiva", "competitiva", "scarico", "transizione"];
 
@@ -390,7 +391,7 @@ export default function PianificazioneAnnuale() {
                   {!!p.obiettivi_tattici && <Text style={styles.obiettivo}><Text style={styles.etichettaObiettivo}>Tattici: </Text>{p.obiettivi_tattici}</Text>}
                   <View style={styles.rigaAzioni}>
                     <Pressable onPress={() => apriModificaProposta(p)}><Text style={styles.azione}>Modifica</Text></Pressable>
-                    <Pressable onPress={() => rimuoviProposta(p.chiave)}><Text style={styles.azioneDistruttiva}>Rimuovi</Text></Pressable>
+                    <TastoCestino etichetta="Rimuovi" onPress={() => rimuoviProposta(p.chiave)} />
                   </View>
                 </View>
               </View>
@@ -507,7 +508,7 @@ export default function PianificazioneAnnuale() {
                   {!!b.obiettivi_tattici && <Text style={styles.obiettivo}><Text style={styles.etichettaObiettivo}>Tattici: </Text>{b.obiettivi_tattici}</Text>}
                   <View style={styles.rigaAzioni}>
                     <Pressable onPress={() => apriModifica(b)}><Text style={styles.azione}>Modifica</Text></Pressable>
-                    <Pressable onPress={() => chiediEliminazione(b)}><Text style={styles.azioneDistruttiva}>Elimina</Text></Pressable>
+                    <TastoCestino onPress={() => chiediEliminazione(b)} />
                   </View>
                 </View>
               </View>

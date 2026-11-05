@@ -202,10 +202,10 @@ const styles = StyleSheet.create({
   rigaTitolo: { color: brand.colors.onSurface, fontWeight: "600", fontSize: 16 },
   rigaDescrizione: { color: brand.colors.onSurfaceSecondary, fontSize: 14 },
   azioniReset: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  bottonePrimario: { flexGrow: 1, flexBasis: 160, minHeight: 44, paddingHorizontal: 16, borderRadius: 999, backgroundColor: brand.colors.brand, alignItems: "center", justifyContent: "center" },
+  bottonePrimario: { flexGrow: 1, flexBasis: 160, minHeight: 42, paddingHorizontal: 16, borderRadius: 999, backgroundColor: brand.colors.brand, alignItems: "center", justifyContent: "center" },
   bottonePrimarioTesto: { color: "#000", fontSize: 15, fontWeight: "700" },
-  bottoneRifiuta: { flexGrow: 1, flexBasis: 100, minHeight: 44, paddingHorizontal: 16, borderRadius: 999, backgroundColor: brand.colors.surfaceTertiary, alignItems: "center", justifyContent: "center" },
+  bottoneRifiuta: { flexGrow: 1, flexBasis: 100, minHeight: 36, paddingHorizontal: 16, borderRadius: 999, backgroundColor: brand.colors.surfaceTertiary, alignItems: "center", justifyContent: "center" },
   bottoneRifiutaTesto: { color: brand.colors.error, fontSize: 15, fontWeight: "600" },
-  bottoneWhatsapp: { minHeight: 44, paddingHorizontal: 16, borderRadius: 999, backgroundColor: `${brand.colors.success}29`, alignItems: "center", justifyContent: "center" },
+  bottoneWhatsapp: { minHeight: 36, paddingHorizontal: 16, borderRadius: 999, backgroundColor: `${brand.colors.success}29`, alignItems: "center", justifyContent: "center" },
   bottoneWhatsappTesto: { color: brand.colors.success, fontSize: 14, fontWeight: "700" },
 });

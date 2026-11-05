@@ -14,6 +14,7 @@ import { PopupForm } from "@/src/components/PopupForm";
 import { TitoloGrande } from "@/src/components/TitoloGrande";
 import { brand } from "@/src/config";
 import type { Athlete, Attendance, Rpe, Training } from "@/src/types/database";
+import { TastoCestino } from "@/src/components/TastoCestino";
 
 /** "2026-09-15 18:30" -> ISO. Formato semplice da digitare a mano, valido anche per date future. */
 function testoADataIso(testo: string): string | null {
@@ -196,9 +197,7 @@ export default function Allenamenti() {
           <Pressable style={styles.linkAzione} onPress={() => onArchiviaSingolo(item, true)} accessibilityLabel="Archivia">
             <Text style={styles.linkAzioneTesto}>🗄 Archivia</Text>
           </Pressable>
-          <Pressable style={styles.linkAzione} onPress={() => chiediEliminazione(item)}>
-            <Text style={styles.azioneCardDistruttiva}>Elimina</Text>
-          </Pressable>
+          <TastoCestino onPress={() => chiediEliminazione(item)} stile={{ marginTop: 4 }} />
         </View>
       </View>
     );
@@ -323,7 +322,7 @@ const styles = StyleSheet.create({
   contenuto: { padding: 16, paddingBottom: 90, width: "100%", maxWidth: 900, alignSelf: "center" },
   input: { backgroundColor: brand.colors.surfaceTertiary, color: brand.colors.onSurface, borderRadius: 12, padding: 12, minHeight: 44 },
   nota: { color: brand.colors.muted, fontSize: 12 },
-  bottone: { backgroundColor: brand.colors.brand, padding: 12, borderRadius: 999, alignItems: "center", minHeight: 44, justifyContent: "center" },
+  bottone: { backgroundColor: brand.colors.brand, paddingVertical: 6, paddingHorizontal: 14, borderRadius: 999, alignItems: "center", minHeight: 42, justifyContent: "center" },
   bottoneTesto: { color: "#000", fontWeight: "700" },
   titoloSezione: { color: brand.colors.onSurface, fontSize: 22, fontWeight: "700", letterSpacing: -0.3 },
   // Scheda in evidenza (prossimo allenamento)
@@ -348,9 +347,9 @@ const styles = StyleSheet.create({
   azioniBlocco: { gap: 4 },
   rigaAzioniCard: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   rigaLinkCard: { flexDirection: "row", flexWrap: "wrap", columnGap: 16 },
-  pillPrimaria: { backgroundColor: brand.colors.brand, paddingHorizontal: 22, borderRadius: 999, minHeight: 46, justifyContent: "center", alignItems: "center" },
+  pillPrimaria: { backgroundColor: brand.colors.brand, paddingHorizontal: 16, borderRadius: 999, minHeight: 42, justifyContent: "center", alignItems: "center" },
   pillPrimariaTesto: { color: "#000", fontWeight: "700", fontSize: 16 },
-  pillSecondaria: { backgroundColor: brand.colors.surfaceTertiary, paddingHorizontal: 20, borderRadius: 999, minHeight: 46, justifyContent: "center", alignItems: "center" },
+  pillSecondaria: { backgroundColor: brand.colors.surfaceTertiary, paddingHorizontal: 16, borderRadius: 999, minHeight: 36, justifyContent: "center", alignItems: "center" },
   pillSecondariaTesto: { color: brand.colors.onSurface, fontWeight: "600", fontSize: 15 },
   linkAzione: { minHeight: 44, justifyContent: "center" },
   linkAzioneTesto: { color: brand.colors.muted, fontSize: 13, fontWeight: "600" },

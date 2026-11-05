@@ -6,6 +6,7 @@ import { DEFAULT_CAMPIONATO, creaCampionato, disattivaCampionato, elencaCampiona
 import { brand } from "@/src/config";
 import type { Campionato } from "@/src/types/database";
 import { avvisa } from "@/src/lib/confermaAzione";
+import { TastoCestino } from "@/src/components/TastoCestino";
 
 export default function Campionati() {
   const { team } = useAuth();
@@ -52,7 +53,7 @@ export default function Campionati() {
                 {c.nome} ({c.federazione}) — distinta {c.distinta_min_giocatrici}-{c.distinta_max_giocatrici}
                 {c.data_inizio || c.data_fine ? `\nPeriodo: ${c.data_inizio ?? "?"} → ${c.data_fine ?? "?"}` : ""}
               </Text>
-              <Pressable onPress={() => rimuovi(c.id)}><Text style={styles.rimuovi}>Rimuovi</Text></Pressable>
+              <TastoCestino etichetta="Rimuovi" onPress={() => rimuovi(c.id)} />
             </View>
           ))}
           {campionati.length === 0 && <Text style={styles.nota}>Nessun campionato ancora.</Text>}

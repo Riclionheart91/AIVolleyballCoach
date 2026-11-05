@@ -6,6 +6,7 @@ import { aggiornaEsercizio, eliminaEsercizio, leggiEsercizio } from "@/src/servi
 import { confermaAzione, avvisa } from "@/src/lib/confermaAzione";
 import { brand, fasiAllenamento } from "@/src/config";
 import type { Exercise } from "@/src/types/database";
+import { TastoCestino } from "@/src/components/TastoCestino";
 
 export default function SchedaEsercizio() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -79,9 +80,7 @@ export default function SchedaEsercizio() {
           <Text style={styles.indietro}>← Esercizi</Text>
         </Pressable>
         {inModifica && (
-          <Pressable onPress={chiediEliminazione}>
-            <Text style={styles.elimina}>Elimina</Text>
-          </Pressable>
+          <TastoCestino onPress={chiediEliminazione} />
         )}
       </View>
 
