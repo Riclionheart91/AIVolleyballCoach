@@ -1,10 +1,25 @@
 import { Linking, Platform } from "react-native";
 
+/** Trasforma un link wa.me nel link diretto all'app WhatsApp (whatsapp://send?phone=...&text=...). */
+function linkAppWhatsApp(url: string): string | null {
+  try {
+    const u = new URL(url);
+    if (u.hostname !== "wa.me" && u.hostname !== "api.whatsapp.com") return null;
+    const numero = u.hostname === "wa.me" ? u.pathname.replace(/\D/g, "") : (u.searchParams.get("phone") ?? "").replace(/\D/g, "");
+    const testo = u.searchParams.get("text");
+    const parametri = [numero ? `phone=${numero}` : "", testo ? `text=${encodeURIComponent(testo)}` : ""].filter(Boolean).join("&");
+    return `whatsapp://send${parametri ? `?${parametri}` : ""}`;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Apre un link WhatsApp (wa.me).
  *  - App nativa: apre il link con il sistema.
- *  - Web su telefono: wa.me passa il testimone all'app WhatsApp e lascia dietro una scheda bianca. La scheda e'
- *    aperta da noi, quindi la chiudiamo da soli appena si torna all'app.
+ *  - Web su telefono: si apre direttamente l'app WhatsApp (whatsapp://) dalla stessa pagina, senza passare da wa.me:
+ *    cosi' non si apre nessuna scheda e quindi non ne resta una bianca. Se l'app non si apre (non installata) si
+ *    ripiega sul link wa.me in una nuova scheda.
  *  - Web su computer: la scheda e' WhatsApp Web e resta aperta, e' li' che si preme invia.
  */
 export function apriWhatsApp(url: string) {
@@ -12,29 +27,24 @@ export function apriWhatsApp(url: string) {
     Linking.openURL(url);
     return;
   }
-  const finestra = window.open(url, "_blank");
-  if (!finestra) {
-    // Blocco dei popup: si usa la scheda corrente, meglio che non aprire nulla.
-    window.location.href = url;
-    return;
-  }
-  // Senza "noopener" la scheda si puo' chiudere da qui; si taglia comunque il legame con questa pagina.
-  try { finestra.opener = null; } catch { /* alcuni browser non lo permettono */ }
-
   const ua = navigator.userAgent;
   const telefono = /Android|iPhone|iPad|iPod/i.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
-  if (!telefono) return;
+  const diretto = telefono ? linkAppWhatsApp(url) : null;
 
-  let scaduto: ReturnType<typeof setTimeout> | null = null;
-  const chiudi = () => {
-    document.removeEventListener("visibilitychange", alRitorno);
-    if (scaduto) clearTimeout(scaduto);
-    try { if (!finestra.closed) finestra.close(); } catch { /* gia' chiusa */ }
-  };
-  const alRitorno = () => {
-    if (document.visibilityState === "visible") setTimeout(chiudi, 400);
-  };
-  document.addEventListener("visibilitychange", alRitorno);
-  // Se non si torna mai, non si lascia l'ascoltatore appeso per sempre.
-  scaduto = setTimeout(() => document.removeEventListener("visibilitychange", alRitorno), 30 * 60 * 1000);
+  if (!diretto) {
+    if (!window.open(url, "_blank")) window.location.href = url; // blocco dei popup: si usa la scheda corrente
+    return;
+  }
+
+  // Se la pagina passa in secondo piano, WhatsApp si e' aperto: niente da fare. Altrimenti, dopo un attimo, ripiego.
+  let aperto = false;
+  const alCambio = () => { if (document.visibilityState === "hidden") aperto = true; };
+  document.addEventListener("visibilitychange", alCambio);
+  window.addEventListener("pagehide", alCambio);
+  window.location.href = diretto;
+  setTimeout(() => {
+    document.removeEventListener("visibilitychange", alCambio);
+    window.removeEventListener("pagehide", alCambio);
+    if (!aperto && document.visibilityState === "visible") window.open(url, "_blank");
+  }, 2500);
 }
