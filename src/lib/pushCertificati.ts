@@ -36,6 +36,15 @@ function chiaveApplicationServer(base64Url: string): Uint8Array {
   return output;
 }
 
+/** True se l'abbonamento e' stato creato con la chiave VAPID attuale (se la chiave cambia, quelli vecchi non servono piu'). */
+function abbonamentoConChiaveAttuale(sub: PushSubscription): boolean {
+  const usata = sub.options?.applicationServerKey;
+  if (!usata) return true; // non verificabile: si lascia com'e'
+  const a = new Uint8Array(usata);
+  const b = chiaveApplicationServer(vapidPublicKey);
+  return a.length === b.length && a.every((v, i) => v === b[i]);
+}
+
 async function registrazioneServiceWorker(): Promise<ServiceWorkerRegistration | null> {
   if (!pushCertificatiSupportato()) return null;
   try {
@@ -52,7 +61,7 @@ export async function statoAbbonamentoPushCertificati(): Promise<boolean> {
   const reg = await navigator.serviceWorker.getRegistration(`${BASE_URL_WEB}/`);
   if (!reg) return false;
   const sub = await reg.pushManager.getSubscription();
-  return !!sub;
+  return !!sub && abbonamentoConChiaveAttuale(sub);
 }
 
 /** Chiede il permesso (se serve), iscrive il dispositivo e salva l'abbonamento sul server. */
@@ -73,6 +82,13 @@ export async function attivaNotifichePushCertificati(): Promise<void> {
   if (!reg) throw new Error("Impossibile registrare il service worker per le notifiche push.");
 
   let sub = await reg.pushManager.getSubscription();
+  if (sub && !abbonamentoConChiaveAttuale(sub)) {
+    // Abbonamento creato con una chiave vecchia: il server non puo' piu' usarlo. Si toglie e se ne crea uno nuovo.
+    const vecchio = sub.endpoint;
+    await sub.unsubscribe().catch(() => undefined);
+    await supabaseClient.from("push_subscriptions").delete().eq("endpoint", vecchio);
+    sub = null;
+  }
   if (!sub) {
     sub = await reg.pushManager.subscribe({
       userVisibleOnly: true,
@@ -105,4 +121,21 @@ export async function disattivaNotifichePushCertificati(): Promise<void> {
   const endpoint = sub.endpoint;
   await sub.unsubscribe();
   await supabaseClient.from("push_subscriptions").delete().eq("endpoint", endpoint);
+}
+
+/** Chiede al server di mandare una notifica di prova ai dispositivi iscritti di questo utente. Restituisce quante ne ha inviate. */
+export async function inviaNotificaDiProva(): Promise<number> {
+  const { data, error } = await supabaseClient.functions.invoke("notifica-prova", { body: {} });
+  if (error) {
+    // Il corpo dell'errore contiene il messaggio leggibile restituito dalla funzione.
+    let messaggio = "Invio non riuscito. Riprova.";
+    try {
+      const corpo = await (error as { context?: Response }).context?.json();
+      if (corpo?.messaggio) messaggio = corpo.messaggio;
+    } catch { /* si usa il messaggio generico */ }
+    throw new Error(messaggio);
+  }
+  const inviate = (data as { inviate?: number } | null)?.inviate ?? 0;
+  if (inviate === 0) throw new Error("La notifica non e' stata consegnata: disattiva e riattiva le notifiche su questo dispositivo.");
+  return inviate;
 }

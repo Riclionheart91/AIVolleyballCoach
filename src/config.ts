@@ -39,7 +39,7 @@ export const supabase = {
  * function supabase/functions/notifica-certificati (mai in questo
  * repository — vedi il commento in testa a quel file).
  */
-export const vapidPublicKey = "BNzC0E6SbnLL5VmMQiNn8xFSOhzU4FWuMIrPn849KGM_LRgjslTBhwi1v2KEtItmLNjkoLl-Kvb4lCCxjHPNZq0";
+export const vapidPublicKey = "BN6my00sAF08arUy81QisQAzZyE6PqLhO8pA4LpFAMvr_dvNrBB8Wt9XV5haS048AbeeoW6lJCmeL-dR9m5Wg_A";
 
 // Vocabolario unico in tutta l'app: "Servizio", non "Battuta".
 export const fondamentali = ["Servizio", "Ricezione", "Attacco", "Muro", "Difesa"] as const;

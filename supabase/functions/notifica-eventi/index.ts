@@ -30,7 +30,13 @@ import { buildPushHTTPRequest } from "npm:@pushforge/builder@2";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-const VAPID_PRIVATE_JWK_RAW = Deno.env.get("VAPID_PRIVATE_JWK");
+// Chiave privata VAPID: secret della funzione se impostato, altrimenti il Vault del database (letto con la chiave di servizio).
+let VAPID_PRIVATE_JWK_RAW: string | null | undefined = Deno.env.get("VAPID_PRIVATE_JWK");
+async function caricaChiaveVapid(admin: ReturnType<typeof createClient>) {
+  if (VAPID_PRIVATE_JWK_RAW) return;
+  const { data } = await admin.rpc("leggi_vapid_privata");
+  VAPID_PRIVATE_JWK_RAW = typeof data === "string" && data.length > 0 ? data : null;
+}
 const VAPID_ADMIN_CONTACT = "mailto:lil.liu91@gmail.com";
 const BASE_URL_WEB = "/AIVolleyballCoach";
 
@@ -305,6 +311,7 @@ Deno.serve(async (req) => {
   if (req.method !== "POST") return jsonResponse({ errore: true, messaggio: "Metodo non consentito." }, 405);
   const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, { auth: { persistSession: false, autoRefreshToken: false } });
   if (!(await autorizzata(req, admin))) return jsonResponse({ errore: true, messaggio: "Non autorizzato." }, 401);
+  await caricaChiaveVapid(admin);
 
   let corpo: { tipo?: string; match_id?: string } = {};
   try {

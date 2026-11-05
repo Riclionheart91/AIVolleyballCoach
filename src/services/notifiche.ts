@@ -41,7 +41,7 @@ export function riappareIlCertificato(scadenzaIso: string, adesso: Date = new Da
   const settimanaPrima = piuGiorni(scadenza, -GIORNI_RIAPPARIZIONE_CERTIFICATO);
   if (settimanaPrima > oggi) return dataLocale(settimanaPrima);       // il caso normale: 7 giorni prima della scadenza
   if (scadenza > oggi) return dataLocale(scadenza);                    // manca meno di una settimana: torna alla scadenza
-  return dataLocale(piuGiorni(oggi, GIORNI_RIAPPARIZIONE_CERTIFICATO)); // gia' scaduto: si ripropone fra una settimana
+  return dataLocale(piuGiorni(oggi, 1));                                // gia' scaduto: si ripropone ogni giorno, finche' non lo si rinnova
 }
 
 /**

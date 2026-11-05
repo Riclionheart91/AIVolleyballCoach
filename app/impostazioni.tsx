@@ -14,6 +14,7 @@ import {
   statoAbbonamentoPushCertificati,
   attivaNotifichePushCertificati,
   disattivaNotifichePushCertificati,
+  inviaNotificaDiProva,
 } from "@/src/lib/pushCertificati";
 import {
   pushEventiSupportato,
@@ -64,6 +65,18 @@ export default function Impostazioni() {
       setPushCertificatiAttivo(attiva);
     } catch (e) {
       avvisa("Errore", (e as Error).message);
+    } finally {
+      setCaricandoPush(false);
+    }
+  }
+
+  async function provaNotifica() {
+    setCaricandoPush(true);
+    try {
+      await inviaNotificaDiProva();
+      avvisa("Notifica di prova inviata", "Dovrebbe comparire tra pochi secondi nel centro notifiche del telefono.");
+    } catch (e) {
+      avvisa("Notifica di prova", (e as Error).message);
     } finally {
       setCaricandoPush(false);
     }
@@ -171,13 +184,18 @@ export default function Impostazioni() {
           <Text style={styles.sezioneTitolo}>Notifiche push — certificati in scadenza</Text>
           <Text style={styles.nota}>
             {ruolo === "atleta"
-              ? "Ogni venerdì mattina, se il tuo certificato medico è scaduto o in scadenza entro 30 giorni, ricevi una notifica su questo dispositivo — anche ad app chiusa."
-              : "Ogni venerdì mattina ricevi su questo dispositivo, anche ad app chiusa, l'elenco delle atlete della squadra con certificato medico scaduto o in scadenza entro 30 giorni."}
+              ? "Se il tuo certificato medico è in scadenza (entro 30 giorni) ricevi una notifica ogni venerdì mattina; se è già scaduto, ogni giorno. Compare nel centro notifiche del telefono, anche ad app chiusa."
+              : "Ogni venerdì mattina ricevi l'elenco delle atlete con certificato medico scaduto o in scadenza entro 30 giorni; per i certificati già scaduti la notifica arriva ogni giorno. Compare nel centro notifiche del telefono, anche ad app chiusa."}
           </Text>
           <View style={styles.rigaNotifiche}>
             <Text style={styles.rigaProviderNome}>Attive su questo dispositivo</Text>
             <Switch value={pushCertificatiAttivo} onValueChange={cambiaPushCertificati} disabled={caricandoPush} trackColor={{ true: brand.colors.brand }} />
           </View>
+          {pushCertificatiAttivo && (
+            <Pressable style={styles.bottone} onPress={provaNotifica} disabled={caricandoPush} testID="notifica-di-prova">
+              <Text style={styles.bottoneTesto}>Invia una notifica di prova</Text>
+            </Pressable>
+          )}
         </View>
       )}
 

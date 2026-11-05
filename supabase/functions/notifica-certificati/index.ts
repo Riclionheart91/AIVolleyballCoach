@@ -34,7 +34,13 @@ import { buildPushHTTPRequest } from "npm:@pushforge/builder@2";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-const VAPID_PRIVATE_JWK_RAW = Deno.env.get("VAPID_PRIVATE_JWK");
+// Chiave privata VAPID: secret della funzione se impostato, altrimenti il Vault del database (letto con la chiave di servizio).
+let VAPID_PRIVATE_JWK_RAW: string | null | undefined = Deno.env.get("VAPID_PRIVATE_JWK");
+async function caricaChiaveVapid(admin: ReturnType<typeof createClient>) {
+  if (VAPID_PRIVATE_JWK_RAW) return;
+  const { data } = await admin.rpc("leggi_vapid_privata");
+  VAPID_PRIVATE_JWK_RAW = typeof data === "string" && data.length > 0 ? data : null;
+}
 const VAPID_ADMIN_CONTACT = "mailto:lil.liu91@gmail.com";
 const BASE_URL_WEB = "/AIVolleyballCoach";
 const GIORNI_PREAVVISO_CERTIFICATO = 30; // stessa soglia di src/services/notifiche.ts
@@ -103,13 +109,20 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS_HEADERS });
 
   const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+  await caricaChiaveVapid(admin);
+
+  // Modalita' "solo_scaduti": giro quotidiano che avvisa solo dei certificati gia' scaduti (quelli in scadenza restano al venerdi').
+  let soloScaduti = false;
+  try { soloScaduti = (await req.json())?.solo_scaduti === true; } catch { /* corpo vuoto: giro completo */ }
 
   if (!VAPID_PRIVATE_JWK_RAW) {
     console.warn("VAPID_PRIVATE_JWK non impostato: nessuna notifica verrà inviata. Vedi il commento in testa a questo file.");
   }
 
   const oggi = new Date();
-  const soglia = new Date(oggi.getTime() + GIORNI_PREAVVISO_CERTIFICATO * 24 * 60 * 60 * 1000);
+  const soglia = soloScaduti
+    ? oggi
+    : new Date(oggi.getTime() + GIORNI_PREAVVISO_CERTIFICATO * 24 * 60 * 60 * 1000);
 
   const { data: atlete, error: erroreAtlete } = await admin
     .from("athletes")
@@ -171,7 +184,7 @@ Deno.serve(async (req) => {
       .map((a) => `${a.nome} ${a.cognome} — ${formattaScadenza(a.scadenza_certificato_medico)}`);
     const extra = atleteSquadra.length > 15 ? ` e altre ${atleteSquadra.length - 15}` : "";
     const payloadStaff = {
-      title: `Certificati in scadenza — ${nome}`,
+      title: soloScaduti ? `Certificati scaduti — ${nome}` : `Certificati in scadenza — ${nome}`,
       body: righeElenco.join("\n") + extra,
       url: `${BASE_URL_WEB}/(tabs)/atlete`,
     };
@@ -186,7 +199,7 @@ Deno.serve(async (req) => {
     for (const a of atleteSquadra) {
       const membroAtleta = membriRighe.filter((m) => m.team_id === teamId && m.ruolo === "atleta" && m.atleta_id === a.id);
       const payloadAtleta = {
-        title: "Certificato medico in scadenza",
+        title: soloScaduti ? "Certificato medico scaduto" : "Certificato medico in scadenza",
         body: `Il tuo certificato medico ${formattaScadenza(a.scadenza_certificato_medico)}.`,
         url: `${BASE_URL_WEB}/atleta/${a.id}`,
       };
