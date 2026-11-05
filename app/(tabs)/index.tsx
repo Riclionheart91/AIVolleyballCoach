@@ -23,6 +23,21 @@ type FiltroCertificato = StatoCertificato | null;
 type FiltroRuolo = RuoloCampo | null;
 type SezioneRosa = { lettera: string; data: Athlete[] };
 
+type VistaRosa = "az" | "ruolo";
+const CHIAVE_VISTA_ROSA = "rosa-vista";
+const ETICHETTA_SENZA_RUOLO = "Senza ruolo";
+
+function leggiVista(): VistaRosa {
+  try {
+    const v = typeof localStorage !== "undefined" ? localStorage.getItem(CHIAVE_VISTA_ROSA) : null;
+    return v === "ruolo" ? "ruolo" : "az";
+  } catch { return "az"; }
+}
+
+function salvaVista(v: VistaRosa) {
+  try { localStorage.setItem(CHIAVE_VISTA_ROSA, v); } catch { /* ignora */ }
+}
+
 const GIORNI_PREAVVISO_CERTIFICATO = 30;
 const SOGLIA_INDICE_AZ = 12;
 
@@ -75,6 +90,7 @@ export default function Atlete() {
   const [ricerca, setRicerca] = useState("");
   const [filtroRuolo, setFiltroRuolo] = useState<FiltroRuolo>(null);
   const [filtroCertificato, setFiltroCertificato] = useState<FiltroCertificato>(null);
+  const [vista, setVista] = useState<VistaRosa>(leggiVista);
   const scrollRef = useRef<ScrollView>(null);
   const posizioneSezioni = useRef<Record<string, number>>({});
   const lettereRef = useRef<View>(null);
@@ -121,6 +137,13 @@ export default function Atlete() {
     filtrate.sort((x, y) =>
       normalizza(x.cognome).localeCompare(normalizza(y.cognome), "it") ||
       normalizza(x.nome).localeCompare(normalizza(y.nome), "it"));
+    if (vista === "ruolo") {
+      // Per ruolo: nell'ordine dei ruoli in campo, con chi non ha un ruolo in fondo (dentro ogni ruolo resta l'ordine A-Z).
+      const ordine: string[] = [...ruoliCampo, ETICHETTA_SENZA_RUOLO];
+      return ordine
+        .map((r) => ({ lettera: r, data: filtrate.filter((a) => (a.ruolo_campo ?? ETICHETTA_SENZA_RUOLO) === r) }))
+        .filter((g) => g.data.length > 0);
+    }
     const gruppi = new Map<string, Athlete[]>();
     for (const a of filtrate) {
       const l = letteraIniziale(a);
@@ -130,10 +153,10 @@ export default function Atlete() {
     return Array.from(gruppi.entries())
       .sort(([a], [b]) => (a === "#" ? 1 : b === "#" ? -1 : a.localeCompare(b)))
       .map(([lettera, data]) => ({ lettera, data }));
-  }, [atlete, ricerca, filtroRuolo, filtroCertificato, puoScrivere, statiCertificato]);
+  }, [atlete, ricerca, filtroRuolo, filtroCertificato, puoScrivere, statiCertificato, vista]);
 
   const visibili = useMemo(() => sezioni.reduce((n, s) => n + s.data.length, 0), [sezioni]);
-  const mostraIndice = visibili >= SOGLIA_INDICE_AZ;
+  const mostraIndice = vista === "az" && visibili >= SOGLIA_INDICE_AZ;
 
   function azzeraFiltri() {
     setRicerca(""); setFiltroRuolo(null); setFiltroCertificato(null);
@@ -274,6 +297,20 @@ export default function Atlete() {
                 </Pressable>
               )}
             </View>
+            <View style={styles.selettoreVista} accessibilityRole="tablist">
+              {([["az", "A–Z"], ["ruolo", "Per ruolo"]] as const).map(([v, etichetta]) => (
+                <Pressable
+                  key={v}
+                  testID={`rosa-vista-${v}`}
+                  onPress={() => { setVista(v); salvaVista(v); scrollRef.current?.scrollTo({ y: 0, animated: false }); }}
+                  style={[styles.vistaOpzione, vista === v && styles.vistaOpzioneAttiva]}
+                  accessibilityRole="tab"
+                  accessibilityState={{ selected: vista === v }}
+                >
+                  <Text style={[styles.vistaTesto, vista === v && styles.vistaTestoAttivo]}>{etichetta}</Text>
+                </Pressable>
+              ))}
+            </View>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled" style={styles.filtriScroll} contentContainerStyle={styles.filtriRiga}>
               <Pressable onPress={() => setFiltroRuolo(null)} hitSlop={{ top: 4, bottom: 4 }} style={[styles.chipFiltro, filtroRuolo === null && styles.chipAttivo]}>
                 <Text style={[styles.chipTesto, filtroRuolo === null && styles.chipTestoAttivo]}>Tutte</Text>
@@ -345,7 +382,7 @@ export default function Atlete() {
             onLayout={(e) => { posizioneSezioni.current[s.lettera] = e.nativeEvent.layout.y; }}
           >
             <View style={[styles.intestazioneSezione, Platform.OS === "web" ? (styles.intestazioneAppiccicosa as object) : null]}>
-              <Text style={styles.intestazioneSezioneTesto} accessibilityRole="header">{s.lettera}</Text>
+              <Text style={styles.intestazioneSezioneTesto} accessibilityRole="header">{vista === "ruolo" ? `${s.lettera.toUpperCase()} · ${s.data.length}` : s.lettera}</Text>
             </View>
             {s.data.map((a, i) => renderRiga(a, i, s.data.length))}
           </View>
@@ -433,6 +470,11 @@ const styles = StyleSheet.create({
   filtriRiga: { flexDirection: "row", alignItems: "center", gap: 8, paddingRight: 8 },
   etichettaFiltro: { color: brand.colors.muted, fontSize: 12, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.6, marginRight: 2 },
   chipFiltro: { paddingHorizontal: 14, minHeight: 36, borderRadius: 999, backgroundColor: brand.colors.surfaceTertiary, alignItems: "center", justifyContent: "center" },
+  selettoreVista: { flexDirection: "row", backgroundColor: brand.colors.surfaceTertiary, borderRadius: 12, padding: 3, marginBottom: 10 },
+  vistaOpzione: { flex: 1, minHeight: 38, borderRadius: 9, alignItems: "center", justifyContent: "center" },
+  vistaOpzioneAttiva: { backgroundColor: brand.colors.brand },
+  vistaTesto: { color: brand.colors.onSurfaceSecondary, fontSize: 14, fontWeight: "600" },
+  vistaTestoAttivo: { color: "#000", fontWeight: "700" },
   intestazioneSezione: { backgroundColor: brand.colors.surface, paddingTop: 10, paddingBottom: 6, paddingHorizontal: 4 },
   intestazioneAppiccicosa: { position: "sticky", top: 0, zIndex: 5 },
   intestazioneSezioneTesto: { color: brand.colors.muted, fontSize: 13, fontWeight: "700", letterSpacing: 0.4 },
