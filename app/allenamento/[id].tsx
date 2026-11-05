@@ -207,7 +207,7 @@ export default function PianoAllenamento() {
         avvisa("Nessuna alternativa", r.messaggio ?? "L'assistente non ha proposto alternative.");
         return;
       }
-      const sostituto = { ...r.esercizi[0], durataMinuti: attuale.durataMinuti };
+      const sostituto = { ...r.esercizi[0], durataMinuti: attuale.durataMinuti, fase: attuale.fase ?? r.esercizi[0].fase, ruoloTarget: attuale.ruoloTarget ?? r.esercizi[0].ruoloTarget };
       setEsercizi((prec) => prec.map((e, i) => (i === indice ? sostituto : e)));
       setEsercizioEspanso(null);
     } catch (e) {
@@ -301,7 +301,7 @@ export default function PianoAllenamento() {
         for (const n of daCatalogare) {
           try {
             const ex = await creaEsercizio(team!.id, { nome: n.nome, categoria: n.categoria || null, descrizione: n.descrizione });
-            creati.push({ exerciseId: ex.id, nome: ex.nome, durataMinuti: n.durataMinuti, note: "" });
+            creati.push({ exerciseId: ex.id, nome: ex.nome, durataMinuti: n.durataMinuti, note: "", fase: n.fase, ruoloTarget: n.ruoloTarget });
           } catch { /* un nome duplicato non deve fermare il resto */ }
         }
         if (creati.length > 0) {

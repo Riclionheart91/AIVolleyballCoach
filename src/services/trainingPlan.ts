@@ -39,11 +39,30 @@ export async function elencaPianoAllenamento(trainingId: string): Promise<Traini
   return data ?? [];
 }
 
+/** Esercizio proposto dall'AI che non esiste ancora in catalogo: va creato prima di entrare nel piano. */
+export interface EsercizioNuovoProposto {
+  nome: string;
+  categoria: string;
+  descrizione: string;
+  durataMinuti: number;
+  fase: string;
+  ruoloTarget: string | null;
+}
+
 export interface RisultatoGenerazionePiano {
   errore: boolean;
   messaggio?: string;
   argomentoSuggerito?: string;
   esercizi?: VoceRiepilogoPiano[];
+  nuovi?: EsercizioNuovoProposto[];
+}
+
+const FASI_SEDUTA = ["riscaldamento", "tecnico", "situazionale", "defaticamento"];
+
+/** Fase indicata dall'AI (anche con maiuscole o accenti diversi), se è una delle quattro valide. */
+function faseDaRisposta(valore: unknown): string | null {
+  const f = String(valore ?? "").trim().toLowerCase();
+  return FASI_SEDUTA.includes(f) ? f : null;
 }
 
 /**
@@ -76,7 +95,9 @@ export async function generaPianoAllenamentoAI(teamId: string, argomento: string
       `Defaticamento = mobilità leggera e respirazione sulle aree più sollecitate da QUESTA seduta.\n` +
       `Indica per ogni esercizio il campo "fase" con uno di: riscaldamento, tecnico, situazionale, defaticamento.\n` +
       `Dove utile puoi proporre lavori PARALLELI per ruolo: stesso momento, esercizi diversi. In quel caso valorizza "ruolo_target" (es. "Centrale"), altrimenti lascialo vuoto.\n\n`
-    : "";
+    : `La seduta va divisa in QUATTRO FASI, in questo ordine: riscaldamento, tecnico, situazionale, defaticamento. ` +
+      `Riscaldamento = mobilità e attivazione; tecnico = fondamentali analitici; situazionale = esercizi a tema e mini-partite; defaticamento = mobilità leggera. ` +
+      `Indica per ogni esercizio il campo "fase" con uno di questi quattro valori e distribuisci gli esercizi su tutte le fasi, con il totale che rispetta la durata richiesta.\n\n`;
   if (catalogo.length === 0) {
     return { errore: true, messaggio: "Il catalogo esercizi è vuoto: aggiungi almeno qualche esercizio nella tab Esercizi prima di generare un piano con l'AI." };
   }
@@ -120,8 +141,11 @@ export async function generaPianoAllenamentoAI(teamId: string, argomento: string
     for (const item of (parsed.esercizi ?? []).slice(0, 25)) {
       const trovato = catalogo.find((e) => e.nome.trim().toLowerCase() === String(item.nome).trim().toLowerCase());
       const durata = Math.min(120, Math.max(1, Number(item.durata_minuti) || 15));
+      // La fase indicata dall'AI va conservata: prima veniva scartata e ogni esercizio finiva in "tecnico".
+      const ruoloTarget = String(item.ruolo_target ?? "").trim() || null;
       if (trovato) {
-        eserciziProposti.push({ exerciseId: trovato.id, nome: trovato.nome, durataMinuti: durata, note: String(item.note ?? "") });
+        const fase = faseDaRisposta(item.fase) ?? faseDaRisposta(trovato.fase_consigliata) ?? "tecnico";
+        eserciziProposti.push({ exerciseId: trovato.id, nome: trovato.nome, durataMinuti: durata, note: String(item.note ?? ""), fase, ruoloTarget });
       } else if (item.nome) {
         // Prima gli esercizi non riconosciuti venivano scartati in
         // silenzio, e con un catalogo poco coperto il risultato era
@@ -132,6 +156,8 @@ export async function generaPianoAllenamentoAI(teamId: string, argomento: string
           categoria: String(item.categoria ?? argomento).trim(),
           descrizione: String(item.descrizione ?? item.note ?? "").trim(),
           durataMinuti: durata,
+          fase: faseDaRisposta(item.fase) ?? "tecnico",
+          ruoloTarget,
         });
       }
     }
