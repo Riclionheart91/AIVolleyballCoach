@@ -79,7 +79,16 @@ export default function Profilo() {
     router.replace("/login");
   }
 
-  const iniziali = (session?.user.email ?? "?").replace(/[^a-zA-Z]/g, "").slice(0, 2).toUpperCase() || "?";
+  // Nome da mostrare: quello dell'account Google; se non c'è, quello dell'anagrafica (la scheda atleta collegata);
+  // solo in ultimo la mail, perché lo schermo non resti senza nome.
+  const metaGoogle = (session?.user.user_metadata ?? {}) as { full_name?: string; name?: string; given_name?: string; family_name?: string };
+  const nomeGoogle = (metaGoogle.full_name || metaGoogle.name || [metaGoogle.given_name, metaGoogle.family_name].filter(Boolean).join(" ") || "").trim();
+  const nomeAnagrafica = mieDati ? `${mieDati.nome ?? ""} ${mieDati.cognome ?? ""}`.trim() : "";
+  const nomeVisualizzato = nomeGoogle || nomeAnagrafica || session?.user.email || "—";
+  const paroleNome = (nomeGoogle || nomeAnagrafica).split(/\s+/).filter(Boolean);
+  const iniziali = paroleNome.length > 0
+    ? `${paroleNome[0].charAt(0)}${paroleNome.length > 1 ? paroleNome[paroleNome.length - 1].charAt(0) : ""}`.toUpperCase()
+    : ((session?.user.email ?? "?").replace(/[^a-zA-Z]/g, "").slice(0, 2).toUpperCase() || "?");
 
   const vociSquadra: VoceElenco[] = puoScrivere ? [
     { chiave: "gestione", icona: "people-outline", colore: brand.colors.brand, testo: "Gestione squadra e accessi", vai: () => router.push("/gestione-squadra") },
@@ -111,7 +120,7 @@ export default function Profilo() {
           <Text style={styles.avatarTesto}>{iniziali}</Text>
         </View>
         <View style={{ flex: 1, gap: 1 }}>
-          <Text style={styles.valore} numberOfLines={1}>{session?.user.email}</Text>
+          <Text style={styles.valore} numberOfLines={1}>{nomeVisualizzato}</Text>
           <Text style={styles.sottotitolo} numberOfLines={2}>
             {team?.nome ?? "—"} · {ruolo ? etichetteRuolo[ruolo] : "—"}
           </Text>

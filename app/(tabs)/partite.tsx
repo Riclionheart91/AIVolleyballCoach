@@ -16,6 +16,16 @@ import { TitoloGrande } from "@/src/components/TitoloGrande";
 import { CondividiGenitori } from "@/src/components/CondividiGenitori";
 import { commentoPartita, inviaLinkScout } from "@/src/lib/messaggiWhatsApp";
 
+/** "OGGI · 21:00" oppure "GIO 5 NOV · 21:00" per la scheda in evidenza. */
+function etichettaQuando(iso: string): string {
+  const d = new Date(iso);
+  const ora = d.getHours() === 0 && d.getMinutes() === 0 ? "" : ` · ${d.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })}`;
+  const giorno = d.toDateString() === new Date().toDateString()
+    ? "OGGI"
+    : d.toLocaleDateString("it-IT", { weekday: "short", day: "numeric", month: "short" }).replace(/\./g, "").toUpperCase();
+  return `${giorno}${ora}`;
+}
+
 /** Iniziali del nome di una squadra, per il cerchio al posto dello stemma. */
 function iniziali(nome: string): string {
   const parti = nome.trim().split(/\s+/).filter(Boolean);
@@ -283,10 +293,19 @@ export default function Partite() {
     }
   }
 
+  // Scheda in evidenza: la prima partita ancora da giocare (oggi o futura) che non è già in diretta.
+  const prossimaPartita = (() => {
+    const oggi = new Date(); oggi.setHours(0, 0, 0, 0);
+    return partite
+      .filter((m) => m.stato === "programmata" && new Date(m.data).getTime() >= oggi.getTime())
+      .sort((a, b) => new Date(a.data).getTime() - new Date(b.data).getTime())[0] ?? null;
+  })();
+
   // Partite raggruppate per giorno, nello stesso ordine dell'elenco (dalla piu' vicina a oggi).
   const gruppi = (() => {
     const mappa = new Map<string, { chiave: string; etichetta: string; partite: Match[] }>();
     for (const p of elenco) {
+      if (prossimaPartita && p.id === prossimaPartita.id) continue;
       const d = new Date(p.data);
       const chiave = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
       let g = mappa.get(chiave);
@@ -299,6 +318,77 @@ export default function Partite() {
     return Array.from(mappa.values());
   })();
   const inDiretta = visibili.filter((m) => m.stato === "in_corso");
+
+  /** Azioni di una partita (luogo, campionato, analisi, scout QR, elimina): nella riga dell'elenco e nella scheda "Prossima partita". */
+  function renderAzioniPartita(item: Match, inScheda = false) {
+    const haAzioni = puoEliminare || (puoVedereAnalisi && item.stato !== "programmata");
+    if (!haAzioni) return null;
+    return (
+            <View style={[styles.azioniPartita, inScheda && styles.azioniInScheda]}>
+              {puoScrivere && (
+                <View style={styles.selettoreRiga}>
+                  {(["casa", "trasferta"] as const).map((l) => (
+                    <Pressable key={l} onPress={() => item.luogo !== l && onCambiaLuogo(item.id, l)} hitSlop={{ top: 6, bottom: 6 }} style={[styles.pillola, item.luogo === l && styles.chipAttivo]}>
+                      <Text style={[styles.pillolaTesto, item.luogo === l && styles.chipTestoAttivo]}>{l === "casa" ? "🏠 Casa" : "🚌 Trasferta"}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+              )}
+              {puoScrivere && (
+                <Pressable onPress={() => setPickerCampionatoMatchId(pickerCampionatoMatchId === item.id ? null : item.id)} hitSlop={{ top: 8, bottom: 8 }}>
+                  <Text style={styles.linkCampionato}>
+                    Campionato: {campionati.find((c) => c.id === item.campionato_id)?.nome ?? "nessuno (amichevole)"} — tocca per cambiare
+                  </Text>
+                </Pressable>
+              )}
+              {pickerCampionatoMatchId === item.id && (
+                <View style={styles.selettoreRiga}>
+                  <Pressable onPress={() => onScegliCampionato(item.id, null)} hitSlop={{ top: 6, bottom: 6 }} style={[styles.pillola, !item.campionato_id && styles.chipAttivo]}>
+                    <Text style={[styles.pillolaTesto, !item.campionato_id && styles.chipTestoAttivo]}>Amichevole</Text>
+                  </Pressable>
+                  {campionati.map((c) => (
+                    <Pressable key={c.id} onPress={() => onScegliCampionato(item.id, c.id)} hitSlop={{ top: 6, bottom: 6 }} style={[styles.pillola, item.campionato_id === c.id && styles.chipAttivo]}>
+                      <Text style={[styles.pillolaTesto, item.campionato_id === c.id && styles.chipTestoAttivo]}>{c.nome}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+              )}
+              {puoScrivere && (
+                <Pressable onPress={() => chiediConversioneInAllenamento(item)} hitSlop={{ top: 8, bottom: 8 }}>
+                  <Text style={styles.linkConverti}>È un allenamento — spostalo</Text>
+                </Pressable>
+              )}
+              {puoEliminare && item.stato === "in_corso" && <IndicatoreScoutQr matchId={item.id} />}
+              {puoVedereAnalisi && item.stato !== "programmata" && (
+                <View style={styles.selettoreRiga}>
+                  <Pressable onPress={() => router.push(`/analisi-partita/${item.id}`)} hitSlop={{ top: 6, bottom: 6 }} style={styles.pillola}>
+                    <Text style={styles.pillolaTestoLink}>📈 Analisi completa</Text>
+                  </Pressable>
+                  <Pressable onPress={() => apriRotazioni(item)} hitSlop={{ top: 6, bottom: 6 }} style={styles.pillola}>
+                    <Text style={styles.pillolaTestoLink}>📊 Rotazioni</Text>
+                  </Pressable>
+                </View>
+              )}
+              {puoEliminare && (
+                <View style={styles.selettoreRiga}>
+                  {item.stato !== "conclusa" && (
+                    <Pressable onPress={() => apriOspiti(item)} hitSlop={{ top: 6, bottom: 6 }} style={styles.bottoneOspite}>
+                      <Text style={styles.bottoneOspiteTesto}>📋 Scout con QR</Text>
+                    </Pressable>
+                  )}
+                  {item.stato === "in_corso" && (
+                    <Pressable onPress={() => chiediAzzeramento(item)} hitSlop={{ top: 6, bottom: 6 }} style={styles.bottoneAzzera}>
+                      <Text style={styles.bottoneAzzeraTesto}>↺ Azzera partita (solo 1° set)</Text>
+                    </Pressable>
+                  )}
+                  <Pressable onPress={() => chiediEliminazione(item)} hitSlop={{ top: 6, bottom: 6 }} style={styles.bottoneElimina}>
+                    <Text style={styles.bottoneEliminaTesto}>🗑 Elimina partita</Text>
+                  </Pressable>
+                </View>
+              )}
+            </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -476,6 +566,32 @@ export default function Partite() {
               );
             })}
 
+            {prossimaPartita && (() => {
+              const m = prossimaPartita;
+              const nomeNoi = team?.nome ?? "Noi";
+              const inCasa = m.luogo === "casa";
+              const competizione = campionati.find((c) => c.id === m.campionato_id)?.nome ?? (m.tipo_gara === "campionato" ? "Campionato" : "Amichevole");
+              return (
+                <View style={{ gap: 12 }}>
+                  <Text style={styles.titoloSezioneGrande}>Prossima partita</Text>
+                  <View style={styles.schedaEvidenza}>
+                    <View style={{ gap: 6 }}>
+                      <Text style={styles.evidenzaQuando}>{etichettaQuando(m.data)}</Text>
+                      <Text style={styles.evidenzaTitolo}>{inCasa ? `${nomeNoi} – ${m.avversario}` : `${m.avversario} – ${nomeNoi}`}</Text>
+                      <Text style={styles.evidenzaSotto}>{competizione} · {inCasa ? "Casa" : "Trasferta"}</Text>
+                      <Text style={[styles.badge, styles.badgeProgrammata, { alignSelf: "flex-start" }]}>Da preparare</Text>
+                    </View>
+                    {puoScrivere && (
+                      <Pressable style={styles.bottonePrincipale} onPress={() => apriPartita(m)} accessibilityRole="button">
+                        <Text style={styles.bottonePrincipaleTesto}>Prepara la partita</Text>
+                      </Pressable>
+                    )}
+                    {renderAzioniPartita(m, true)}
+                  </View>
+                </View>
+              );
+            })()}
+
       {puoScrivere && (
         <>
           <Text style={styles.sezionePiccola}>Nuova partita</Text>
@@ -551,7 +667,6 @@ export default function Partite() {
                 const ora = new Date(item.data);
                 const oraTesto = ora.getHours() === 0 && ora.getMinutes() === 0 ? "—" : ora.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" });
                 const vinta = item.set_vinti_noi > item.set_vinti_avversario;
-                const haAzioni = puoEliminare || (puoVedereAnalisi && item.stato !== "programmata");
                 return (
                   <View key={item.id}>
                     {indice > 0 && <View style={styles.separatore} />}
@@ -573,71 +688,7 @@ export default function Partite() {
                         <Text style={[styles.luogoRiga, inCasa && { color: brand.colors.success }]}>{inCasa ? "Casa" : "Trasferta"}</Text>
                       </View>
                     </Pressable>
-                    {haAzioni && (
-                      <View style={styles.azioniPartita}>
-                        {puoScrivere && (
-                          <View style={styles.selettoreRiga}>
-                            {(["casa", "trasferta"] as const).map((l) => (
-                              <Pressable key={l} onPress={() => item.luogo !== l && onCambiaLuogo(item.id, l)} hitSlop={{ top: 6, bottom: 6 }} style={[styles.pillola, item.luogo === l && styles.chipAttivo]}>
-                                <Text style={[styles.pillolaTesto, item.luogo === l && styles.chipTestoAttivo]}>{l === "casa" ? "🏠 Casa" : "🚌 Trasferta"}</Text>
-                              </Pressable>
-                            ))}
-                          </View>
-                        )}
-                        {puoScrivere && (
-                          <Pressable onPress={() => setPickerCampionatoMatchId(pickerCampionatoMatchId === item.id ? null : item.id)} hitSlop={{ top: 8, bottom: 8 }}>
-                            <Text style={styles.linkCampionato}>
-                              Campionato: {campionati.find((c) => c.id === item.campionato_id)?.nome ?? "nessuno (amichevole)"} — tocca per cambiare
-                            </Text>
-                          </Pressable>
-                        )}
-                        {pickerCampionatoMatchId === item.id && (
-                          <View style={styles.selettoreRiga}>
-                            <Pressable onPress={() => onScegliCampionato(item.id, null)} hitSlop={{ top: 6, bottom: 6 }} style={[styles.pillola, !item.campionato_id && styles.chipAttivo]}>
-                              <Text style={[styles.pillolaTesto, !item.campionato_id && styles.chipTestoAttivo]}>Amichevole</Text>
-                            </Pressable>
-                            {campionati.map((c) => (
-                              <Pressable key={c.id} onPress={() => onScegliCampionato(item.id, c.id)} hitSlop={{ top: 6, bottom: 6 }} style={[styles.pillola, item.campionato_id === c.id && styles.chipAttivo]}>
-                                <Text style={[styles.pillolaTesto, item.campionato_id === c.id && styles.chipTestoAttivo]}>{c.nome}</Text>
-                              </Pressable>
-                            ))}
-                          </View>
-                        )}
-                        {puoScrivere && (
-                          <Pressable onPress={() => chiediConversioneInAllenamento(item)} hitSlop={{ top: 8, bottom: 8 }}>
-                            <Text style={styles.linkConverti}>È un allenamento — spostalo</Text>
-                          </Pressable>
-                        )}
-                        {puoEliminare && item.stato === "in_corso" && <IndicatoreScoutQr matchId={item.id} />}
-                        {puoVedereAnalisi && item.stato !== "programmata" && (
-                          <View style={styles.selettoreRiga}>
-                            <Pressable onPress={() => router.push(`/analisi-partita/${item.id}`)} hitSlop={{ top: 6, bottom: 6 }} style={styles.pillola}>
-                              <Text style={styles.pillolaTestoLink}>📈 Analisi completa</Text>
-                            </Pressable>
-                            <Pressable onPress={() => apriRotazioni(item)} hitSlop={{ top: 6, bottom: 6 }} style={styles.pillola}>
-                              <Text style={styles.pillolaTestoLink}>📊 Rotazioni</Text>
-                            </Pressable>
-                          </View>
-                        )}
-                        {puoEliminare && (
-                          <View style={styles.selettoreRiga}>
-                            {item.stato !== "conclusa" && (
-                              <Pressable onPress={() => apriOspiti(item)} hitSlop={{ top: 6, bottom: 6 }} style={styles.bottoneOspite}>
-                                <Text style={styles.bottoneOspiteTesto}>📋 Scout con QR</Text>
-                              </Pressable>
-                            )}
-                            {item.stato === "in_corso" && (
-                              <Pressable onPress={() => chiediAzzeramento(item)} hitSlop={{ top: 6, bottom: 6 }} style={styles.bottoneAzzera}>
-                                <Text style={styles.bottoneAzzeraTesto}>↺ Azzera partita (solo 1° set)</Text>
-                              </Pressable>
-                            )}
-                            <Pressable onPress={() => chiediEliminazione(item)} hitSlop={{ top: 6, bottom: 6 }} style={styles.bottoneElimina}>
-                              <Text style={styles.bottoneEliminaTesto}>🗑 Elimina partita</Text>
-                            </Pressable>
-                          </View>
-                        )}
-                      </View>
-                    )}
+                    {renderAzioniPartita(item)}
                   </View>
                 );
               })}
@@ -650,6 +701,11 @@ export default function Partite() {
 }
 
 const styles = StyleSheet.create({
+  titoloSezioneGrande: { color: brand.colors.onSurface, fontSize: 22, fontWeight: "700", letterSpacing: -0.3 },
+  schedaEvidenza: { backgroundColor: brand.colors.surfaceSecondary, borderWidth: 1, borderColor: brand.colors.border, borderRadius: 22, padding: 18, gap: 14 },
+  evidenzaQuando: { color: brand.colors.brand, fontSize: 12, fontWeight: "700", letterSpacing: 0.8 },
+  evidenzaTitolo: { color: brand.colors.onSurface, fontSize: 24, fontWeight: "700", letterSpacing: -0.4 },
+  evidenzaSotto: { color: brand.colors.onSurfaceSecondary, fontSize: 14 },
   container: { flex: 1, backgroundColor: brand.colors.surface, paddingHorizontal: 16, paddingTop: 8 },
   contenuto: { paddingBottom: 60, width: "100%", maxWidth: 900, alignSelf: "center" },
   sezionePiccola: { color: brand.colors.muted, fontSize: 13, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.6, paddingLeft: 4, marginBottom: -8 },
@@ -702,6 +758,7 @@ const styles = StyleSheet.create({
   squadraNostra: { color: brand.colors.onSurface, fontWeight: "700" },
   risultatoRiga: { fontSize: 17, fontWeight: "800" },
   luogoRiga: { color: brand.colors.muted, fontSize: 12, fontWeight: "700" },
+  azioniInScheda: { paddingLeft: 0, paddingRight: 0, paddingBottom: 0 },
   azioniPartita: { gap: 8, paddingLeft: 72, paddingRight: 14, paddingBottom: 12 },
   cardSotto: { color: brand.colors.muted, fontSize: 12 },
   linkCampionato: { color: brand.colors.brandSecondary, fontSize: 13, fontWeight: "600" },
