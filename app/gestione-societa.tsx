@@ -27,8 +27,9 @@ import { confermaAzione, avvisa } from "@/src/lib/confermaAzione";
 import { brand } from "@/src/config";
 import { MessaggioWhatsApp } from "@/src/components/MessaggioWhatsApp";
 import { TitoloGrande } from "@/src/components/TitoloGrande";
-import { invitoStaffLink } from "@/src/lib/messaggiWhatsApp";
+import { invitoPresidenteLink, invitoStaffLink } from "@/src/lib/messaggiWhatsApp";
 import { creaInvitoLink, linkInvito } from "@/src/services/teamInvites";
+import { creaInvitoPresidenteLink, linkInvitoPresidente } from "@/src/services/societa";
 import type { Athlete } from "@/src/types/database";
 
 /**
@@ -54,6 +55,7 @@ export default function GestioneSocieta() {
   const [nomeStagione, setNomeStagione] = useState("");
   const [apertura, setApertura] = useState(false);
 
+  const [invitoPresidenteWa, setInvitoPresidenteWa] = useState<string | null>(null);
   const [invitoStaff, setInvitoStaff] = useState<{ nomeSquadra: string; token: string; ruolo: "allenatore" | "vice_allenatore" } | null>(null);
 
   const [inCorsoAttivazione, setInCorsoAttivazione] = useState<string | null>(null);
@@ -123,6 +125,16 @@ export default function GestioneSocieta() {
       avvisa("Errore", (e as Error).message);
     } finally {
       setInvitandoPresidente(false);
+    }
+  }
+
+  /** Crea il link personale per un nuovo presidente e apre WhatsApp col messaggio pronto: il contatto si sceglie lì. */
+  async function onInvitaPresidenteWhatsApp() {
+    if (!societaPresidenza) return;
+    try {
+      setInvitoPresidenteWa(await creaInvitoPresidenteLink(societaPresidenza.societa_id));
+    } catch (e) {
+      avvisa("Errore", (e as Error).message);
     }
   }
 
@@ -353,6 +365,10 @@ export default function GestioneSocieta() {
               {invitandoPresidente ? <ActivityIndicator color="#000" /> : <Text style={styles.bottoneTesto}>Aggiungi</Text>}
             </Pressable>
           </View>
+          <Pressable style={styles.bottone} onPress={onInvitaPresidenteWhatsApp}>
+            <Text style={styles.bottoneTesto}>💬 Crea il link e invia su WhatsApp</Text>
+          </Pressable>
+          <Text style={styles.nota}>Oppure manda un link personale su WhatsApp: scegli tu a chi mandarlo. Chi lo apre accede con il suo account Google, qualunque sia la sua email, e diventa presidente. Il link vale per una persona e scade dopo 7 giorni.</Text>
         </View>
 
         {!stagioneSocietaEsiste && (
@@ -471,6 +487,16 @@ export default function GestioneSocieta() {
           ))
         )}
       </ScrollView>
+
+      {invitoPresidenteWa && societaPresidenza && (
+        <MessaggioWhatsApp
+          visibile
+          titolo={`Presidente di ${societaPresidenza.nome}`}
+          nota="Si apre WhatsApp col messaggio e il link pronti: scegli tu la persona a cui mandarlo e premi invia. Chi apre il link accede con Google e diventa presidente insieme a voi."
+          modelli={[{ etichetta: "Invito", testo: invitoPresidenteLink(societaPresidenza.nome, linkInvitoPresidente(invitoPresidenteWa)) }]}
+          onChiudi={() => setInvitoPresidenteWa(null)}
+        />
+      )}
 
       {invitoStaff && (
         <MessaggioWhatsApp

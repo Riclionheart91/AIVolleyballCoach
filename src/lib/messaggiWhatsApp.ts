@@ -12,6 +12,11 @@ export function invitoStaffLink(squadra: string, ruolo: string, link: string): s
   return `Ciao! Ti invito come ${ruolo} nella squadra ${squadra} sull'app.\nApri questo link e accedi con il tuo account Google (la tua email Google): ${link}\nIl link vale per una sola persona e scade tra 7 giorni.`;
 }
 
+/** Invito a diventare presidente della società, con link personale. */
+export function invitoPresidenteLink(societa: string, link: string): string {
+  return `Ciao! Ti invito come presidente della società ${societa} sull'app.\nApri questo link e accedi con il tuo account Google (la tua email Google): ${link}\nIl link vale per una sola persona e scade tra 7 giorni.`;
+}
+
 const CONSIGLIO_PASSWORD = "Ti consiglio di salvare la password nel gestore password del telefono (Password di iCloud o Gestore password di Google).";
 
 /** Primo invito di un'atleta: con Google basta l'email in anagrafica, con email e password serve il link personale. */

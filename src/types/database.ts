@@ -41,6 +41,9 @@ export interface Athlete {
   codice_fiscale: string | null;
   numero_licenza: string | null;
   scadenza_certificato_medico: string | null;
+  /** Avviso WhatsApp del certificato: per quale scadenza è stato mandato e fino a quando la notifica resta nascosta (migrazione 0100). */
+  certificato_avviso_scadenza?: string | null;
+  certificato_avviso_fino_a?: string | null;
   status: "attiva" | "archiviata";
   telefono: string | null;
   email_contatto: string | null;

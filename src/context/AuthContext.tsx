@@ -6,7 +6,7 @@ import { supabase as cfg } from "@/src/config";
 import { accettaInvitiPendenti, accettaInvitoLink, CHIAVE_INVITO_LINK } from "@/src/services/teamInvites";
 import { avvisa } from "@/src/lib/confermaAzione";
 import { ottieniTokenCaptcha, erroreDaCaptcha, MSG_CAPTCHA_FALLITO } from "@/src/lib/captcha";
-import { miaSocietaPresidenza, type MiaSocieta } from "@/src/services/societa";
+import { accettaInvitoPresidente, CHIAVE_INVITO_PRESIDENTE, miaSocietaPresidenza, type MiaSocieta } from "@/src/services/societa";
 import type { Ruolo, Season, Team } from "@/src/types/database";
 
 const CHIAVE_ULTIMO_TEAM = "aivolleyballcoach:ultimo_team_id";
@@ -81,6 +81,8 @@ interface AuthState {
   esci: () => Promise<void>;
   creaPrimaSquadra: (nome: string) => Promise<void>;
   ricaricaContesto: () => Promise<void>;
+  /** Rilegge se si è presidente di una società (dopo aver accettato un invito da presidente). */
+  ricaricaSocieta: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthState | null>(null);
@@ -177,6 +179,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const id = session.user.id;
     setCaricamentoContesto(true);
     await usaInvitoLinkInSospeso();
+    await usaInvitoPresidenteInSospeso();
     await accettaInvitiPendenti();
 
     const { data, error } = await supabaseClient.rpc("mio_contesto_team");
@@ -276,6 +279,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
+  /** Come sopra, per il link d'invito da presidente di società: abbinato all'account, poi si rilegge la presidenza. */
+  async function usaInvitoPresidenteInSospeso() {
+    const token = await AsyncStorage.getItem(CHIAVE_INVITO_PRESIDENTE);
+    if (!token || !session || (session.user as { is_anonymous?: boolean }).is_anonymous) return;
+    await AsyncStorage.removeItem(CHIAVE_INVITO_PRESIDENTE);
+    try {
+      await accettaInvitoPresidente(token);
+      await ricaricaSocieta();
+      avvisa("Benvenuto", "Ora sei presidente della società: l'invito è stato abbinato al tuo account.");
+    } catch (e) {
+      avvisa("Invito non utilizzabile", (e as Error).message);
+    }
+  }
+
+  async function ricaricaSocieta() {
+    try { setSocietaPresidenza(await miaSocietaPresidenza()); } catch { /* resta com'era */ }
+  }
+
   async function esci() {
     await supabaseClient.auth.signOut();
   }
@@ -329,7 +350,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       session, caricamento, team, ruolo, atletaId, puoScrivere, soloLettura, puoScoutare, puoUsareAI, puoGestireStagioni, puoVedereAnalisi, presidenteGiocaQui, isSuperuser,
       societaPresidenza, caricamentoSocieta, squadreDisponibili, cambiaSquadra, squadraScelta, caricamentoContesto, erroreTeam, stagioneAttiva, stagioneSocietaEsiste,
       squadraAttivata: stagioneAttiva !== null,
-      accediConGoogle, accediConPassword, esci, creaPrimaSquadra, ricaricaContesto,
+      accediConGoogle, accediConPassword, esci, creaPrimaSquadra, ricaricaContesto, ricaricaSocieta,
     }),
     [session, caricamento, team, ruolo, atletaId, isSuperuser, visioneCompletaConcessa, societaPresidenza, caricamentoSocieta, squadreDisponibili, squadraScelta, caricamentoContesto, caricamentoSocieta, erroreTeam, stagioneAttiva, stagioneSocietaEsiste],
   );

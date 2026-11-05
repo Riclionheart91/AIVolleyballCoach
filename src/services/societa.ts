@@ -1,4 +1,5 @@
 import { supabaseClient } from "@/src/lib/supabase";
+import { supabase as cfg } from "@/src/config";
 
 export interface MiaSocieta { societa_id: string; nome: string }
 
@@ -123,4 +124,34 @@ export async function elencaPresidentiAtleti(): Promise<PresidenteAtleta[]> {
 export async function impostaVisioneAnalisiPresidente(teamId: string, userId: string, concessa: boolean): Promise<void> {
   const { error } = await supabaseClient.rpc("imposta_visione_analisi_presidente", { p_team_id: teamId, p_user_id: userId, p_concessa: concessa });
   if (error) throw error;
+}
+
+// ─────────── Invito del presidente con un link (WhatsApp) — migrazione 0101 ───────────
+
+export const CHIAVE_INVITO_PRESIDENTE = "aivolleyballcoach:invito_presidente_token";
+
+export function linkInvitoPresidente(token: string): string {
+  const base = (cfg.authRedirectUrl || "").replace(/\/+$/, "");
+  return `${base}/invito-presidente/${token}`;
+}
+
+/** Crea il link personale (monouso, 7 giorni) per aggiungere un presidente alla società, da mandare su WhatsApp. */
+export async function creaInvitoPresidenteLink(societaId: string): Promise<string> {
+  const { data, error } = await supabaseClient.rpc("crea_invito_presidente_link", { p_societa_id: societaId });
+  if (error) throw error;
+  return data as string;
+}
+
+/** Per la pagina d'ingresso, anche prima di accedere: il nome della società, solo se il link è ancora valido. */
+export async function anteprimaInvitoPresidente(token: string): Promise<{ societa_nome: string } | null> {
+  const { data, error } = await supabaseClient.rpc("anteprima_invito_presidente_link", { p_token: token });
+  if (error) throw error;
+  return ((data as { societa_nome: string }[] | null) ?? [])[0] ?? null;
+}
+
+/** Ritorna la società di cui si diventa presidente; errore leggibile se il link non è valido, è scaduto o già usato. */
+export async function accettaInvitoPresidente(token: string): Promise<string> {
+  const { data, error } = await supabaseClient.rpc("accetta_invito_presidente_link", { p_token: token });
+  if (error) throw error;
+  return data as string;
 }

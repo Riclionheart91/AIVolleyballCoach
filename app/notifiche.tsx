@@ -3,7 +3,7 @@ import { View, Text, Pressable, StyleSheet, ScrollView, ActivityIndicator } from
 import { Ionicons } from "@expo/vector-icons";
 import { router, useFocusEffect } from "expo-router";
 import { useAuth } from "@/src/context/AuthContext";
-import { calcolaNotifiche, type Notifica } from "@/src/services/notifiche";
+import { calcolaNotifiche, nascondiAvvisoCertificato, type Notifica } from "@/src/services/notifiche";
 import { confermaResetAccesso, linkAccesso, rifiutaResetAccesso, type ResetConfermato } from "@/src/services/accessi";
 import { avvisa } from "@/src/lib/confermaAzione";
 import type { Athlete } from "@/src/types/database";
@@ -162,7 +162,9 @@ export default function CentroNotifiche() {
           titolo={`Certificato — ${whatsapp.atleta.nome} ${whatsapp.atleta.cognome}`}
           atleta={whatsapp.atleta}
           modelli={[{ etichetta: "Certificato", testo: promemoriaCertificato(team.nome, whatsapp.scadenza) }]}
-          onChiudi={() => setWhatsapp(null)}
+          // Mandato l'avviso la notifica sparisce (e torna 7 giorni prima della scadenza): l'elenco si aggiorna alla chiusura.
+          onInviato={() => { if (whatsapp.atleta && whatsapp.scadenza) nascondiAvvisoCertificato(whatsapp.atleta.id, whatsapp.scadenza); }}
+          onChiudi={() => { setWhatsapp(null); carica(); }}
         />
       )}
     </View>

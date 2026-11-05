@@ -30,6 +30,7 @@ export default function RootLayout() {
         <Stack.Screen name="ospite" />
         <Stack.Screen name="scout/[token]" />
         <Stack.Screen name="invito/[token]" />
+        <Stack.Screen name="invito-presidente/[token]" />
         <Stack.Screen name="accesso/[token]" />
         <Stack.Screen name="seleziona-squadra" options={{ contentStyle: AREA_SICURA_CON_TITOLO, headerShown: true, title: "Cambia squadra", presentation: "modal" }} />
         <Stack.Screen name="(tabs)" options={{ contentStyle: {} }} />

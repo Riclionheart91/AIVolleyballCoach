@@ -1,4 +1,5 @@
 import { elencaAtlete } from "@/src/services/athletes";
+import { supabaseClient } from "@/src/lib/supabase";
 import type { Athlete } from "@/src/types/database";
 import { elencaInvitiPendenti } from "@/src/services/teamInvites";
 import { atleteDaValutare, elencaPropostePendenti as elencaPropostePendentiValutazioni } from "@/src/services/evaluations";
@@ -25,6 +26,36 @@ export interface Notifica {
 }
 
 const GIORNI_PREAVVISO_CERTIFICATO = 30;
+/** Dopo il WhatsApp la notifica del certificato ricompare questi giorni prima della scadenza. */
+const GIORNI_RIAPPARIZIONE_CERTIFICATO = 7;
+
+function dueCifre(n: number): string { return n < 10 ? `0${n}` : String(n); }
+function dataLocale(d: Date): string { return `${d.getFullYear()}-${dueCifre(d.getMonth() + 1)}-${dueCifre(d.getDate())}`; }
+function piuGiorni(d: Date, giorni: number): Date { return new Date(d.getFullYear(), d.getMonth(), d.getDate() + giorni); }
+
+/** Data (AAAA-MM-GG) da cui la notifica del certificato torna a comparire dopo un avviso su WhatsApp mandato `adesso`. */
+export function riappareIlCertificato(scadenzaIso: string, adesso: Date = new Date()): string {
+  const [a, m, g] = scadenzaIso.slice(0, 10).split("-").map(Number);
+  const scadenza = new Date(a, m - 1, g);
+  const oggi = new Date(adesso.getFullYear(), adesso.getMonth(), adesso.getDate());
+  const settimanaPrima = piuGiorni(scadenza, -GIORNI_RIAPPARIZIONE_CERTIFICATO);
+  if (settimanaPrima > oggi) return dataLocale(settimanaPrima);       // il caso normale: 7 giorni prima della scadenza
+  if (scadenza > oggi) return dataLocale(scadenza);                    // manca meno di una settimana: torna alla scadenza
+  return dataLocale(piuGiorni(oggi, GIORNI_RIAPPARIZIONE_CERTIFICATO)); // gia' scaduto: si ripropone fra una settimana
+}
+
+/**
+ * Dopo aver mandato il WhatsApp la notifica si nasconde. Si ricorda anche la scadenza a cui si riferisce:
+ * se il certificato viene rinnovato (data diversa) l'avviso vecchio non conta piu'. Se la migrazione 0100 non
+ * e' ancora applicata l'errore si ignora: l'avviso resta visibile, nulla si rompe.
+ */
+export async function nascondiAvvisoCertificato(atletaId: string, scadenzaIso: string): Promise<void> {
+  const { error } = await supabaseClient.from("athletes").update({
+    certificato_avviso_scadenza: scadenzaIso.slice(0, 10),
+    certificato_avviso_fino_a: riappareIlCertificato(scadenzaIso),
+  }).eq("id", atletaId);
+  if (error) console.warn("Avviso certificato non registrato:", error.message);
+}
 
 /**
  * Centro notifiche: NON sono notifiche push del sistema operativo (che
@@ -56,6 +87,12 @@ export async function calcolaNotifiche(teamId: string, puoScrivere: boolean): Pr
     for (const a of atlete) {
       if (!a.scadenza_certificato_medico) continue;
       const scadenza = new Date(a.scadenza_certificato_medico);
+      // Avviso gia' mandato su WhatsApp per QUESTA scadenza: la notifica resta nascosta fino alla data scelta.
+      if (
+        a.certificato_avviso_fino_a &&
+        a.certificato_avviso_scadenza === a.scadenza_certificato_medico.slice(0, 10) &&
+        dataLocale(oggi) < a.certificato_avviso_fino_a.slice(0, 10)
+      ) continue;
       if (scadenza < oggi) {
         notifiche.push({
           id: `certmed-${a.id}`, tipo: "certificato_medico", urgente: true,
