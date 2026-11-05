@@ -13,9 +13,9 @@ import type { Exercise } from "@/src/types/database";
 /** Sotto questa dimensione il catalogo va intero: filtrare un elenco corto toglierebbe scelta senza far risparmiare nulla. */
 export const SOGLIA_CATALOGO_COMPLETO = 50;
 /** Esercizi pertinenti all'argomento, al massimo. */
-export const MAX_PERTINENTI = 40;
+export const MAX_PERTINENTI = 50;
 /** Esercizi di riempimento per ogni fase (riscaldamento, tecnico, situazionale, defaticamento), al massimo. */
-export const PER_FASE = 6;
+export const PER_FASE = 12;
 /** Se l'argomento non corrisponde a nulla, l'elenco viene comunque portato a questa dimensione con esercizi vari. */
 export const MINIMO_ELENCO = 30;
 

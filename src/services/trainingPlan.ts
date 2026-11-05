@@ -57,6 +57,28 @@ export interface RisultatoGenerazionePiano {
   nuovi?: EsercizioNuovoProposto[];
 }
 
+/** Quanti esercizi non presenti in catalogo si accettano in una seduta: gli altri si scartano a favore del catalogo. */
+const MAX_NUOVI_PER_PIANO = 1;
+
+/** Nome senza accenti, maiuscole e punteggiatura, per riconoscere un esercizio anche se l'AI lo scrive in modo leggermente diverso. */
+function chiaveNome(nome: unknown): string {
+  return String(nome ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+/** Esercizio del catalogo che corrisponde al nome indicato dall'AI: identico, oppure uno solo che lo contiene (o ne e' contenuto). */
+function trovaInCatalogo(catalogo: Exercise[], nomeAI: unknown): Exercise | undefined {
+  const chiave = chiaveNome(nomeAI);
+  if (!chiave) return undefined;
+  const esatto = catalogo.find((e) => chiaveNome(e.nome) === chiave);
+  if (esatto) return esatto;
+  if (chiave.length < 8) return undefined;
+  const simili = catalogo.filter((e) => {
+    const k = chiaveNome(e.nome);
+    return k.length >= 8 && (k.includes(chiave) || chiave.includes(k));
+  });
+  return simili.length === 1 ? simili[0] : undefined;
+}
+
 const FASI_SEDUTA = ["riscaldamento", "tecnico", "situazionale", "defaticamento"];
 
 /** Fase indicata dall'AI (anche con maiuscole o accenti diversi), se è una delle quattro valide. */
@@ -104,7 +126,9 @@ export async function generaPianoAllenamentoAI(teamId: string, argomento: string
 
   // All'AI si mostrano solo gli esercizi pertinenti all'argomento (piu' qualche esercizio per fase): l'intero catalogo
   // allungava il prompt oltre il necessario. Il riconoscimento dei nomi in risposta usa invece il catalogo completo.
-  const elencoCatalogo = selezionaCatalogoPerArgomento(catalogo, argomento).map((e) => `- ${e.nome}${e.categoria ? ` (${e.categoria})` : ""}`).join("\n");
+  const elencoCatalogo = selezionaCatalogoPerArgomento(catalogo, argomento)
+    .map((e) => `- ${e.nome}${e.categoria ? ` (${e.categoria})` : ""}${faseDaRisposta(e.fase_consigliata) ? ` [${e.fase_consigliata}]` : ""}`)
+    .join("\n");
 
   // Se la seduta cade dentro un blocco del piano annuale, i suoi
   // obiettivi entrano nel prompt: è ciò che rende la pianificazione
@@ -119,8 +143,9 @@ export async function generaPianoAllenamentoAI(teamId: string, argomento: string
 
   const prompt = contestoPeriodo + vincoloFasi +
     `Proponi un piano per una sessione di allenamento sul tema "${argomento}", ` +
-    `della durata totale di circa ${durataTotaleMinuti} minuti. USA SOLO esercizi da questo catalogo (mai inventarne altri, scrivi il nome esattamente come qui):\n${elencoCatalogo}\n\n` +
-    `Puoi proporre anche esercizi NON presenti in catalogo se utili: in quel caso indica "nuovo": true e una descrizione completa.\n` +
+    `della durata totale di circa ${durataTotaleMinuti} minuti.\n` +
+    `PRIORITA' ASSOLUTA agli esercizi GIA' IN CATALOGO: costruisci tutta la seduta con questi (tra parentesi la categoria, tra parentesi quadre la fase in cui di solito si usano) e scrivi il nome ESATTAMENTE come qui:\n${elencoCatalogo}\n\n` +
+    `Per ogni fase scegli l'esercizio del catalogo piu' vicino a quello che ti serve, anche se non e' perfetto. Un esercizio NON in catalogo e' un'eccezione: proponilo ("nuovo": true, con descrizione completa) SOLO se per quella fase nessun esercizio dell'elenco puo' andare bene, e comunque al massimo ${MAX_NUOVI_PER_PIANO} in tutta la seduta. Se hai dubbi, usa un esercizio del catalogo.\n` +
     `Rispondi SOLO in formato JSON: {"esercizi": [{"nome": "...", "fase": "riscaldamento|tecnico|situazionale|defaticamento", "ruolo_target": "", "durata_minuti": numero, "note": "breve indicazione", "nuovo": false, "categoria": "...", "descrizione": "..."}], "argomento_suggerito": "..."}. ` +
     `La somma delle durate deve avvicinarsi a ${durataTotaleMinuti} minuti.` + istruzioniAggiuntive(istruzioniExtra);
 
@@ -139,14 +164,14 @@ export async function generaPianoAllenamentoAI(teamId: string, argomento: string
     const nuovi: EsercizioNuovoProposto[] = [];
 
     for (const item of (parsed.esercizi ?? []).slice(0, 25)) {
-      const trovato = catalogo.find((e) => e.nome.trim().toLowerCase() === String(item.nome).trim().toLowerCase());
+      const trovato = trovaInCatalogo(catalogo, item.nome);
       const durata = Math.min(120, Math.max(1, Number(item.durata_minuti) || 15));
       // La fase indicata dall'AI va conservata: prima veniva scartata e ogni esercizio finiva in "tecnico".
       const ruoloTarget = String(item.ruolo_target ?? "").trim() || null;
       if (trovato) {
         const fase = faseDaRisposta(item.fase) ?? faseDaRisposta(trovato.fase_consigliata) ?? "tecnico";
         eserciziProposti.push({ exerciseId: trovato.id, nome: trovato.nome, durataMinuti: durata, note: String(item.note ?? ""), fase, ruoloTarget });
-      } else if (item.nome) {
+      } else if (item.nome && nuovi.length < MAX_NUOVI_PER_PIANO) {
         // Prima gli esercizi non riconosciuti venivano scartati in
         // silenzio, e con un catalogo poco coperto il risultato era
         // "nessun esercizio riconoscibile". Ora si propongono per
