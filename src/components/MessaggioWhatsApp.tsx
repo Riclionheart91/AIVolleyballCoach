@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { View, Text, Pressable, StyleSheet, Modal, ScrollView, TextInput } from "react-native";
 import { apriWhatsApp } from "@/src/lib/apriWhatsApp";
 import { brand } from "@/src/config";
@@ -25,10 +25,10 @@ export function nomeFirmatario(session: { user: { user_metadata?: unknown; email
 }
 
 /** Link wa.me alla chat con l'atleta e il messaggio gia' scritto e firmato, oppure null se non ha un numero valido. */
-export function linkChatAtleta(atleta: Athlete, testoModello: string, firmatario: string): string | null {
+export function linkChatAtleta(atleta: Athlete, testoModello: string, firmatario: string, comeScritto = false): string | null {
   const numero = numeroWhatsApp(atleta.telefono);
   if (!numero) return null;
-  const firmato = firmatario ? `${testoModello.replace(/\s+$/, "")}\n— ${firmatario}` : testoModello;
+  const firmato = comeScritto ? testoModello : firmatario ? `${testoModello.replace(/\s+$/, "")}\n— ${firmatario}` : testoModello;
   return `https://wa.me/${numero}?text=${encodeURIComponent(firmato.replace(/\{nome\}/g, atleta.nome))}`;
 }
 
@@ -54,8 +54,24 @@ export function MessaggioWhatsApp({ visibile, titolo, atleta, nota, modelli, onC
   // Il commento della partita lascia uno spazio fra il risultato e la firma, da riempire.
   const nuovoTesto = (t: string) => (t.endsWith("\n\n") ? `${t}\n${firmatario ? `— ${firmatario}` : ""}` : conFirma(t));
 
+  // Nessuna finestra intermedia: appena serve, WhatsApp si apre con il messaggio gia' scritto (chat dell'atleta se c'e'
+  // il numero, altrimenti si sceglie la chat in WhatsApp). La finestra compare solo se manca il numero dell'atleta,
+  // per dirlo. Il ref evita di aprire due volte se il componente si ridisegna mentre e' visibile.
+  const giaAperto = useRef(false);
+  const [serveFinestra, setServeFinestra] = useState(false);
   useEffect(() => {
-    if (visibile) setTesto(nuovoTesto(modelli[0]?.testo ?? ""));
+    if (!visibile) { giaAperto.current = false; setServeFinestra(false); return; }
+    const iniziale = nuovoTesto(modelli[0]?.testo ?? "");
+    setTesto(iniziale);
+    if (giaAperto.current) return;
+    giaAperto.current = true;
+    const link = atleta
+      ? linkChatAtleta(atleta, modelli[0]?.testo ?? "", firmatario, true)
+      : `https://wa.me/?text=${encodeURIComponent(iniziale.replace(/\{nome\}/g, "ragazze"))}`;
+    if (!link) { setServeFinestra(true); return; }
+    apriWhatsApp(link);
+    onInviato?.();
+    onChiudi();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visibile]);
 
@@ -68,7 +84,7 @@ export function MessaggioWhatsApp({ visibile, titolo, atleta, nota, modelli, onC
   const testoFinale = testo.replace(/\{nome\}/g, atleta?.nome ?? "ragazze");
 
   return (
-    <Modal visible={visibile} animationType="slide" transparent onRequestClose={onChiudi}>
+    <Modal visible={visibile && serveFinestra} animationType="slide" transparent onRequestClose={onChiudi}>
       <View style={styles.sfondo}>
         <View style={styles.carta}>
           <ScrollView contentContainerStyle={{ gap: 10 }}>
