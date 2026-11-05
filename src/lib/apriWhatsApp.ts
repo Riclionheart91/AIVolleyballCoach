@@ -18,8 +18,7 @@ function linkAppWhatsApp(url: string): string | null {
  * Apre un link WhatsApp (wa.me).
  *  - App nativa: apre il link con il sistema.
  *  - Web su telefono: si apre direttamente l'app WhatsApp (whatsapp://) dalla stessa pagina, senza passare da wa.me:
- *    cosi' non si apre nessuna scheda e quindi non ne resta una bianca. Se l'app non si apre (non installata) si
- *    ripiega sul link wa.me in una nuova scheda.
+ *    cosi' non si apre nessuna scheda e quindi non ne resta una bianca. Se WhatsApp non e' installato non succede nulla.
  *  - Web su computer: la scheda e' WhatsApp Web e resta aperta, e' li' che si preme invia.
  */
 export function apriWhatsApp(url: string) {
@@ -36,15 +35,6 @@ export function apriWhatsApp(url: string) {
     return;
   }
 
-  // Se la pagina passa in secondo piano, WhatsApp si e' aperto: niente da fare. Altrimenti, dopo un attimo, ripiego.
-  let aperto = false;
-  const alCambio = () => { if (document.visibilityState === "hidden") aperto = true; };
-  document.addEventListener("visibilitychange", alCambio);
-  window.addEventListener("pagehide", alCambio);
+  // Nessun ripiego automatico: aprire una scheda dopo l'attesa rischierebbe proprio di lasciare la pagina bianca.
   window.location.href = diretto;
-  setTimeout(() => {
-    document.removeEventListener("visibilitychange", alCambio);
-    window.removeEventListener("pagehide", alCambio);
-    if (!aperto && document.visibilityState === "visible") window.open(url, "_blank");
-  }, 2500);
 }
