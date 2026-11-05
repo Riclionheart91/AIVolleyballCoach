@@ -20,10 +20,19 @@ const AREA_SICURA = {
 // Schermate con la barra del titolo di sistema: sopra ci pensa gia' lei.
 const AREA_SICURA_CON_TITOLO = { ...AREA_SICURA, paddingTop: 0 } as object;
 
+// L'app e' sempre scura: le barre del titolo di sistema (Profilo, Impostazioni, Cambia squadra, Scouting, ...) devono
+// esserlo anche loro, altrimenti con il telefono in tema chiaro restano bianche.
+const INTESTAZIONE_SCURA = {
+  headerStyle: { backgroundColor: "#0B1220" },
+  headerTintColor: "#FFFFFF",
+  headerTitleStyle: { color: "#FFFFFF" },
+  headerShadowVisible: false,
+} as object;
+
 export default function RootLayout() {
   return (
     <AuthProvider>
-      <Stack screenOptions={{ headerShown: false, contentStyle: AREA_SICURA }}>
+      <Stack screenOptions={{ headerShown: false, contentStyle: AREA_SICURA, ...INTESTAZIONE_SCURA }}>
         <Stack.Screen name="login" />
         <Stack.Screen name="crea-squadra" />
         <Stack.Screen name="apri-stagione" />
@@ -33,7 +42,7 @@ export default function RootLayout() {
         <Stack.Screen name="invito-presidente/[token]" />
         <Stack.Screen name="accesso/[token]" />
         <Stack.Screen name="seleziona-squadra" options={{ contentStyle: AREA_SICURA_CON_TITOLO, headerShown: true, title: "Cambia squadra", presentation: "modal" }} />
-        <Stack.Screen name="(tabs)" options={{ contentStyle: {} }} />
+        <Stack.Screen name="(tabs)" options={{ contentStyle: { backgroundColor: "#0B1220" } }} />
         <Stack.Screen name="atleta/[id]" />
         <Stack.Screen name="esercizio/[id]" />
         <Stack.Screen name="allenamento/[id]" />
