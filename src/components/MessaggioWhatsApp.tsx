@@ -18,6 +18,20 @@ export function numeroWhatsApp(telefono: string | null): string | null {
   return n.length >= 10 && n.length <= 15 ? n : null;
 }
 
+/** Nome di battesimo di chi sta mandando il messaggio (account Google, altrimenti l'inizio dell'email). */
+export function nomeFirmatario(session: { user: { user_metadata?: unknown; email?: string | null } } | null | undefined): string {
+  const meta = (session?.user.user_metadata ?? {}) as { full_name?: string; name?: string };
+  return (meta.full_name || meta.name || session?.user.email?.split("@")[0] || "").trim().split(/\s+/)[0];
+}
+
+/** Link wa.me alla chat con l'atleta e il messaggio gia' scritto e firmato, oppure null se non ha un numero valido. */
+export function linkChatAtleta(atleta: Athlete, testoModello: string, firmatario: string): string | null {
+  const numero = numeroWhatsApp(atleta.telefono);
+  if (!numero) return null;
+  const firmato = firmatario ? `${testoModello.replace(/\s+$/, "")}\n— ${firmatario}` : testoModello;
+  return `https://wa.me/${numero}?text=${encodeURIComponent(firmato.replace(/\{nome\}/g, atleta.nome))}`;
+}
+
 /**
  * Messaggio WhatsApp precompilato e modificabile. Due usi:
  *  - con `atleta`: scrive a una persona, al numero in anagrafica ("{nome}" diventa il suo nome);
@@ -35,8 +49,7 @@ export function MessaggioWhatsApp({ visibile, titolo, atleta, nota, modelli, onC
   const [testo, setTesto] = useState("");
 
   // Il messaggio e' firmato con il nome di battesimo di chi lo sta mandando (account Google, altrimenti l'inizio dell'email).
-  const meta = (session?.user.user_metadata ?? {}) as { full_name?: string; name?: string };
-  const firmatario = (meta.full_name || meta.name || session?.user.email?.split("@")[0] || "").trim().split(/\s+/)[0];
+  const firmatario = nomeFirmatario(session);
   const conFirma = (t: string) => (firmatario ? `${t.replace(/\s+$/, "")}\n— ${firmatario}` : t);
   // Il commento della partita lascia uno spazio fra il risultato e la firma, da riempire.
   const nuovoTesto = (t: string) => (t.endsWith("\n\n") ? `${t}\n${firmatario ? `— ${firmatario}` : ""}` : conFirma(t));

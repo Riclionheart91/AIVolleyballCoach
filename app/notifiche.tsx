@@ -10,16 +10,30 @@ import type { Athlete } from "@/src/types/database";
 import { brand } from "@/src/config";
 import { TitoloGrande } from "@/src/components/TitoloGrande";
 import { RinvioPromemoria } from "@/src/components/RinvioPromemoria";
-import { MessaggioWhatsApp } from "@/src/components/MessaggioWhatsApp";
+import { MessaggioWhatsApp, linkChatAtleta, nomeFirmatario } from "@/src/components/MessaggioWhatsApp";
+import { apriWhatsApp } from "@/src/lib/apriWhatsApp";
 import { promemoriaCertificato, resetAccesso } from "@/src/lib/messaggiWhatsApp";
 
 export default function CentroNotifiche() {
-  const { team, puoScrivere } = useAuth();
+  const { team, puoScrivere, session } = useAuth();
   const [notifiche, setNotifiche] = useState<Notifica[]>([]);
   const [caricamento, setCaricamento] = useState(true);
   const [whatsapp, setWhatsapp] = useState<Notifica | null>(null);
   const [resetPronto, setResetPronto] = useState<ResetConfermato | null>(null);
   const [inCorsoId, setInCorsoId] = useState<string | null>(null);
+
+  /**
+   * "Avvisa su WhatsApp": apre subito la chat con l'atleta e il messaggio gia' scritto, senza finestre intermedie.
+   * Se l'atleta non ha un numero valido si apre la finestra che spiega cosa manca.
+   */
+  function avvisaCertificato(item: Notifica) {
+    if (!team || !item.atleta || !item.scadenza) return;
+    const link = linkChatAtleta(item.atleta, promemoriaCertificato(team.nome, item.scadenza), nomeFirmatario(session));
+    if (!link) { setWhatsapp(item); return; }
+    apriWhatsApp(link);
+    // Mandato l'avviso la notifica sparisce (e torna 7 giorni prima della scadenza).
+    nascondiAvvisoCertificato(item.atleta.id, item.scadenza).then(carica, carica);
+  }
 
   const carica = useCallback(async () => {
     if (!team) return;
@@ -101,7 +115,7 @@ export default function CentroNotifiche() {
             </View>
           )}
           {item.tipo === "certificato_medico" && item.atleta && (
-            <Pressable style={styles.bottoneWhatsapp} onPress={() => setWhatsapp(item)} hitSlop={6}>
+            <Pressable style={styles.bottoneWhatsapp} onPress={() => avvisaCertificato(item)} hitSlop={6}>
               <Text style={styles.bottoneWhatsappTesto}>Avvisa su WhatsApp</Text>
             </Pressable>
           )}
