@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { View, Text, Pressable, StyleSheet, Modal, ScrollView, TextInput, Linking, Platform } from "react-native";
+import { View, Text, Pressable, StyleSheet, Modal, ScrollView, TextInput } from "react-native";
+import { apriWhatsApp } from "@/src/lib/apriWhatsApp";
 import { brand } from "@/src/config";
 import { useAuth } from "@/src/context/AuthContext";
 import type { Athlete } from "@/src/types/database";
@@ -17,19 +18,16 @@ export function numeroWhatsApp(telefono: string | null): string | null {
   return n.length >= 10 && n.length <= 15 ? n : null;
 }
 
-function apriLink(url: string) {
-  if (Platform.OS === "web") window.open(url, "_blank", "noopener");
-  else Linking.openURL(url);
-}
-
 /**
  * Messaggio WhatsApp precompilato e modificabile. Due usi:
  *  - con `atleta`: scrive a una persona, al numero in anagrafica ("{nome}" diventa il suo nome);
  *  - senza `atleta`: apre WhatsApp col testo e si sceglie il gruppo della squadra.
  * Niente invio automatico: l'ultimo tocco ("invia") resta in WhatsApp, a chi scrive.
  */
-export function MessaggioWhatsApp({ visibile, titolo, atleta, nota, modelli, onChiudi }: {
+export function MessaggioWhatsApp({ visibile, titolo, atleta, nota, modelli, onChiudi, onInviato }: {
   visibile: boolean; titolo: string; atleta?: Athlete | null;
+  /** Chiamata quando si preme il pulsante che apre WhatsApp (il messaggio e' stato "mandato"). */
+  onInviato?: () => void;
   /** Senza atleta si sceglie la chat in WhatsApp: questa e' la spiegazione sotto il pulsante. */
   nota?: string; modelli: ModelloMessaggio[]; onChiudi: () => void;
 }) {
@@ -47,6 +45,11 @@ export function MessaggioWhatsApp({ visibile, titolo, atleta, nota, modelli, onC
     if (visibile) setTesto(nuovoTesto(modelli[0]?.testo ?? ""));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visibile]);
+
+  function apriLink(url: string) {
+    apriWhatsApp(url);
+    onInviato?.();
+  }
 
   const numero = atleta ? numeroWhatsApp(atleta.telefono) : null;
   const testoFinale = testo.replace(/\{nome\}/g, atleta?.nome ?? "ragazze");

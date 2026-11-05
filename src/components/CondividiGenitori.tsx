@@ -2,14 +2,12 @@ import { useState } from "react";
 import { View, Text, Pressable, StyleSheet, Modal, ScrollView, ActivityIndicator, Linking, Platform, Share, type StyleProp, type ViewStyle } from "react-native";
 import { brand } from "@/src/config";
 import { CodiceQr } from "@/src/components/CodiceQr";
+import { apriWhatsApp } from "@/src/lib/apriWhatsApp";
 import {
   cambiaLinkGenitori, linkGenitori, messaggioGenitori, ottieniLinkGenitori, revocaLinkGenitori, type LinkGenitori,
 } from "@/src/services/liveGenitori";
 
-function apriLink(url: string) {
-  if (Platform.OS === "web") window.open(url, "_blank", "noopener");
-  else Linking.openURL(url);
-}
+const apriLink = apriWhatsApp;
 
 function oraScadenza(iso: string): string {
   try { return new Date(iso).toLocaleString("it-IT", { weekday: "short", hour: "2-digit", minute: "2-digit" }); } catch { return ""; }
