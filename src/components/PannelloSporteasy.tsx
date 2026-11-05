@@ -13,11 +13,9 @@ const ETICHETTA_TIPO: Record<Tipo, string> = { allenamento: "Allenamento", parti
 interface ScelteRiga { valore: Tipo; manuale: boolean }
 
 /**
- * Pannello di sincronizzazione SportEasy, condiviso tra la tab
- * Allenamenti e la tab Partite: il calendario importa entrambe le
- * cose, quindi il pulsante deve essere raggiungibile da entrambe e
- * non solo da una (prima stava solo in Partite, dentro una sezione
- * chiusa di default — praticamente invisibile).
+ * Pannello di sincronizzazione SportEasy. Sta solo in Impostazioni:
+ * il calendario importa allenamenti e partite insieme, quindi un unico
+ * punto basta (prima era duplicato nelle tab Allenamenti e Partite).
  */
 export function PannelloSporteasy({ teamId, onSincronizzato }: { teamId: string; onSincronizzato?: () => void }) {
   const [integrazione, setIntegrazione] = useState<TeamIntegration | null>(null);

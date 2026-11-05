@@ -9,6 +9,7 @@ import { TitoloGrande } from "@/src/components/TitoloGrande";
 import { etichetteDimensioneTesto, leggiScelta, salvaScelta, type ScelteDimensioneTesto } from "@/src/lib/dimensioneTesto";
 import { avvisa } from "@/src/lib/confermaAzione";
 import { leggiImpostazioniNotifiche, salvaImpostazioniNotifiche, IMPOSTAZIONI_NOTIFICHE_DEFAULT, type ImpostazioniNotificheEsercizio } from "@/src/lib/impostazioniEsercizio";
+import { PannelloSporteasy } from "@/src/components/PannelloSporteasy";
 import {
   pushCertificatiSupportato,
   statoAbbonamentoPushCertificati,
@@ -222,14 +223,8 @@ export default function Impostazioni() {
         </View>
       )}
 
-      <View style={styles.card}>
-        <Text style={styles.sezioneTitolo}>Integrazione SportEasy</Text>
-        <Text style={styles.nota}>Link calendario iCal della squadra (SportEasy → Impostazioni squadra → Esporta calendario). La sincronizzazione vera e propria si lancia dalla tab Partite.</Text>
-        <TextInput style={styles.input} placeholder="webcal://calendar.sporteasy.net/..." placeholderTextColor={brand.colors.muted} autoCapitalize="none" value={linkSporteasy} onChangeText={setLinkSporteasy} editable={puoScrivere} />
-        {puoScrivere && (
-          <Pressable style={styles.bottone} onPress={salvaSporteasy}><Text style={styles.bottoneTesto}>Salva link</Text></Pressable>
-        )}
-      </View>
+      {/* Un solo punto per SportEasy: link del calendario e sincronizzazione di allenamenti e partite. */}
+      {puoScrivere && team && <PannelloSporteasy teamId={team.id} />}
 
       {puoScrivere && (
         <View style={styles.card}>

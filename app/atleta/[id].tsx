@@ -11,7 +11,8 @@ import { TempoDiGiocoAtleta } from "@/src/components/TempoDiGioco";
 import { TitoloGrande } from "@/src/components/TitoloGrande";
 import { brand, ruoliCampo } from "@/src/config";
 import type { Athlete, RuoloCampo } from "@/src/types/database";
-import { TastoCestino } from "@/src/components/TastoCestino";
+import { Ionicons } from "@expo/vector-icons";
+import { AccessoAtleta } from "@/src/components/AccessoAtleta";
 
 export default function SchedaAtleta() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -127,16 +128,6 @@ export default function SchedaAtleta() {
             <Pressable onPress={tornaIndietro} hitSlop={12} style={styles.bersaglio}>
               <Text style={styles.indietro}>‹ Rosa</Text>
             </Pressable>
-            {inModifica && puoScrivere && (
-              <View style={{ flexDirection: "row", gap: 8 }}>
-                {atleta.status === "attiva" ? (
-                  <Pressable onPress={chiediArchiviazione} style={styles.pillSecondaria}><Text style={styles.pillSecondariaTesto}>Archivia</Text></Pressable>
-                ) : (
-                  <Pressable onPress={chiediRipristino} style={styles.pillSecondaria}><Text style={styles.pillSecondariaTesto}>Ripristina</Text></Pressable>
-                )}
-                <TastoCestino onPress={chiediEliminazione} />
-              </View>
-            )}
           </View>
         </View>
       </View>
@@ -171,6 +162,27 @@ export default function SchedaAtleta() {
             <Pressable style={styles.bottone} onPress={salva} disabled={salvataggio || !nome.trim() || !cognome.trim()}>
               {salvataggio ? <ActivityIndicator color="#000" /> : <Text style={styles.bottoneTesto}>Salva</Text>}
             </Pressable>
+
+            {/* Azioni che cambiano lo stato dell'atleta: in fondo, lontane dal pulsante Salva. Archiviata o eliminata
+                perde l'accesso all'app (vedi la migrazione 0103). */}
+            {puoScrivere && (
+              <View style={styles.zonaAzioni}>
+                <Text style={styles.nota}>
+                  {atleta.status === "attiva"
+                    ? "Se l'atleta lascia la squadra, archiviala: resta lo storico ma perde l'accesso all'app."
+                    : "Questa atleta è archiviata: non ha accesso all'app. Ripristinandola torna in rosa (l'accesso va riattivato con un nuovo invito)."}
+                </Text>
+                {atleta.status === "attiva" ? (
+                  <Pressable onPress={chiediArchiviazione} style={styles.pillSecondaria}><Text style={styles.pillSecondariaTesto}>Archivia atleta</Text></Pressable>
+                ) : (
+                  <Pressable onPress={chiediRipristino} style={styles.pillSecondaria}><Text style={styles.pillSecondariaTesto}>Ripristina atleta</Text></Pressable>
+                )}
+                <Pressable onPress={chiediEliminazione} style={styles.pillElimina} accessibilityLabel="Elimina definitivamente">
+                  <Ionicons name="trash-outline" size={16} color={brand.colors.error} />
+                  <Text style={styles.elimina}>Elimina definitivamente</Text>
+                </Pressable>
+              </View>
+            )}
           </>
         ) : (
           <>
@@ -215,6 +227,10 @@ export default function SchedaAtleta() {
                 <RigaSolaLettura etichetta="Email" valore={atleta.email_contatto} />
                 <RigaSolaLettura etichetta="Note" valore={atleta.note_personali} ultima />
               </View>
+            )}
+
+            {puoScrivere && team && (
+              <AccessoAtleta teamId={team.id} nomeSquadra={team.nome} atleta={atleta} />
             )}
 
             <TempoDiGiocoAtleta teamId={atleta.team_id} athleteId={atleta.id} mostraConfronto={puoScrivere || puoVedereAnalisi} />
@@ -279,6 +295,9 @@ const styles = StyleSheet.create({
   scroll: { padding: 16, paddingBottom: 48 },
   bersaglio: { minHeight: 44, justifyContent: "center" },
   indietro: { color: brand.colors.brand, fontWeight: "600", fontSize: 17 },
+  zonaAzioni: { marginTop: 24, paddingTop: 16, borderTopWidth: 1, borderTopColor: brand.colors.border, gap: 10, alignItems: "flex-start" },
+  nota: { color: brand.colors.muted, fontSize: 12 },
+  pillElimina: { flexDirection: "row", alignItems: "center", gap: 6, minHeight: 36, paddingHorizontal: 16, borderRadius: 999, borderWidth: 1, borderColor: brand.colors.error },
   pillSecondaria: { minHeight: 36, paddingHorizontal: 16, borderRadius: 999, backgroundColor: brand.colors.surfaceTertiary, alignItems: "center", justifyContent: "center" },
   pillSecondariaTesto: { color: brand.colors.onSurface, fontWeight: "600", fontSize: 15 },
   elimina: { color: brand.colors.error, fontWeight: "600", fontSize: 15 },

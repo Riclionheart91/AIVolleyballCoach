@@ -4,7 +4,6 @@ import { router, useFocusEffect } from "expo-router";
 import { useAuth } from "@/src/context/AuthContext";
 import { andamentoSquadraPartite, analisiPersonePartita, convertiPartitaInAllenamento, generaCommentoPartitaAI, creaMatch, eliminaPartita, impostaLuogoPartita, elencaPartite, elencaSet, ricominciaPartita, rendimentoRotazioniPartita, type AndamentoSquadraPartiteVoce, type RendimentoRotazionePartita } from "@/src/services/matches";
 import { elencaCampionati, riassegnaCampionatoPartita } from "@/src/services/championships";
-import { PannelloSporteasy } from "@/src/components/PannelloSporteasy";
 import { brand } from "@/src/config";
 import type { Campionato, Match, MatchSet } from "@/src/types/database";
 import { avvisa, confermaAzione } from "@/src/lib/confermaAzione";
@@ -628,8 +627,6 @@ export default function Partite() {
               <Text style={styles.bottoneTesto}>Crea partita (poi convocati e formazione)</Text>
             </Pressable>
           </View>
-
-          <PannelloSporteasy teamId={team!.id} onSincronizzato={carica} />
 
         </>
       )}

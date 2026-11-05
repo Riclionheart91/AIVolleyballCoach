@@ -9,7 +9,7 @@ import {
 } from "@/src/services/trainings";
 import { confermaAzione, avvisa } from "@/src/lib/confermaAzione";
 import { FabAggiungi } from "@/src/components/Fab";
-import { PannelloSporteasy } from "@/src/components/PannelloSporteasy";
+import { MenuAzioni } from "@/src/components/MenuAzioni";
 import { PopupForm } from "@/src/components/PopupForm";
 import { TitoloGrande } from "@/src/components/TitoloGrande";
 import { brand } from "@/src/config";
@@ -189,15 +189,14 @@ export default function Allenamenti() {
           <Pressable style={styles.pillSecondaria} onPress={() => apriModifica(item)}>
             <Text style={styles.pillSecondariaTesto}>Modifica</Text>
           </Pressable>
-        </View>
-        <View style={styles.rigaLinkCard}>
-          <Pressable style={styles.linkAzione} onPress={() => chiediConversione(item)} accessibilityLabel="È una partita">
-            <Text style={styles.linkAzioneTesto}>🏐 È una partita</Text>
-          </Pressable>
-          <Pressable style={styles.linkAzione} onPress={() => onArchiviaSingolo(item, true)} accessibilityLabel="Archivia">
-            <Text style={styles.linkAzioneTesto}>🗄 Archivia</Text>
-          </Pressable>
-          <TastoCestino onPress={() => chiediEliminazione(item)} stile={{ marginTop: 4 }} />
+          <MenuAzioni
+            titolo={item.titolo}
+            voci={[
+              { etichetta: "È una partita", icona: "tennisball-outline", onPress: () => chiediConversione(item) },
+              { etichetta: "Archivia", icona: "archive-outline", onPress: () => onArchiviaSingolo(item, true) },
+              { etichetta: "Elimina", icona: "trash-outline", distruttiva: true, onPress: () => chiediEliminazione(item) },
+            ]}
+          />
         </View>
       </View>
     );
@@ -214,26 +213,23 @@ export default function Allenamenti() {
           <View style={{ marginBottom: 12, gap: 14 }}>
             <TitoloGrande titolo="Allenamenti" />
 
-            {puoScrivere && team && <PannelloSporteasy teamId={team.id} onSincronizzato={carica} />}
-
-            <View style={styles.barraMese}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+            <View style={[styles.barraMese, { flex: 1 }]}>
               <Pressable style={styles.frecciaArea} onPress={() => cambiaMese(-1)} hitSlop={10}><Text style={styles.frecciaMese}>‹</Text></Pressable>
               <Text style={styles.etichettaMese}>
                 {meseVisualizzato.toLocaleDateString("it-IT", { month: "long", year: "numeric" })} · {allenamenti.length}
               </Text>
               <Pressable style={styles.frecciaArea} onPress={() => cambiaMese(1)} hitSlop={10}><Text style={styles.frecciaMese}>›</Text></Pressable>
             </View>
-
             {puoScrivere && (
-              <View style={styles.rigaArchivio}>
-                <Pressable style={styles.linkArchivioArea} onPress={() => setMostraArchivio(!mostraArchivio)}>
-                  <Text style={styles.linkArchivio}>{mostraArchivio ? "▾" : "▸"} Archivio ({archiviati.length})</Text>
-                </Pressable>
-                <Pressable style={styles.linkArchivioArea} onPress={onArchiviaPassati}>
-                  <Text style={styles.linkArchivio}>Archivia passati</Text>
-                </Pressable>
-              </View>
+              <MenuAzioni
+                voci={[
+                  { etichetta: mostraArchivio ? `Nascondi l'archivio (${archiviati.length})` : `Mostra l'archivio (${archiviati.length})`, icona: "file-tray-stacked-outline", onPress: () => setMostraArchivio(!mostraArchivio) },
+                  { etichetta: "Archivia gli allenamenti passati", icona: "archive-outline", onPress: onArchiviaPassati },
+                ]}
+              />
             )}
+            </View>
 
             {mostraArchivio && archiviati.length > 0 && (
               <View style={styles.gruppoArchiviati}>
@@ -267,7 +263,7 @@ export default function Allenamenti() {
             {elenco.length > 0 && <Text style={styles.titoloSezione}>{prossimo ? "Altri del mese" : "Del mese"}</Text>}
           </View>
         }
-        ListEmptyComponent={allenamenti.length === 0 ? <Text style={styles.vuoto}>Nessun allenamento in questo mese. Usa le frecce per cambiare mese, il pulsante + per aggiungerne uno, oppure sincronizza SportEasy qui sopra.</Text> : null}
+        ListEmptyComponent={allenamenti.length === 0 ? <Text style={styles.vuoto}>Nessun allenamento in questo mese. Usa le frecce per cambiare mese, il pulsante + per aggiungerne uno, oppure sincronizza SportEasy dalle Impostazioni.</Text> : null}
         renderItem={({ item, index }) => {
           const d = new Date(item.data);
           return (

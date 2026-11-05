@@ -16,6 +16,7 @@ import type { Athlete } from "@/src/types/database";
 import { confermaAzione, avvisa } from "@/src/lib/confermaAzione";
 import { brand } from "@/src/config";
 import { TastoCestino } from "@/src/components/TastoCestino";
+import { MenuAzioni } from "@/src/components/MenuAzioni";
 
 const ETICHETTE_QUANDO: Record<string, string> = {
   riscaldamento: "nel riscaldamento",
@@ -380,14 +381,16 @@ export function PianiIndividuali({ teamId, athleteId, nomePersona, ruolo, modifi
             <Pressable style={styles.bottoneNota} onPress={() => setMostraIstruzioni(!mostraIstruzioni)}>
               <Text style={styles.bottoneNotaTesto}>{mostraIstruzioni ? "−" : "+"}</Text>
             </Pressable>
-            <Pressable style={styles.bottoneAI} onPress={onGenera} disabled={generando}>
-              {generando
-                ? <ActivityIndicator color={brand.colors.brandSecondary} />
-                : <Text style={styles.bottoneAITesto}>✨ Crea con l'AI</Text>}
-            </Pressable>
-            <Pressable style={styles.bottoneAI} onPress={async () => { await caricaSquadra(); setNuovoPiano(true); }}>
-              <Text style={styles.bottoneAITesto}>✍️ Piano a mano</Text>
-            </Pressable>
+            <MenuAzioni
+              titolo="Nuovo piano individuale"
+              testoPulsante="Nuovo piano"
+              occupato={generando}
+              stile={{ flex: 1 }}
+              voci={[
+                { etichetta: "Crea con l'AI", icona: "sparkles-outline", sotto: "L'AI propone gli esercizi in base ai dati dell'atleta", onPress: onGenera },
+                { etichetta: "Scrivilo a mano", icona: "create-outline", sotto: "Scegli tu atleta ed esercizi", onPress: async () => { await caricaSquadra(); setNuovoPiano(true); } },
+              ]}
+            />
           </View>
         </>
       )}

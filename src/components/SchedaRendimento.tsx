@@ -7,6 +7,7 @@ import { impostaObiettivo, leggiSchedaAtleta, rimuoviObiettivo, type RigaScheda 
 import { avvisa } from "@/src/lib/confermaAzione";
 import { brand } from "@/src/config";
 import type { Fondamentale } from "@/src/types/database";
+import { Ionicons } from "@expo/vector-icons";
 
 /** Colore della barra secondo il livello raggiunto: rende il colpo d'occhio immediato. */
 function coloreLivello(valore: number): string {
@@ -246,6 +247,7 @@ export function SchedaRendimento({ athleteId, nomeAtleta, modificabile, soloRiep
                     catch (e) { avvisa("Errore", (e as Error).message); }
                   }}
                 >
+                  <Ionicons name="trash-outline" size={15} color={brand.colors.error} />
                   <Text style={styles.bottoneDistruttivoTesto}>Rimuovi obiettivo</Text>
                 </Pressable>
               )}
@@ -291,7 +293,7 @@ const styles = StyleSheet.create({
   input: { backgroundColor: brand.colors.surfaceTertiary, color: brand.colors.onSurface, borderRadius: 8, padding: 12 },
   bottone: { backgroundColor: brand.colors.brand, minHeight: 42, justifyContent: "center", paddingHorizontal: 16, borderRadius: 999, alignItems: "center" },
   bottoneTesto: { color: "#000", fontWeight: "700" },
-  bottoneDistruttivo: { borderColor: brand.colors.error, borderWidth: 1, minHeight: 36, justifyContent: "center", paddingHorizontal: 16, borderRadius: 999, alignItems: "center" },
+  bottoneDistruttivo: { flexDirection: "row", gap: 6, borderColor: brand.colors.error, borderWidth: 1, minHeight: 36, justifyContent: "center", paddingHorizontal: 16, borderRadius: 999, alignItems: "center" },
   bottoneDistruttivoTesto: { color: brand.colors.error, fontWeight: "700" },
   chiudi: { color: brand.colors.muted, fontSize: 13, textAlign: "center", paddingVertical: 14 },
 });

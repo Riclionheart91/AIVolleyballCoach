@@ -20,6 +20,7 @@ import { brand, fondamentali, uiStrings } from "@/src/config";
 import type { Athlete, Evaluation, EvaluationProposal, Fondamentale } from "@/src/types/database";
 import { avvisa } from "@/src/lib/confermaAzione";
 import { TitoloGrande } from "@/src/components/TitoloGrande";
+import { MenuAzioni } from "@/src/components/MenuAzioni";
 
 /** Testo dentro l'avatar: il numero di maglia, o le iniziali se manca. */
 function testoAvatar(numero: number | string | null | undefined, nome?: string | null, cognome?: string | null): string {
@@ -231,12 +232,16 @@ function SezioneValutazioneCoach({ teamId }: { teamId: string }) {
         />
 
         <View style={styles.azioni}>
-          <Pressable style={styles.bottonePrimario} onPress={onRegistra} disabled={!punteggio}>
-            <Text style={styles.bottonePrimarioTesto}>Registra valutazione</Text>
-          </Pressable>
-          <Pressable style={styles.bottoneAI} onPress={onSuggerisciAI} disabled={generandoAI || !atletaSelId}>
-            {generandoAI ? <ActivityIndicator color={brand.colors.brand} /> : <Text style={styles.bottoneAITesto}>{uiStrings.valutazioni.aiButton}</Text>}
-          </Pressable>
+          <MenuAzioni
+            titolo="Cosa vuoi fare?"
+            testoPulsante="Valuta"
+            occupato={generandoAI}
+            stile={{ flexGrow: 1 }}
+            voci={[
+              { etichetta: "Registra il punteggio", icona: "checkmark-circle-outline", sotto: punteggio ? `${fondamentale}: ${punteggio}` : "Scrivi prima il punteggio (1-10)", disattiva: !punteggio, onPress: onRegistra },
+              { etichetta: "Chiedi un suggerimento all'AI", icona: "sparkles-outline", sotto: atletaSelId ? "L'AI propone un voto: lo approvi o lo rigetti dopo" : "Scegli prima un'atleta", disattiva: !atletaSelId, onPress: onSuggerisciAI },
+            ]}
+          />
         </View>
 
         {messaggioAI && (

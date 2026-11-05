@@ -3,61 +3,47 @@ import { View, Text, TextInput, Pressable, StyleSheet, ScrollView, ActivityIndic
 import { router, useFocusEffect } from "expo-router";
 import { useAuth } from "@/src/context/AuthContext";
 import { elencaMembri, cambiaRuoloMembro, impostaPermessoScout, rimuoviMembro, RUOLI_CON_SCOUT, type MembroTeam } from "@/src/services/membri";
-import { annullaInvito, annullaInvitoLink, creaInvitoLink, elencaInvitiLink, elencaInvitiPendenti, invitaMembro, linkInvito, type InvitoLink, type RuoloStaff, type TeamInvite } from "@/src/services/teamInvites";
-import { aggiornaAtleta, elencaAtlete } from "@/src/services/athletes";
+import { annullaInvito, annullaInvitoLink, creaInvitoLink, elencaInvitiLink, elencaInvitiPendenti, linkInvito, type InvitoLink, type RuoloStaff, type TeamInvite } from "@/src/services/teamInvites";
 import { confermaAzione, avvisa } from "@/src/lib/confermaAzione";
 import { brand, etichetteRuolo } from "@/src/config";
 import { MessaggioWhatsApp } from "@/src/components/MessaggioWhatsApp";
 import { TitoloGrande } from "@/src/components/TitoloGrande";
-import { invitoAccessoAtleta, invitoStaffLink, invitoStaffPassword } from "@/src/lib/messaggiWhatsApp";
-import { creaLinkAccessoAtleta, creaLinkAccessoStaff, linkAccesso, metodoAccessoPerEmail, type MetodoAccesso } from "@/src/services/accessi";
+import { invitoStaffLink, invitoStaffPassword } from "@/src/lib/messaggiWhatsApp";
+import { creaLinkAccessoStaff, linkAccesso, type MetodoAccesso } from "@/src/services/accessi";
 import type { Athlete, Ruolo } from "@/src/types/database";
+import { Ionicons } from "@expo/vector-icons";
 
 const RUOLI_COLLABORATORE: Ruolo[] = ["allenatore", "vice_allenatore"];
 
 /**
  * Gestione della squadra: chi ha accesso e con quale profilo.
- * Separata in due parti perché rispondono a bisogni diversi —
- * i collaboratori si invitano con un link (su WhatsApp), mentre la rosa esistono già
- * in anagrafica e vanno solo collegate a un account.
+ * Qui ci sono solo i collaboratori (allenatori e vice), che si invitano con un link su WhatsApp.
+ * Le atlete si invitano dalla loro scheda (Rosa → atleta → "Accesso all'app"): un solo punto.
  */
 export default function GestioneSquadra() {
   const { team } = useAuth();
-  const [whatsappInvito, setWhatsappInvito] = useState<{ atleta: Athlete; metodo: MetodoAccesso; email: string; link: string | null } | null>(null);
   const [whatsappStaff, setWhatsappStaff] = useState<{ token: string; ruolo: RuoloStaff; modo: MetodoAccesso; email?: string } | null>(null);
-  // Metodo di accesso di ogni atleta: quello rilevato dal database (account esistente, poi dominio) e l'eventuale scelta a mano.
-  const [metodoRilevato, setMetodoRilevato] = useState<Record<string, MetodoAccesso>>({});
-  const [metodoScelto, setMetodoScelto] = useState<Record<string, MetodoAccesso>>({});
   const [metodoStaff, setMetodoStaff] = useState<MetodoAccesso>("google");
   const [emailStaff, setEmailStaff] = useState("");
   const [invitiLink, setInvitiLink] = useState<InvitoLink[]>([]);
   const [membri, setMembri] = useState<MembroTeam[]>([]);
   const [inviti, setInviti] = useState<TeamInvite[]>([]);
-  const [atlete, setAtlete] = useState<Athlete[]>([]);
   const [caricamento, setCaricamento] = useState(true);
 
   const [ruoloNuovo, setRuoloNuovo] = useState<RuoloStaff>("vice_allenatore");
 
   const [membroInModifica, setMembroInModifica] = useState<MembroTeam | null>(null);
-  const [atletaPerEmail, setAtletaPerEmail] = useState<Athlete | null>(null);
-  const [emailAtleta, setEmailAtleta] = useState("");
 
   const carica = useCallback(async () => {
     if (!team) return;
     setCaricamento(true);
     try {
-      const [m, i, a, l] = await Promise.all([
+      const [m, i, l] = await Promise.all([
         elencaMembri(team.id).catch(() => []),
         elencaInvitiPendenti(team.id).catch(() => []),
-        elencaAtlete(team.id).catch(() => []),
         elencaInvitiLink(team.id).catch(() => []),
       ]);
-      setMembri(m); setInviti(i); setAtlete(a); setInvitiLink(l);
-      const rilevati: Record<string, MetodoAccesso> = {};
-      await Promise.all(a.filter((x) => x.email_contatto?.trim()).map(async (x) => {
-        rilevati[x.id] = await metodoAccessoPerEmail(x.email_contatto!.trim()).catch(() => "google" as MetodoAccesso);
-      }));
-      setMetodoRilevato(rilevati);
+      setMembri(m); setInviti(i); setInvitiLink(l);
     } finally {
       setCaricamento(false);
     }
@@ -66,8 +52,6 @@ export default function GestioneSquadra() {
   useFocusEffect(useCallback(() => { carica(); }, [carica]));
 
   const collaboratori = membri.filter((m) => m.ruolo !== "atleta");
-  const atleteCollegate = new Set(membri.filter((m) => m.atleta_id).map((m) => m.atleta_id!));
-  const invitiPerAtleta = new Map(inviti.filter((i) => i.atleta_id).map((i) => [i.atleta_id!, i]));
 
   /** Crea il link per il ruolo scelto e apre subito WhatsApp col messaggio pronto: il contatto si sceglie li'. */
   async function creaLinkStaff() {
@@ -85,45 +69,6 @@ export default function GestioneSquadra() {
       const token = await creaInvitoLink(team.id, ruoloNuovo);
       carica();
       setWhatsappStaff({ token, ruolo: ruoloNuovo, modo: "google" });
-    } catch (e) { avvisa("Errore", (e as Error).message); }
-  }
-
-  const metodoDi = (a: Athlete): MetodoAccesso => metodoScelto[a.id] ?? metodoRilevato[a.id] ?? "google";
-
-  /** Crea il link personale (il nuovo annulla i precedenti) e apre WhatsApp col messaggio pronto. */
-  async function messaggioAtleta(a: Athlete, email: string, metodo: MetodoAccesso) {
-    if (metodo === "password") {
-      const r = await creaLinkAccessoAtleta(a.id, "password");
-      setWhatsappInvito({ atleta: a, metodo: r.metodo, email: r.email || email, link: r.token ? linkAccesso(r.token) : null });
-    } else {
-      setWhatsappInvito({ atleta: a, metodo: "google", email, link: null });
-    }
-  }
-
-  /** L'atleta ha già l'email in anagrafica: si invita con un tocco, senza ridigitarla. */
-  async function invitaAtleta(a: Athlete, email: string, metodo: MetodoAccesso = metodoDi(a)) {
-    if (!team) return;
-    try {
-      if (metodo === "password") {
-        // Email e password: nessun invito per email, entra con il link personale mandato su WhatsApp.
-        await messaggioAtleta(a, email, "password");
-        carica();
-        return;
-      }
-      await invitaMembro(team.id, email, "atleta", a.id);
-      carica();
-      avvisa("Invito creato", `${a.nome} entrerà come atleta al primo accesso con Google usando ${email}.`);
-    } catch (e) { avvisa("Errore", (e as Error).message); }
-  }
-
-  /** Se l'email manca, la si aggiunge in anagrafica e si invita di seguito: due passaggi in uno. */
-  async function salvaEmailEInvita() {
-    if (!atletaPerEmail || !emailAtleta.trim()) return;
-    try {
-      await aggiornaAtleta(atletaPerEmail.id, { email_contatto: emailAtleta.trim() });
-      const metodo = metodoScelto[atletaPerEmail.id] ?? await metodoAccessoPerEmail(emailAtleta.trim()).catch(() => "google" as MetodoAccesso);
-      await invitaAtleta(atletaPerEmail, emailAtleta.trim(), metodo);
-      setAtletaPerEmail(null); setEmailAtleta("");
     } catch (e) { avvisa("Errore", (e as Error).message); }
   }
 
@@ -204,88 +149,6 @@ export default function GestioneSquadra() {
           </Pressable>
         </View>
 
-        <View style={styles.card}>
-          <Text style={styles.sezione}>Rosa ({atlete.length})</Text>
-          <Text style={styles.nota}>Un tocco invia l'invito se l'email è già in anagrafica; altrimenti la chiede e la salva.</Text>
-          {atlete.map((a) => {
-            const collegata = atleteCollegate.has(a.id);
-            const invitata = invitiPerAtleta.get(a.id);
-            const haEmail = !!a.email_contatto?.trim();
-            // Serve a mostrare/attivare il permesso scout: le atlete non
-            // passano dal modale dei collaboratori (invito diverso), ma
-            // possono comunque tenerlo — es. un'infortunata che segue lo
-            // scouting da bordo campo invece di giocare.
-            const membro = collegata ? membri.find((x) => x.atleta_id === a.id) : undefined;
-            return (
-              <View key={a.id} style={styles.riga}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.rigaTitolo}>{a.numero_maglia ? `#${a.numero_maglia} ` : ""}{a.nome} {a.cognome}</Text>
-                  <Text style={styles.rigaSotto}>
-                    {collegata ? "account collegato" : invitata ? `invito inviato a ${invitata.email}` : haEmail ? a.email_contatto : "nessuna email in anagrafica"}
-                    {membro?.puo_scoutare ? " · scout" : ""}
-                  </Text>
-                  {!collegata && haEmail && (
-                    <View style={[styles.chipRiga, { marginTop: 4 }]}>
-                      {([["google", "Google"], ["password", "Email e password"]] as [MetodoAccesso, string][]).map(([m, et]) => (
-                        <Pressable key={m} onPress={() => setMetodoScelto((prec) => ({ ...prec, [a.id]: m }))} style={[styles.chip, metodoDi(a) === m && styles.chipAttivo]} hitSlop={4}>
-                          <Text style={[styles.chipTesto, metodoDi(a) === m && styles.chipTestoAttivo]}>{et}</Text>
-                        </Pressable>
-                      ))}
-                    </View>
-                  )}
-                </View>
-                {membro && (
-                  <Pressable
-                    style={[styles.chipScout, membro.puo_scoutare && styles.chipScoutAttivo]}
-                    onPress={async () => {
-                      if (!team) return;
-                      try { await impostaPermessoScout(team.id, membro.user_id, !membro.puo_scoutare); carica(); }
-                      catch (e) { avvisa("Errore", (e as Error).message); }
-                    }}
-                    hitSlop={6}
-                  >
-                    <Text style={[styles.chipScoutTesto, membro.puo_scoutare && styles.chipScoutTestoAttivo]}>Scout</Text>
-                  </Pressable>
-                )}
-                {!collegata && (
-                  <Pressable style={styles.chipScout} onPress={() => {
-                    const email = a.email_contatto?.trim();
-                    if (!email) { setAtletaPerEmail(a); setEmailAtleta(""); return; }
-                    messaggioAtleta(a, email, metodoDi(a)).catch((e) => avvisa("Errore", (e as Error).message));
-                  }} hitSlop={6} accessibilityLabel="Invita su WhatsApp">
-                    <Text style={styles.chipScoutTesto}>💬</Text>
-                  </Pressable>
-                )}
-                {collegata ? (
-                  <Pressable
-                    onPress={() => {
-                      const m = membri.find((x) => x.atleta_id === a.id);
-                      if (m) chiediRimozione(m);
-                    }}
-                    hitSlop={8}
-                  >
-                    <Text style={styles.azioneAnnulla}>Revoca accesso</Text>
-                  </Pressable>
-                ) : invitata ? (
-                  <Pressable onPress={async () => { await annullaInvito(invitata.id); carica(); }} hitSlop={8}>
-                    <Text style={styles.azioneAnnulla}>Annulla</Text>
-                  </Pressable>
-                ) : (
-                  <Pressable
-                    style={styles.bottonePiccolo}
-                    onPress={() => {
-                      if (haEmail) invitaAtleta(a, a.email_contatto!.trim());
-                      else { setAtletaPerEmail(a); setEmailAtleta(""); }
-                    }}
-                  >
-                    <Text style={styles.bottonePiccoloTesto}>{haEmail ? "Invita" : "+ Email"}</Text>
-                  </Pressable>
-                )}
-              </View>
-            );
-          })}
-        </View>
-
         {(invitiLink.length > 0 || inviti.filter((i) => !i.atleta_id).length > 0) && (
           <View style={styles.card}>
             <Text style={styles.sezione}>Inviti staff in attesa</Text>
@@ -314,16 +177,6 @@ export default function GestioneSquadra() {
           </View>
         )}
       </ScrollView>
-
-      {team && whatsappInvito && (
-        <MessaggioWhatsApp
-          visibile
-          titolo={`Invito all'app — ${whatsappInvito.atleta.nome} ${whatsappInvito.atleta.cognome}`}
-          atleta={whatsappInvito.atleta}
-          modelli={[{ etichetta: "Invito", testo: invitoAccessoAtleta({ squadra: team.nome, metodo: whatsappInvito.metodo, email: whatsappInvito.email, link: whatsappInvito.link }) }]}
-          onChiudi={() => setWhatsappInvito(null)}
-        />
-      )}
 
       {team && whatsappStaff && (
         <MessaggioWhatsApp
@@ -384,6 +237,7 @@ export default function GestioneSquadra() {
             )}
 
             <Pressable style={styles.bottoneDistruttivo} onPress={() => membroInModifica && chiediRimozione(membroInModifica)}>
+              <Ionicons name="trash-outline" size={16} color={brand.colors.error} />
               <Text style={styles.bottoneDistruttivoTesto}>Rimuovi dalla squadra</Text>
             </Pressable>
             <Pressable onPress={() => setMembroInModifica(null)}><Text style={styles.chiudi}>Chiudi</Text></Pressable>
@@ -391,28 +245,6 @@ export default function GestioneSquadra() {
         </View>
       </Modal>
 
-      <Modal visible={!!atletaPerEmail} animationType="fade" transparent onRequestClose={() => setAtletaPerEmail(null)}>
-        <View style={styles.sfondoPopup}>
-          <View style={styles.cartaPopup}>
-            <Text style={styles.titoloPopup}>Email di {atletaPerEmail?.nome} {atletaPerEmail?.cognome}</Text>
-            <Text style={styles.nota}>Viene salvata in anagrafica e usata subito per l'invito.</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Email Google"
-              placeholderTextColor={brand.colors.muted}
-              autoCapitalize="none"
-              keyboardType="email-address"
-              value={emailAtleta}
-              onChangeText={setEmailAtleta}
-              autoFocus
-            />
-            <Pressable style={styles.bottone} onPress={salvaEmailEInvita} disabled={!emailAtleta.trim()}>
-              <Text style={styles.bottoneTesto}>Salva e invita</Text>
-            </Pressable>
-            <Pressable onPress={() => setAtletaPerEmail(null)}><Text style={styles.chiudi}>Annulla</Text></Pressable>
-          </View>
-        </View>
-      </Modal>
     </View>
   );
 }
@@ -452,7 +284,7 @@ const styles = StyleSheet.create({
   testoPermesso: { color: brand.colors.onSurface, fontSize: 14, fontWeight: "600" },
   bottone: { backgroundColor: brand.colors.brand, minHeight: 42, paddingHorizontal: 16, paddingVertical: 6, borderRadius: 999, alignItems: "center", justifyContent: "center" },
   bottoneTesto: { color: "#000", fontWeight: "700" },
-  bottoneDistruttivo: { backgroundColor: brand.colors.surfaceTertiary, minHeight: 36, paddingHorizontal: 16, paddingVertical: 6, borderRadius: 999, alignItems: "center", justifyContent: "center" },
+  bottoneDistruttivo: { flexDirection: "row", gap: 6, backgroundColor: brand.colors.surfaceTertiary, minHeight: 36, paddingHorizontal: 16, paddingVertical: 6, borderRadius: 999, alignItems: "center", justifyContent: "center" },
   bottoneDistruttivoTesto: { color: brand.colors.error, fontWeight: "700" },
   sfondoPopup: { flex: 1, backgroundColor: "rgba(0,0,0,0.55)", justifyContent: "center", padding: 24 },
   cartaPopup: { backgroundColor: brand.colors.surfaceSecondary, borderRadius: 18, padding: 20, gap: 10, width: "100%", maxWidth: 480, alignSelf: "center" },

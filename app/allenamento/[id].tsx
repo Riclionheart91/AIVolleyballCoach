@@ -11,6 +11,7 @@ import { TitoloGrande } from "@/src/components/TitoloGrande";
 import { brand, fasiAllenamento } from "@/src/config";
 import { supabaseClient } from "@/src/lib/supabase";
 import type { Athlete, Exercise, Training } from "@/src/types/database";
+import { Ionicons } from "@expo/vector-icons";
 
 export default function PianoAllenamento() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -477,7 +478,7 @@ export default function PianoAllenamento() {
                               <Text style={[styles.tastoComandoTesto, posInFase === dellaFase.length - 1 && styles.tastoSpento]}>▼ Giù</Text>
                             </Pressable>
                             <Pressable style={styles.tastoComandoDistruttivo} onPress={() => rimuoviEsercizio(i)}>
-                              <Text style={styles.tastoComandoDistruttivoTesto}>Rimuovi</Text>
+                              <Ionicons name="trash-outline" size={18} color={brand.colors.error} />
                             </Pressable>
                           </View>
 

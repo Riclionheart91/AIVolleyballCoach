@@ -32,6 +32,7 @@ import { creaInvitoLink, linkInvito } from "@/src/services/teamInvites";
 import { creaInvitoPresidenteLink, linkInvitoPresidente } from "@/src/services/societa";
 import type { Athlete } from "@/src/types/database";
 import { Ionicons } from "@expo/vector-icons";
+import { TastoCestino } from "@/src/components/TastoCestino";
 
 /**
  * L'organico della società: qui il presidente vede tutte le squadre del
@@ -346,9 +347,7 @@ export default function GestioneSocieta() {
                 <Text style={styles.dettaglioSquadra}>{p.nome}</Text>
                 {p.nome !== p.email && <Text style={styles.nota}>{p.email}</Text>}
               </View>
-              <Pressable onPress={() => onRimuoviPresidente(p)} style={styles.bottoneRimuoviPresidente}>
-                <Text style={styles.bottoneRimuoviPresidenteTesto}>Rimuovi</Text>
-              </Pressable>
+              <TastoCestino etichetta="Rimuovi presidente" onPress={() => onRimuoviPresidente(p)} />
             </View>
           ))}
           <Text style={styles.nota}>Aggiungerne uno non toglie il ruolo a chi c'è già: possono coesistere più presidenti.</Text>
@@ -445,6 +444,7 @@ export default function GestioneSocieta() {
                 </Pressable>
                 {s.allenatore_email && (
                   <Pressable style={styles.bottoneSecondarioDistruttivo} onPress={() => onRimuoviCollaboratore(s, "allenatore")}>
+                    <Ionicons name="trash-outline" size={15} color={brand.colors.error} />
                     <Text style={styles.bottoneSecondarioDistruttivoTesto}>Rimuovi allenatore</Text>
                   </Pressable>
                 )}
@@ -453,6 +453,7 @@ export default function GestioneSocieta() {
                 </Pressable>
                 {s.vice_allenatore_email && (
                   <Pressable style={styles.bottoneSecondarioDistruttivo} onPress={() => onRimuoviCollaboratore(s, "vice_allenatore")}>
+                    <Ionicons name="trash-outline" size={15} color={brand.colors.error} />
                     <Text style={styles.bottoneSecondarioDistruttivoTesto}>Rimuovi vice</Text>
                   </Pressable>
                 )}
