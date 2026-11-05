@@ -312,12 +312,12 @@ export default function Atlete() {
               ))}
             </View>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled" style={styles.filtriScroll} contentContainerStyle={styles.filtriRiga}>
-              <Pressable onPress={() => setFiltroRuolo(null)} hitSlop={{ top: 4, bottom: 4 }} style={[styles.chipFiltro, filtroRuolo === null && styles.chipAttivo]}>
-                <Text style={[styles.chipTesto, filtroRuolo === null && styles.chipTestoAttivo]}>Tutte</Text>
+              <Pressable onPress={() => setFiltroRuolo(null)} hitSlop={{ top: 8, bottom: 8 }} style={[styles.chipFiltro, filtroRuolo === null && styles.chipAttivo]}>
+                <Text style={[styles.chipTesto, styles.chipFiltroTesto, filtroRuolo === null && styles.chipTestoAttivo]}>Tutte</Text>
               </Pressable>
               {ruoliCampo.map((r) => (
-                <Pressable key={r} onPress={() => setFiltroRuolo(filtroRuolo === r ? null : r)} hitSlop={{ top: 4, bottom: 4 }} style={[styles.chipFiltro, filtroRuolo === r && styles.chipAttivo]}>
-                  <Text style={[styles.chipTesto, filtroRuolo === r && styles.chipTestoAttivo]}>{r}</Text>
+                <Pressable key={r} onPress={() => setFiltroRuolo(filtroRuolo === r ? null : r)} hitSlop={{ top: 8, bottom: 8 }} style={[styles.chipFiltro, filtroRuolo === r && styles.chipAttivo]}>
+                  <Text style={[styles.chipTesto, styles.chipFiltroTesto, filtroRuolo === r && styles.chipTestoAttivo]}>{r}</Text>
                 </Pressable>
               ))}
             </ScrollView>
@@ -325,8 +325,8 @@ export default function Atlete() {
               <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled" style={styles.filtriScroll} contentContainerStyle={styles.filtriRiga}>
                 <Text style={styles.etichettaFiltro}>Certificato</Text>
                 {opzioniCertificato.map((o) => (
-                  <Pressable key={o.valore} onPress={() => setFiltroCertificato(filtroCertificato === o.valore ? null : o.valore)} hitSlop={{ top: 4, bottom: 4 }} style={[styles.chipFiltro, filtroCertificato === o.valore && styles.chipAttivo]}>
-                    <Text style={[styles.chipTesto, filtroCertificato === o.valore && styles.chipTestoAttivo]}>{o.etichetta}</Text>
+                  <Pressable key={o.valore} onPress={() => setFiltroCertificato(filtroCertificato === o.valore ? null : o.valore)} hitSlop={{ top: 8, bottom: 8 }} style={[styles.chipFiltro, filtroCertificato === o.valore && styles.chipAttivo]}>
+                    <Text style={[styles.chipTesto, styles.chipFiltroTesto, filtroCertificato === o.valore && styles.chipTestoAttivo]}>{o.etichetta}</Text>
                   </Pressable>
                 ))}
               </ScrollView>
@@ -466,12 +466,12 @@ const styles = StyleSheet.create({
   ricercaInput: { flex: 1, color: brand.colors.onSurface, fontSize: 16, minHeight: 44, paddingVertical: 8 },
   ricercaPulisci: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },
   ricercaPulisciTesto: { color: brand.colors.muted, fontSize: 15, fontWeight: "700" },
-  filtriScroll: { flexGrow: 0, marginBottom: 8 },
-  filtriRiga: { flexDirection: "row", alignItems: "center", gap: 8, paddingRight: 8 },
-  etichettaFiltro: { color: brand.colors.muted, fontSize: 12, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.6, marginRight: 2 },
-  chipFiltro: { paddingHorizontal: 14, minHeight: 36, borderRadius: 999, backgroundColor: brand.colors.surfaceTertiary, alignItems: "center", justifyContent: "center" },
+  filtriScroll: { flexGrow: 0, marginBottom: 6 },
+  filtriRiga: { flexDirection: "row", alignItems: "center", gap: 6, paddingRight: 8 },
+  etichettaFiltro: { color: brand.colors.muted, fontSize: 11, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.6, marginRight: 2 },
+  chipFiltro: { paddingHorizontal: 11, minHeight: 28, borderRadius: 999, backgroundColor: brand.colors.surfaceTertiary, alignItems: "center", justifyContent: "center" },
   selettoreVista: { flexDirection: "row", backgroundColor: brand.colors.surfaceTertiary, borderRadius: 12, padding: 3, marginBottom: 10 },
-  vistaOpzione: { flex: 1, minHeight: 38, borderRadius: 9, alignItems: "center", justifyContent: "center" },
+  vistaOpzione: { flex: 1, minHeight: 32, borderRadius: 9, alignItems: "center", justifyContent: "center" },
   vistaOpzioneAttiva: { backgroundColor: brand.colors.brand },
   vistaTesto: { color: brand.colors.onSurfaceSecondary, fontSize: 14, fontWeight: "600" },
   vistaTestoAttivo: { color: "#000", fontWeight: "700" },
@@ -520,6 +520,7 @@ const styles = StyleSheet.create({
   selettoreRiga: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   chip: { paddingHorizontal: 14, minHeight: 44, borderRadius: 999, backgroundColor: brand.colors.surfaceTertiary, alignItems: "center", justifyContent: "center" },
   chipAttivo: { backgroundColor: brand.colors.brand },
+  chipFiltroTesto: { fontSize: 12.5 },
   chipTesto: { color: brand.colors.onSurfaceSecondary, fontSize: 14, fontWeight: "600" },
   chipTestoAttivo: { color: "#000", fontWeight: "700" },
 });
