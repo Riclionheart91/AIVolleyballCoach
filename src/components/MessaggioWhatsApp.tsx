@@ -66,7 +66,7 @@ export function MessaggioWhatsApp({ visibile, titolo, atleta, nota, modelli, onC
     if (giaAperto.current) return;
     giaAperto.current = true;
     const link = atleta
-      ? linkChatAtleta(atleta, modelli[0]?.testo ?? "", firmatario, true)
+      ? linkChatAtleta(atleta, iniziale, firmatario, true)
       : `https://wa.me/?text=${encodeURIComponent(iniziale.replace(/\{nome\}/g, "ragazze"))}`;
     if (!link) { setServeFinestra(true); return; }
     apriWhatsApp(link);
