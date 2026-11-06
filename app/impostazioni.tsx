@@ -10,6 +10,7 @@ import { etichetteDimensioneTesto, leggiScelta, salvaScelta, type ScelteDimensio
 import { avvisa } from "@/src/lib/confermaAzione";
 import { leggiImpostazioniNotifiche, salvaImpostazioniNotifiche, IMPOSTAZIONI_NOTIFICHE_DEFAULT, type ImpostazioniNotificheEsercizio } from "@/src/lib/impostazioniEsercizio";
 import { PannelloSporteasy } from "@/src/components/PannelloSporteasy";
+import { ImpostazioniGesti } from "@/src/components/ImpostazioniGesti";
 import {
   pushCertificatiSupportato,
   statoAbbonamentoPushCertificati,
@@ -164,6 +165,8 @@ export default function Impostazioni() {
           </View>
         </View>
       )}
+
+      {ruolo !== "atleta" && <ImpostazioniGesti />}
 
       <View style={styles.card}>
         <Text style={styles.sezioneTitolo}>Avvisi durante l'esercizio</Text>

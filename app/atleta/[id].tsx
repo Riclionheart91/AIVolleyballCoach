@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
-import { View, Text, TextInput, Pressable, StyleSheet, ScrollView, ActivityIndicator } from "react-native";
+import { View, Text, TextInput, Pressable, StyleSheet, ScrollView, ActivityIndicator, Animated } from "react-native";
 import { useLocalSearchParams, router } from "expo-router";
 import { useAuth } from "@/src/context/AuthContext";
+import { useScorrimentoIOS } from "@/src/lib/scorrimentoIOS";
 import { aggiornaAtleta, archiviaAtleta, eliminaAtletaDefinitivamente, leggiAtleta, ripristinaAtleta } from "@/src/services/athletes";
 import { confermaAzione, avvisa } from "@/src/lib/confermaAzione";
 import { SchedaRendimento } from "@/src/components/SchedaRendimento";
@@ -111,6 +112,8 @@ export default function SchedaAtleta() {
     );
   }
 
+  const { scrollY, propsLista } = useScorrimentoIOS();
+
   if (!atleta) return <View style={styles.container}><ActivityIndicator color={brand.colors.brand} style={{ marginTop: 40 }} /></View>;
 
   const sottotitolo = [
@@ -128,11 +131,15 @@ export default function SchedaAtleta() {
             <Pressable onPress={tornaIndietro} hitSlop={12} style={styles.bersaglio}>
               <Text style={styles.indietro}>‹ Rosa</Text>
             </Pressable>
+            {/* Scorrendo, il nome compare in alto accanto a "Rosa" (titolo che si riduce). */}
+            <Animated.Text pointerEvents="none" numberOfLines={1} style={{ flex: 1, textAlign: "center", marginRight: 60, color: brand.colors.onSurface, fontSize: 17, fontWeight: "600", opacity: scrollY.interpolate({ inputRange: [30, 70], outputRange: [0, 1], extrapolate: "clamp" }) }}>
+              {atleta.nome} {atleta.cognome}
+            </Animated.Text>
           </View>
         </View>
       </View>
 
-      <ScrollView contentContainerStyle={styles.scroll}>
+      <ScrollView contentContainerStyle={styles.scroll} {...propsLista}>
        <View style={styles.colonna}>
         {atleta.status === "archiviata" && <Text style={styles.badgeArchiviata}>ARCHIVIATA</Text>}
 

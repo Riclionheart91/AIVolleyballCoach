@@ -1,8 +1,9 @@
 import { useState } from "react";
-import { Pressable, Text, StyleSheet, View, Modal, useWindowDimensions } from "react-native";
+import { Pressable, Text, StyleSheet, View, Modal, Animated, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { brand } from "@/src/config";
 import { ALTEZZA_BARRA } from "@/src/lib/spazioBarra";
+import { useTrascinaPerChiudere } from "@/src/lib/trascinaPerChiudere";
 
 interface Props {
   onPress: () => void;
@@ -32,12 +33,14 @@ export interface VoceMenuFab { icona: string; etichetta: string; descrizione?: s
 /** Un solo "+" che apre la scelta di come procedere: al posto di piu' pulsanti tondi uno sull'altro. */
 export function FabMenu({ titolo, voci }: { titolo: string; voci: VoceMenuFab[] }) {
   const [aperto, setAperto] = useState(false);
+  const trascina = useTrascinaPerChiudere(() => setAperto(false));
   return (
     <>
       <FabAggiungi onPress={() => setAperto(true)} />
       <Modal visible={aperto} animationType="fade" transparent onRequestClose={() => setAperto(false)}>
         <Pressable style={menu.sfondo} onPress={() => setAperto(false)}>
-          <View style={menu.carta}>
+          <Animated.View style={[menu.carta, trascina.stile]} {...trascina.panHandlers}>
+            <View style={menu.maniglia} />
             <Text style={menu.titolo}>{titolo}</Text>
             {voci.map((v) => (
               <Pressable key={v.etichetta} style={menu.voce} onPress={() => { setAperto(false); v.onPress(); }}>
@@ -49,7 +52,7 @@ export function FabMenu({ titolo, voci }: { titolo: string; voci: VoceMenuFab[] 
               </Pressable>
             ))}
             <Pressable onPress={() => setAperto(false)}><Text style={menu.annulla}>Annulla</Text></Pressable>
-          </View>
+          </Animated.View>
         </Pressable>
       </Modal>
     </>
@@ -92,6 +95,7 @@ const styles = StyleSheet.create({
 const menu = StyleSheet.create({
   sfondo: { flex: 1, backgroundColor: "rgba(0,0,0,0.55)", justifyContent: "flex-end", padding: 16 },
   carta: { backgroundColor: brand.colors.surfaceSecondary, borderRadius: 16, padding: 16, gap: 6 },
+  maniglia: { alignSelf: "center", width: 36, height: 5, borderRadius: 3, backgroundColor: "rgba(255,255,255,0.22)", marginBottom: 6 },
   titolo: { color: brand.colors.onSurface, fontSize: 16, fontWeight: "700", marginBottom: 6 },
   voce: { flexDirection: "row", alignItems: "center", gap: 14, paddingVertical: 12, paddingHorizontal: 8, borderRadius: 10, backgroundColor: brand.colors.surfaceTertiary },
   icona: { fontSize: 24 },

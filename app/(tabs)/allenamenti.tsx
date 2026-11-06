@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from "react";
-import { View, Text, FlatList, TextInput, Pressable, StyleSheet, RefreshControl } from "react-native";
+import { View, Text, FlatList, TextInput, Pressable, StyleSheet } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { useAuth } from "@/src/context/AuthContext";
 import { elencaAtlete } from "@/src/services/athletes";
@@ -16,6 +16,9 @@ import { brand } from "@/src/config";
 import type { Athlete, Attendance, Rpe, Training } from "@/src/types/database";
 import { TastoCestino } from "@/src/components/TastoCestino";
 import { SPAZIO_BARRA } from "@/src/lib/spazioBarra";
+import { TitoloCompatto, useScorrimentoIOS } from "@/src/lib/scorrimentoIOS";
+import { RigaScorrevole, type AzioneRiga } from "@/src/components/RigaScorrevole";
+import { useGestoRiga } from "@/src/lib/preferenzeGesti";
 
 /** "2026-09-15 18:30" -> ISO. Formato semplice da digitare a mano, valido anche per date future. */
 function testoADataIso(testo: string): string | null {
@@ -203,13 +206,26 @@ export default function Allenamenti() {
     );
   }
 
+  const { scrollY, propsLista, indicatore } = useScorrimentoIOS(carica);
+  const gestoAllenamenti = useGestoRiga("allenamenti");
+
+  /** Azione dello scorrimento di lato su una seduta (scelta in Impostazioni; spenta di default). */
+  function azioneSwipe(t: Training): AzioneRiga | null {
+    if (!puoScrivere) return null;
+    if (gestoAllenamenti === "archivia") return { etichetta: "Archivia", icona: "archive-outline", colore: "#8E8E93", onPress: () => onArchiviaSingolo(t, true) };
+    if (gestoAllenamenti === "elimina") return { etichetta: "Elimina", icona: "trash-outline", colore: brand.colors.error, onPress: () => chiediEliminazione(t) };
+    return null;
+  }
+
   return (
     <View style={styles.container}>
+      <TitoloCompatto titolo="Allenamenti" scrollY={scrollY} />
+      {indicatore}
       <FlatList
         data={elenco}
         keyExtractor={(t) => t.id}
         contentContainerStyle={styles.contenuto}
-        refreshControl={<RefreshControl refreshing={false} onRefresh={carica} tintColor={brand.colors.brand} />}
+        {...propsLista}
         ListHeaderComponent={
           <View style={{ marginBottom: 12, gap: 14 }}>
             <TitoloGrande titolo="Allenamenti" />
@@ -270,6 +286,7 @@ export default function Allenamenti() {
           return (
             <View style={[styles.rigaWrap, index === 0 && styles.rigaPrima, index === elenco.length - 1 && styles.rigaUltima]}>
               {index > 0 && <View style={styles.separatore} />}
+              <RigaScorrevole azione={azioneSwipe(item)}>
               <View style={styles.riga}>
                 <View style={styles.tessera}>
                   <Text style={styles.tesseraMese}>{d.toLocaleDateString("it-IT", { month: "short" }).replace(/\./g, "").toUpperCase()}</Text>
@@ -284,6 +301,7 @@ export default function Allenamenti() {
                 </View>
               </View>
               {puoScrivere && <View style={styles.azioniEspanse}>{renderAzioni(item)}</View>}
+              </RigaScorrevole>
 
               {/* Presenze e RPE rimossi: le prestazioni si valutano
                   mensilmente e tramite scouting (globale, amichevole,

@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
-import { View, Text, SectionList, TextInput, Pressable, StyleSheet, RefreshControl, Modal } from "react-native";
+import { View, Text, SectionList, Pressable, StyleSheet, Modal } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { useAuth } from "@/src/context/AuthContext";
 import { elencaEsercizi } from "@/src/services/exercises";
@@ -9,7 +9,8 @@ import { FabAggiungi } from "@/src/components/Fab";
 import { CreaEsercizio } from "@/src/components/CreaEsercizio";
 import { avvisa } from "@/src/lib/confermaAzione";
 import { brand, fasiAllenamento } from "@/src/config";
-import { TitoloGrande } from "@/src/components/TitoloGrande";
+import { BarraRicerca } from "@/src/components/BarraRicerca";
+import { useScorrimentoIOS } from "@/src/lib/scorrimentoIOS";
 import type { Exercise } from "@/src/types/database";
 import { SPAZIO_BARRA } from "@/src/lib/spazioBarra";
 
@@ -162,37 +163,30 @@ export default function Esercizi() {
     if (nuovi.length > 1) avvisa("Aggiunti", `${nuovi.length} esercizi inseriti nel catalogo.`);
   }
 
+  const { propsLista, indicatore } = useScorrimentoIOS(carica);
+
   return (
     <View style={styles.container}>
+      {/* Titolo, ricerca e scelta del raggruppamento restano fissi in alto: scorre solo l'elenco. */}
+      <View style={styles.fisso}>
+        <Text accessibilityRole="header" style={styles.titoloFisso}>Esercizi</Text>
+        <BarraRicerca value={ricerca} onChangeText={setRicerca} placeholder={`Cerca tra ${esercizi.length} esercizi`} accessibilityLabel="Cerca tra gli esercizi" />
+        <View style={styles.segmenti}>
+          <Pressable onPress={() => setRaggruppaPerFase(true)} style={[styles.segmento, raggruppaPerFase && styles.segmentoAttivo]}>
+            <Text style={[styles.segmentoTesto, raggruppaPerFase && styles.segmentoTestoAttivo]}>Per fase</Text>
+          </Pressable>
+          <Pressable onPress={() => setRaggruppaPerFase(false)} style={[styles.segmento, !raggruppaPerFase && styles.segmentoAttivo]}>
+            <Text style={[styles.segmentoTesto, !raggruppaPerFase && styles.segmentoTestoAttivo]}>Per categoria</Text>
+          </Pressable>
+        </View>
+      </View>
+      <View style={{ flex: 1 }}>
       <SectionList
         sections={sezioni}
         keyExtractor={(r) => r.id}
         stickySectionHeadersEnabled
         contentContainerStyle={styles.contenuto}
-        refreshControl={<RefreshControl refreshing={caricamento} onRefresh={carica} tintColor={brand.colors.brand} />}
-        ListHeaderComponent={
-          <View style={{ gap: 12, marginBottom: 8 }}>
-            <TitoloGrande titolo="Esercizi" />
-            <View style={styles.segmenti}>
-              <Pressable onPress={() => setRaggruppaPerFase(true)} style={[styles.segmento, raggruppaPerFase && styles.segmentoAttivo]}>
-                <Text style={[styles.segmentoTesto, raggruppaPerFase && styles.segmentoTestoAttivo]}>Per fase</Text>
-              </Pressable>
-              <Pressable onPress={() => setRaggruppaPerFase(false)} style={[styles.segmento, !raggruppaPerFase && styles.segmentoAttivo]}>
-                <Text style={[styles.segmentoTesto, !raggruppaPerFase && styles.segmentoTestoAttivo]}>Per categoria</Text>
-              </Pressable>
-            </View>
-            <View style={styles.barraRicerca}>
-              <TextInput
-                style={styles.inputRicerca}
-                placeholder={`Cerca tra ${esercizi.length} esercizi…`}
-                placeholderTextColor={brand.colors.muted}
-                value={ricerca}
-                onChangeText={setRicerca}
-              />
-              {!!ricerca && <Pressable onPress={() => setRicerca("")} hitSlop={10} style={styles.tastoPulisci}><Text style={styles.pulisci}>✕</Text></Pressable>}
-            </View>
-          </View>
-        }
+        {...propsLista}
         ListEmptyComponent={!caricamento ? <Text style={styles.vuoto}>{ricerca ? "Nessun esercizio trovato." : "Nessun esercizio ancora. Usa il + qui sotto: puoi crearli a mano o farli proporre dall'AI."}</Text> : null}
         renderSectionHeader={({ section }) => (
           <Pressable style={styles.intestazioneCategoria} onPress={() => commutaCategoria(section.titolo)}>
@@ -247,6 +241,8 @@ export default function Esercizi() {
           );
         }}
       />
+      {indicatore}
+      </View>
 
       {puoScrivere && (
         <FabAggiungi onPress={() => apriCreazione("manuale")} />
@@ -283,10 +279,8 @@ const styles = StyleSheet.create({
   segmentoAttivo: { backgroundColor: brand.colors.brand },
   segmentoTesto: { color: brand.colors.onSurfaceSecondary, fontSize: 14, fontWeight: "600" },
   segmentoTestoAttivo: { color: "#000", fontWeight: "700" },
-  barraRicerca: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: brand.colors.surfaceTertiary, borderRadius: 12, paddingHorizontal: 12, minHeight: 44 },
-  inputRicerca: { flex: 1, color: brand.colors.onSurface, paddingVertical: 10, fontSize: 16 },
-  tastoPulisci: { width: 44, height: 44, alignItems: "center", justifyContent: "center", marginRight: -12 },
-  pulisci: { color: brand.colors.muted, fontSize: 16 },
+  fisso: { gap: 10, paddingHorizontal: 16, paddingTop: 6, paddingBottom: 8, backgroundColor: brand.colors.surface, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "rgba(255,255,255,0.1)", zIndex: 5 },
+  titoloFisso: { color: brand.colors.onSurface, fontSize: 30, fontWeight: "700", letterSpacing: -0.5 },
   intestazioneCategoria: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", backgroundColor: brand.colors.surface, paddingTop: 12, paddingBottom: 8, minHeight: 48 },
   titoloCategoria: { color: brand.colors.onSurface, fontSize: 22, fontWeight: "700", letterSpacing: -0.3 },
   conteggioCategoria: { color: brand.colors.muted, fontSize: 14, fontWeight: "700" },

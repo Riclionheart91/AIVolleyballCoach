@@ -4,6 +4,7 @@ import { PianiIndividuali } from "@/src/components/PianiIndividuali";
 import { TitoloGrande } from "@/src/components/TitoloGrande";
 import { brand } from "@/src/config";
 import { SPAZIO_BARRA } from "@/src/lib/spazioBarra";
+import { TitoloCompatto, useScorrimentoIOS } from "@/src/lib/scorrimentoIOS";
 
 /**
  * Scheda personale di chi gioca: è la prima cosa che vede aprendo
@@ -13,6 +14,7 @@ import { SPAZIO_BARRA } from "@/src/lib/spazioBarra";
  */
 export default function SchedaPersonale() {
   const { team, atletaId, ruolo } = useAuth();
+  const { scrollY, propsLista } = useScorrimentoIOS();
 
   if (ruolo !== "atleta" || !atletaId || !team) {
     return (
@@ -23,7 +25,9 @@ export default function SchedaPersonale() {
   }
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.contenuto}>
+    <View style={styles.container}>
+    <TitoloCompatto titolo="Il mio allenamento" scrollY={scrollY} />
+    <ScrollView style={styles.container} contentContainerStyle={styles.contenuto} {...propsLista}>
       <View style={styles.colonna}>
         <TitoloGrande titolo="Il mio allenamento" />
         <View style={styles.schedaNota}>
@@ -34,6 +38,7 @@ export default function SchedaPersonale() {
         <PianiIndividuali teamId={team.id} athleteId={atletaId} nomePersona="" ruolo={null} modificabile={false} sempreEsploso />
       </View>
     </ScrollView>
+    </View>
   );
 }
 

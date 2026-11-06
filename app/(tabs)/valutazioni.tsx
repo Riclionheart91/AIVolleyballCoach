@@ -22,6 +22,7 @@ import { avvisa } from "@/src/lib/confermaAzione";
 import { TitoloGrande } from "@/src/components/TitoloGrande";
 import { MenuAzioni } from "@/src/components/MenuAzioni";
 import { SPAZIO_BARRA } from "@/src/lib/spazioBarra";
+import { TitoloCompatto, useScorrimentoIOS } from "@/src/lib/scorrimentoIOS";
 
 /** Testo dentro l'avatar: il numero di maglia, o le iniziali se manca. */
 function testoAvatar(numero: number | string | null | undefined, nome?: string | null, cognome?: string | null): string {
@@ -31,9 +32,12 @@ function testoAvatar(numero: number | string | null | undefined, nome?: string |
 
 export default function Valutazioni() {
   const { team, puoScrivere, ruolo, atletaId } = useAuth();
+  const { scrollY, propsLista } = useScorrimentoIOS();
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.contenuto}>
+    <View style={styles.container}>
+    <TitoloCompatto titolo={uiStrings.valutazioni.title} scrollY={scrollY} />
+    <ScrollView style={styles.container} contentContainerStyle={styles.contenuto} {...propsLista}>
       <TitoloGrande titolo={uiStrings.valutazioni.title} />
 
       {puoScrivere && team && <SezioneCicloValutazione teamId={team.id} />}
@@ -41,6 +45,7 @@ export default function Valutazioni() {
       {ruolo === "atleta" && atletaId && <SezioneValutazionePersonale athleteId={atletaId} teamId={team!.id} />}
       {ruolo === "presidente" && team && <SezioneValutazionePresidente teamId={team.id} />}
     </ScrollView>
+    </View>
   );
 }
 

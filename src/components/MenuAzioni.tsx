@@ -1,7 +1,8 @@
 import { useState } from "react";
-import { Modal, Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
+import { Animated, Modal, Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { brand } from "@/src/config";
+import { useTrascinaPerChiudere } from "@/src/lib/trascinaPerChiudere";
 
 export interface VoceMenuAzioni {
   etichetta: string;
@@ -25,6 +26,7 @@ export function MenuAzioni({ titolo, voci, stile, etichetta = "Altre azioni", te
   testoPulsante?: string; occupato?: boolean;
 }) {
   const [aperto, setAperto] = useState(false);
+  const trascina = useTrascinaPerChiudere(() => setAperto(false));
   const ordinate = [...voci.filter((v) => !v.distruttiva), ...voci.filter((v) => v.distruttiva)];
   return (
     <>
@@ -42,7 +44,8 @@ export function MenuAzioni({ titolo, voci, stile, etichetta = "Altre azioni", te
       </Pressable>
       <Modal visible={aperto} animationType="fade" transparent onRequestClose={() => setAperto(false)}>
         <Pressable style={s.sfondo} onPress={() => setAperto(false)}>
-          <View style={s.carta}>
+          <Animated.View style={[s.carta, trascina.stile]} {...trascina.panHandlers}>
+            <View style={s.maniglia} />
             {!!titolo && <Text style={s.titolo} numberOfLines={1}>{titolo}</Text>}
             {ordinate.map((v) => (
               <Pressable key={v.etichetta} style={[s.voce, v.disattiva && { opacity: 0.4 }]} disabled={v.disattiva} onPress={() => { setAperto(false); v.onPress(); }}>
@@ -54,7 +57,7 @@ export function MenuAzioni({ titolo, voci, stile, etichetta = "Altre azioni", te
               </Pressable>
             ))}
             <Pressable style={s.annulla} onPress={() => setAperto(false)}><Text style={s.annullaTesto}>Annulla</Text></Pressable>
-          </View>
+          </Animated.View>
         </Pressable>
       </Modal>
     </>
@@ -68,6 +71,7 @@ const s = StyleSheet.create({
   voceSotto: { color: brand.colors.muted, fontSize: 12, marginTop: 1 },
   sfondo: { flex: 1, backgroundColor: "rgba(0,0,0,0.55)", justifyContent: "flex-end", padding: 12 },
   carta: { backgroundColor: brand.colors.surfaceSecondary, borderRadius: 16, padding: 8, gap: 2, maxWidth: 520, width: "100%", alignSelf: "center" },
+  maniglia: { alignSelf: "center", width: 36, height: 5, borderRadius: 3, backgroundColor: "rgba(255,255,255,0.22)", marginTop: 2, marginBottom: 4 },
   titolo: { color: brand.colors.muted, fontSize: 12, fontWeight: "600", textAlign: "center", paddingVertical: 8 },
   voce: { flexDirection: "row", alignItems: "center", gap: 12, minHeight: 52, paddingVertical: 6, paddingHorizontal: 14, borderRadius: 10 },
   voceTesto: { color: brand.colors.onSurface, fontSize: 16 },

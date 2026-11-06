@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { View, Text, TextInput, Pressable, StyleSheet, ScrollView, ActivityIndicator, Modal, FlatList } from "react-native";
 import { useLocalSearchParams, useFocusEffect, router } from "expo-router";
 import { useAuth } from "@/src/context/AuthContext";
+import { ManigliaRiordino } from "@/src/components/ManigliaRiordino";
 import { creaEsercizio, elencaEsercizi } from "@/src/services/exercises";
 import { elencaAtlete } from "@/src/services/athletes";
 import { pesiFasiPerData, type PesoFase, elencaPianoAllenamento, generaPianoAllenamentoAI, impostaPianoAllenamento, leggiBloccoPerData, type VoceRiepilogoPiano } from "@/src/services/trainingPlan";
@@ -151,6 +152,25 @@ export default function PianoAllenamento() {
     // alla posizione e si apriva quello che ci era finito dentro.
     setEsercizioEspanso(indiceDestinazione);
     salvaOrdine();
+  }
+
+  /**
+   * Riordino trascinando la maniglia: scambia con il vicino della stessa fase e dice dove e' finito l'esercizio,
+   * cosi' il trascinamento puo' continuare di piu' posti senza rilasciare.
+   */
+  function spostaTrascinando(indice: number, direzione: -1 | 1): number | null {
+    const lista = eserciziRef.current;
+    if (!lista[indice]) return null;
+    const fase = faseDi(lista[indice]);
+    const indiciFase = lista.map((e, i) => ({ e, i })).filter(({ e }) => faseDi(e) === fase).map(({ i }) => i);
+    const pos = indiciFase.indexOf(indice);
+    const dest = indiciFase[pos + direzione];
+    if (pos === -1 || dest === undefined) return null;
+    spostaEsercizio(indice, direzione);
+    const nuovo = [...lista];
+    [nuovo[indice], nuovo[dest]] = [nuovo[dest], nuovo[indice]];
+    eserciziRef.current = nuovo;
+    return dest;
   }
 
   /**
@@ -450,6 +470,7 @@ export default function PianoAllenamento() {
                         return (
                     <View key={i} style={styles.bloccoEsercizio}>
                       <Pressable style={styles.rigaEsercizio} onPress={() => setEsercizioEspanso(esercizioEspanso === i ? null : i)}>
+                        <ManigliaRiordino indice={i} sposta={spostaTrascinando} />
                         <Text style={styles.numeroOrdine}>{posInFase + 1}</Text>
                         <View style={{ flex: 1 }}>
                           <Text style={styles.rigaEsercizioNome}>{e.nuovo ? "✨ " : ""}{e.nome}</Text>

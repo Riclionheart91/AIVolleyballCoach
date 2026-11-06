@@ -1,17 +1,22 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { View, Text, ScrollView, TextInput, Pressable, StyleSheet, RefreshControl, PanResponder, Platform } from "react-native";
+import { View, Text, ScrollView, TextInput, Pressable, StyleSheet, PanResponder, Platform } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { useAuth } from "@/src/context/AuthContext";
-import { creaAtleta, elencaAtlete, elencaAtleteArchiviate, ripristinaAtleta } from "@/src/services/athletes";
+import { archiviaAtleta, creaAtleta, elencaAtlete, elencaAtleteArchiviate, ripristinaAtleta } from "@/src/services/athletes";
 import { FabMenu } from "@/src/components/Fab";
 import { PopupForm } from "@/src/components/PopupForm";
 import { brand, ruoliCampo } from "@/src/config";
 import type { Athlete, RuoloCampo } from "@/src/types/database";
-import { avvisa } from "@/src/lib/confermaAzione";
-import { MessaggioWhatsApp } from "@/src/components/MessaggioWhatsApp";
+import { avvisa, confermaAzione } from "@/src/lib/confermaAzione";
+import { MessaggioWhatsApp, numeroWhatsApp } from "@/src/components/MessaggioWhatsApp";
 import { promemoriaSporteasy } from "@/src/lib/messaggiWhatsApp";
 import { TitoloGrande } from "@/src/components/TitoloGrande";
 import { SPAZIO_BARRA } from "@/src/lib/spazioBarra";
+import { BarraRicerca } from "@/src/components/BarraRicerca";
+import { ALTEZZA_TITOLO_COMPATTO, TitoloCompatto, stileFisso, useScorrimentoIOS } from "@/src/lib/scorrimentoIOS";
+import { apriWhatsApp } from "@/src/lib/apriWhatsApp";
+import { RigaScorrevole, type AzioneRiga } from "@/src/components/RigaScorrevole";
+import { useGestoRiga } from "@/src/lib/preferenzeGesti";
 
 /** Testo dentro l'avatar: il numero di maglia, o le iniziali se manca. */
 function testoAvatar(a: Athlete): string {
@@ -94,6 +99,8 @@ export default function Atlete() {
   const [vista, setVista] = useState<VistaRosa>(leggiVista);
   const scrollRef = useRef<ScrollView>(null);
   const posizioneSezioni = useRef<Record<string, number>>({});
+  // Altezza del blocco fisso (ricerca + ruoli): le lettere A–Z si fermano subito sotto.
+  const [altezzaFissa, setAltezzaFissa] = useState(96);
   const lettereRef = useRef<View>(null);
   const finestraIndice = useRef({ top: 0, altezza: 0 });
   const nascondiTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -159,6 +166,28 @@ export default function Atlete() {
   const visibili = useMemo(() => sezioni.reduce((n, s) => n + s.data.length, 0), [sezioni]);
   const mostraIndice = vista === "az" && visibili >= SOGLIA_INDICE_AZ;
 
+  const { scrollY, propsLista, indicatore } = useScorrimentoIOS(carica);
+  const gestoRosa = useGestoRiga("rosa");
+
+  /** Azione dello scorrimento di lato su una riga (scelta in Impostazioni; spenta di default). */
+  function azioneSwipe(a: Athlete): AzioneRiga | null {
+    if (gestoRosa === "whatsapp") {
+      return { etichetta: "WhatsApp", icona: "logo-whatsapp", colore: "#25D366", onPress: () => {
+        const n = numeroWhatsApp(a.telefono);
+        if (!n) { avvisa("Numero mancante", `${a.nome} non ha un numero di telefono valido nella scheda.`); return; }
+        apriWhatsApp(`https://wa.me/${n}`);
+      } };
+    }
+    if (gestoRosa === "archivia" && puoScrivere) {
+      return { etichetta: "Archivia", icona: "archive-outline", colore: "#8E8E93", onPress: () => {
+        confermaAzione("Archiviare l'atleta?", `"${a.nome} ${a.cognome}" non comparirà più negli elenchi attivi e perderà l'accesso all'app. Puoi ripristinarla dalla Rosa archiviata.`, "Archivia", async () => {
+          try { await archiviaAtleta(a.id); carica(); } catch (e) { avvisa("Errore", (e as Error).message); }
+        }, true);
+      } };
+    }
+    return null;
+  }
+
   function azzeraFiltri() {
     setRicerca(""); setFiltroRuolo(null); setFiltroCertificato(null);
   }
@@ -171,7 +200,7 @@ export default function Atlete() {
   function vaiALettera(lettera: string, animato: boolean) {
     const y = posizioneSezioni.current[lettera];
     if (y == null) return;
-    scrollRef.current?.scrollTo({ y: Math.max(0, y), animated: animato });
+    scrollRef.current?.scrollTo({ y: Math.max(0, y - ALTEZZA_TITOLO_COMPATTO - altezzaFissa), animated: animato });
   }
 
   function mostraBolla(lettera: string) {
@@ -234,6 +263,7 @@ export default function Atlete() {
         ]}
       >
         {index > 0 && <View style={styles.separatore} />}
+        <RigaScorrevole azione={azioneSwipe(item)}>
         <Pressable style={styles.riga} onPress={() => router.push(`/atleta/${item.id}`)}>
           <View style={styles.avatar}><Text style={styles.avatarTesto}>{testoAvatar(item)}</Text></View>
           <View style={{ flex: 1, gap: 1 }}>
@@ -249,6 +279,7 @@ export default function Atlete() {
           )}
           <Text style={styles.chevron}>›</Text>
         </Pressable>
+        </RigaScorrevole>
       </View>
     );
   }
@@ -266,38 +297,19 @@ export default function Atlete() {
 
   return (
     <View style={styles.container}>
+      <TitoloCompatto titolo="Rosa" scrollY={scrollY} />
+      {indicatore}
       <ScrollView
         ref={scrollRef}
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={[styles.contenuto, mostraIndice && styles.contenutoConIndice]}
-        refreshControl={<RefreshControl refreshing={caricamento} onRefresh={carica} tintColor={brand.colors.brand} />}
+        {...propsLista}
       >
           <>
             <TitoloGrande
               titolo="Rosa"
               sottotitolo={team ? `${team.nome} · ${filtriAttivi ? `${visibili} di ${atlete.length}` : atlete.length} ${(filtriAttivi ? visibili : atlete.length) === 1 ? "atleta" : "atlete"}` : undefined}
             />
-            <View style={styles.ricerca}>
-              <Text style={styles.ricercaIcona} accessible={false}>🔍</Text>
-              <TextInput
-                testID="rosa-ricerca"
-                style={styles.ricercaInput}
-                placeholder="Cerca per nome, cognome o numero"
-                placeholderTextColor={brand.colors.muted}
-                value={ricerca}
-                onChangeText={setRicerca}
-                autoCapitalize="none"
-                autoCorrect={false}
-                returnKeyType="search"
-                clearButtonMode="never"
-                accessibilityLabel="Cerca atlete per nome, cognome o numero di maglia"
-              />
-              {!!ricerca && (
-                <Pressable onPress={() => setRicerca("")} hitSlop={8} style={styles.ricercaPulisci} accessibilityRole="button" accessibilityLabel="Cancella la ricerca">
-                  <Text style={styles.ricercaPulisciTesto}>✕</Text>
-                </Pressable>
-              )}
-            </View>
             <View style={styles.selettoreVista} accessibilityRole="tablist">
               {([["az", "A–Z"], ["ruolo", "Per ruolo"]] as const).map(([v, etichetta]) => (
                 <Pressable
@@ -312,7 +324,18 @@ export default function Atlete() {
                 </Pressable>
               ))}
             </View>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled" style={styles.filtriScroll} contentContainerStyle={styles.filtriRiga}>
+            <View
+              style={[stileFisso, styles.bloccoFisso, mostraIndice && styles.bloccoFissoConIndice]}
+              onLayout={(e) => setAltezzaFissa(e.nativeEvent.layout.height)}
+            >
+              <BarraRicerca
+                testID="rosa-ricerca"
+                value={ricerca}
+                onChangeText={setRicerca}
+                placeholder="Cerca per nome, cognome o numero"
+                accessibilityLabel="Cerca atlete per nome, cognome o numero di maglia"
+              />
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled" style={styles.filtriScroll} contentContainerStyle={styles.filtriRiga}>
               <Pressable onPress={() => setFiltroRuolo(null)} hitSlop={{ top: 8, bottom: 8 }} style={[styles.chipFiltro, filtroRuolo === null && styles.chipAttivo]}>
                 <Text style={[styles.chipTesto, styles.chipFiltroTesto, filtroRuolo === null && styles.chipTestoAttivo]}>Tutte</Text>
               </Pressable>
@@ -321,7 +344,8 @@ export default function Atlete() {
                   <Text style={[styles.chipTesto, styles.chipFiltroTesto, filtroRuolo === r && styles.chipTestoAttivo]}>{r}</Text>
                 </Pressable>
               ))}
-            </ScrollView>
+              </ScrollView>
+            </View>
             {puoScrivere && (
               <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled" style={styles.filtriScroll} contentContainerStyle={styles.filtriRiga}>
                 <Text style={styles.etichettaFiltro}>Certificato</Text>
@@ -382,7 +406,7 @@ export default function Atlete() {
             key={s.lettera}
             onLayout={(e) => { posizioneSezioni.current[s.lettera] = e.nativeEvent.layout.y; }}
           >
-            <View style={[styles.intestazioneSezione, Platform.OS === "web" ? (styles.intestazioneAppiccicosa as object) : null]}>
+            <View style={[styles.intestazioneSezione, Platform.OS === "web" ? ({ position: "sticky", top: ALTEZZA_TITOLO_COMPATTO + altezzaFissa, zIndex: 5 } as object) : null]}>
               <Text style={styles.intestazioneSezioneTesto} accessibilityRole="header">{vista === "ruolo" ? `${s.lettera.toUpperCase()} · ${s.data.length}` : s.lettera}</Text>
             </View>
             {s.data.map((a, i) => renderRiga(a, i, s.data.length))}
@@ -462,6 +486,8 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: brand.colors.surface },
   contenuto: { padding: 16, paddingBottom: SPAZIO_BARRA, width: "100%", maxWidth: 900, alignSelf: "center" },
   contenutoConIndice: { paddingRight: 34 },
+  bloccoFisso: { marginHorizontal: -16, paddingHorizontal: 16, paddingTop: 6, paddingBottom: 6, gap: 8 },
+  bloccoFissoConIndice: { marginRight: -34, paddingRight: 34 },
   ricerca: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: brand.colors.surfaceTertiary, borderRadius: 12, paddingLeft: 12, minHeight: 44, marginBottom: 10 },
   ricercaIcona: { fontSize: 15, opacity: 0.7 },
   ricercaInput: { flex: 1, color: brand.colors.onSurface, fontSize: 16, minHeight: 44, paddingVertical: 8 },

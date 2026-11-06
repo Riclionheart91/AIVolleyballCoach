@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import { View, Text, FlatList, Pressable, StyleSheet, RefreshControl } from "react-native";
+import { View, Text, FlatList, Pressable, StyleSheet } from "react-native";
 import { useFocusEffect } from "expo-router";
 import { useAuth } from "@/src/context/AuthContext";
 import { chiudiEApriNuovaStagioneSocieta, elencaStagioniSocieta, generaBaselineStagione } from "@/src/services/seasons";
@@ -8,6 +8,7 @@ import { TitoloGrande } from "@/src/components/TitoloGrande";
 import { brand } from "@/src/config";
 import type { Season } from "@/src/types/database";
 import { SPAZIO_BARRA } from "@/src/lib/spazioBarra";
+import { TitoloCompatto, useScorrimentoIOS } from "@/src/lib/scorrimentoIOS";
 
 /**
  * La stagione è ora di società, condivisa da tutte le squadre: questa
@@ -96,13 +97,17 @@ export default function Stagioni() {
     );
   }
 
+  const { scrollY, propsLista, indicatore } = useScorrimentoIOS(carica);
+
   return (
     <View style={styles.container}>
+      <TitoloCompatto titolo="Stagioni" scrollY={scrollY} />
+      {indicatore}
       <FlatList
         data={altre}
         keyExtractor={(s) => s.id}
         contentContainerStyle={styles.contenuto}
-        refreshControl={<RefreshControl refreshing={caricamento} onRefresh={carica} tintColor={brand.colors.brand} />}
+        {...propsLista}
         ListHeaderComponent={
           <View style={{ gap: 14, marginBottom: altre.length > 0 ? 12 : 0 }}>
             <TitoloGrande titolo="Stagioni" />

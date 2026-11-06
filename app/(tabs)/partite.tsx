@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { View, Text, FlatList, TextInput, Pressable, StyleSheet, RefreshControl, ActivityIndicator, Modal, ScrollView } from "react-native";
+import { View, Text, FlatList, TextInput, Pressable, StyleSheet, ActivityIndicator, Modal, ScrollView } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { useAuth } from "@/src/context/AuthContext";
 import { andamentoSquadraPartite, analisiPersonePartita, convertiPartitaInAllenamento, generaCommentoPartitaAI, creaMatch, eliminaPartita, impostaLuogoPartita, elencaPartite, elencaSet, ricominciaPartita, rendimentoRotazioniPartita, type AndamentoSquadraPartiteVoce, type RendimentoRotazionePartita } from "@/src/services/matches";
@@ -16,6 +16,9 @@ import { CondividiGenitori } from "@/src/components/CondividiGenitori";
 import { commentoPartita, inviaLinkScout } from "@/src/lib/messaggiWhatsApp";
 import { Ionicons } from "@expo/vector-icons";
 import { SPAZIO_BARRA } from "@/src/lib/spazioBarra";
+import { TitoloCompatto, useScorrimentoIOS } from "@/src/lib/scorrimentoIOS";
+import { RigaScorrevole, type AzioneRiga } from "@/src/components/RigaScorrevole";
+import { useGestoRiga } from "@/src/lib/preferenzeGesti";
 
 /** "OGGI · 21:00" oppure "GIO 5 NOV · 21:00" per la scheda in evidenza. */
 function etichettaQuando(iso: string): string {
@@ -392,6 +395,15 @@ export default function Partite() {
     );
   }
 
+  const { scrollY, propsLista, indicatore } = useScorrimentoIOS(carica);
+  const gestoPartite = useGestoRiga("partite");
+
+  /** Azione dello scorrimento di lato su una partita (scelta in Impostazioni; spenta di default). */
+  function azioneSwipe(m: Match): AzioneRiga | null {
+    if (gestoPartite === "elimina" && puoEliminare) return { etichetta: "Elimina", icona: "trash-outline", colore: brand.colors.error, onPress: () => chiediEliminazione(m) };
+    return null;
+  }
+
   return (
     <View style={styles.container}>
       {team && whatsappPartita && (
@@ -527,6 +539,8 @@ export default function Partite() {
         </View>
       </Modal>
 
+      <TitoloCompatto titolo="Partite" scrollY={scrollY} />
+      {indicatore}
       <FlatList
         data={gruppi}
         keyExtractor={(g) => g.chiave}
@@ -653,7 +667,7 @@ export default function Partite() {
       )}
           </View>
         }
-        refreshControl={<RefreshControl refreshing={caricamento} onRefresh={carica} tintColor={brand.colors.brand} />}
+        {...propsLista}
         ListEmptyComponent={!caricamento ? <Text style={styles.vuoto}>Nessuna partita ancora.</Text> : null}
         renderItem={({ item: gruppo }) => (
           <View style={styles.gruppo}>
@@ -670,6 +684,7 @@ export default function Partite() {
                 return (
                   <View key={item.id}>
                     {indice > 0 && <View style={styles.separatore} />}
+                    <RigaScorrevole azione={azioneSwipe(item)}>
                     <Pressable style={styles.rigaPartita} onPress={() => apriPartita(item)}>
                       <Text style={styles.oraPartita}>{oraTesto}</Text>
                       <View style={{ flex: 1, gap: 2 }}>
@@ -689,6 +704,7 @@ export default function Partite() {
                       </View>
                     </Pressable>
                     {renderAzioniPartita(item)}
+                    </RigaScorrevole>
                   </View>
                 );
               })}
