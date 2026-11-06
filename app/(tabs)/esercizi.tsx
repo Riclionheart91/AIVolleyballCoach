@@ -11,6 +11,7 @@ import { avvisa } from "@/src/lib/confermaAzione";
 import { brand, fasiAllenamento } from "@/src/config";
 import { TitoloGrande } from "@/src/components/TitoloGrande";
 import type { Exercise } from "@/src/types/database";
+import { SPAZIO_BARRA } from "@/src/lib/spazioBarra";
 
 const SENZA_CATEGORIA = "Senza categoria";
 
@@ -276,7 +277,7 @@ export default function Esercizi() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: brand.colors.surface },
-  contenuto: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 100, width: "100%", maxWidth: 900, alignSelf: "center" },
+  contenuto: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: SPAZIO_BARRA, width: "100%", maxWidth: 900, alignSelf: "center" },
   segmenti: { flexDirection: "row", backgroundColor: brand.colors.surfaceTertiary, borderRadius: 12, padding: 2 },
   segmento: { flex: 1, minHeight: 40, borderRadius: 10, alignItems: "center", justifyContent: "center" },
   segmentoAttivo: { backgroundColor: brand.colors.brand },

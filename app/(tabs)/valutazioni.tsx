@@ -21,6 +21,7 @@ import type { Athlete, Evaluation, EvaluationProposal, Fondamentale } from "@/sr
 import { avvisa } from "@/src/lib/confermaAzione";
 import { TitoloGrande } from "@/src/components/TitoloGrande";
 import { MenuAzioni } from "@/src/components/MenuAzioni";
+import { SPAZIO_BARRA } from "@/src/lib/spazioBarra";
 
 /** Testo dentro l'avatar: il numero di maglia, o le iniziali se manca. */
 function testoAvatar(numero: number | string | null | undefined, nome?: string | null, cognome?: string | null): string {
@@ -377,7 +378,7 @@ function SezioneValutazionePresidente({ teamId }: { teamId: string }) {
 const styles = StyleSheet.create({
   input: { backgroundColor: brand.colors.surfaceTertiary, color: brand.colors.onSurface, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, minHeight: 44, fontSize: 16 },
   container: { flex: 1, backgroundColor: brand.colors.surface },
-  contenuto: { padding: 16, gap: 20, paddingBottom: 60, width: "100%", maxWidth: 900, alignSelf: "center" },
+  contenuto: { padding: 16, gap: 20, paddingBottom: SPAZIO_BARRA, width: "100%", maxWidth: 900, alignSelf: "center" },
   titoloSezione: { color: brand.colors.onSurface, fontSize: 22, fontWeight: "700", letterSpacing: -0.3 },
   scheda: { backgroundColor: brand.colors.surfaceSecondary, borderRadius: 18, overflow: "hidden" },
   separatore: { height: 1, backgroundColor: brand.colors.border },

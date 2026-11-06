@@ -7,6 +7,7 @@ import { confermaAzione, avvisa } from "@/src/lib/confermaAzione";
 import { TitoloGrande } from "@/src/components/TitoloGrande";
 import { brand } from "@/src/config";
 import type { Season } from "@/src/types/database";
+import { SPAZIO_BARRA } from "@/src/lib/spazioBarra";
 
 /**
  * La stagione è ora di società, condivisa da tutte le squadre: questa
@@ -142,7 +143,7 @@ export default function Stagioni() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: brand.colors.surface },
-  contenuto: { padding: 16, paddingBottom: 90, width: "100%", maxWidth: 900, alignSelf: "center" },
+  contenuto: { padding: 16, paddingBottom: SPAZIO_BARRA, width: "100%", maxWidth: 900, alignSelf: "center" },
   titoloSezione: { color: brand.colors.onSurface, fontSize: 22, fontWeight: "700", letterSpacing: -0.3 },
   schedaEvidenza: { backgroundColor: brand.colors.surfaceSecondary, borderWidth: 1, borderColor: brand.colors.border, borderRadius: 22, padding: 18, gap: 8 },
   rigaTitolo: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 10 },

@@ -15,6 +15,7 @@ import { TitoloGrande } from "@/src/components/TitoloGrande";
 import { brand } from "@/src/config";
 import type { Athlete, Attendance, Rpe, Training } from "@/src/types/database";
 import { TastoCestino } from "@/src/components/TastoCestino";
+import { SPAZIO_BARRA } from "@/src/lib/spazioBarra";
 
 /** "2026-09-15 18:30" -> ISO. Formato semplice da digitare a mano, valido anche per date future. */
 function testoADataIso(testo: string): string | null {
@@ -315,7 +316,7 @@ export default function Allenamenti() {
  */
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: brand.colors.surface },
-  contenuto: { padding: 16, paddingBottom: 90, width: "100%", maxWidth: 900, alignSelf: "center" },
+  contenuto: { padding: 16, paddingBottom: SPAZIO_BARRA, width: "100%", maxWidth: 900, alignSelf: "center" },
   input: { backgroundColor: brand.colors.surfaceTertiary, color: brand.colors.onSurface, borderRadius: 12, padding: 12, minHeight: 44 },
   nota: { color: brand.colors.muted, fontSize: 12 },
   bottone: { backgroundColor: brand.colors.brand, paddingVertical: 6, paddingHorizontal: 14, borderRadius: 999, alignItems: "center", minHeight: 42, justifyContent: "center" },

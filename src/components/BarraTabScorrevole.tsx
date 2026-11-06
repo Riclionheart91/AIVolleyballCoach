@@ -105,8 +105,8 @@ export default function BarraTabScorrevole({ state, descriptors, navigation, nom
 const WEB_BARRA = { backdropFilter: "blur(28px) saturate(170%)", WebkitBackdropFilter: "blur(28px) saturate(170%)" };
 
 const styles = StyleSheet.create({
-  // Contenitore trasparente: la barra "fluttua" staccata dai bordi come in iOS, senza coprire il contenuto.
-  ombra: { paddingTop: 6, paddingHorizontal: 16, backgroundColor: "transparent" },
+  // Contenitore trasparente: la barra "fluttua" staccata dai bordi come in iOS, sopra il contenuto (che scorre dietro, vedi SPAZIO_BARRA).
+  ombra: { position: "absolute", left: 0, right: 0, bottom: 0, paddingTop: 6, paddingHorizontal: 16, backgroundColor: "transparent" },
   barra: {
     flexDirection: "row",
     backgroundColor: "rgba(30,41,59,0.82)",

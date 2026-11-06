@@ -11,6 +11,7 @@ import { avvisa } from "@/src/lib/confermaAzione";
 import { MessaggioWhatsApp } from "@/src/components/MessaggioWhatsApp";
 import { promemoriaSporteasy } from "@/src/lib/messaggiWhatsApp";
 import { TitoloGrande } from "@/src/components/TitoloGrande";
+import { SPAZIO_BARRA } from "@/src/lib/spazioBarra";
 
 /** Testo dentro l'avatar: il numero di maglia, o le iniziali se manca. */
 function testoAvatar(a: Athlete): string {
@@ -459,7 +460,7 @@ export default function Atlete() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: brand.colors.surface },
-  contenuto: { padding: 16, paddingBottom: 100, width: "100%", maxWidth: 900, alignSelf: "center" },
+  contenuto: { padding: 16, paddingBottom: SPAZIO_BARRA, width: "100%", maxWidth: 900, alignSelf: "center" },
   contenutoConIndice: { paddingRight: 34 },
   ricerca: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: brand.colors.surfaceTertiary, borderRadius: 12, paddingLeft: 12, minHeight: 44, marginBottom: 10 },
   ricercaIcona: { fontSize: 15, opacity: 0.7 },
@@ -483,7 +484,7 @@ const styles = StyleSheet.create({
   vuotoTitolo: { color: brand.colors.onSurface, fontSize: 17, fontWeight: "700", textAlign: "center" },
   bottoneAzzera: { backgroundColor: brand.colors.surfaceTertiary, borderRadius: 999, minHeight: 36, paddingHorizontal: 16, alignItems: "center", justifyContent: "center", marginTop: 4 },
   bottoneAzzeraTesto: { color: brand.colors.brand, fontSize: 15, fontWeight: "700" },
-  indice: { position: "absolute", right: 0, top: 0, bottom: 100, width: 120, justifyContent: "center", alignItems: "flex-end" },
+  indice: { position: "absolute", right: 0, top: 0, bottom: SPAZIO_BARRA, width: 120, justifyContent: "center", alignItems: "flex-end" },
   indiceLettere: { width: 32, alignItems: "center", paddingVertical: 2 },
   indiceLettera: { width: 32, alignItems: "center", justifyContent: "center" },
   indiceTesto: { color: brand.colors.brand, fontSize: 11, fontWeight: "700" },

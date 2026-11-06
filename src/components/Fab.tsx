@@ -1,6 +1,8 @@
 import { useState } from "react";
-import { Pressable, Text, StyleSheet, View, Modal } from "react-native";
+import { Pressable, Text, StyleSheet, View, Modal, useWindowDimensions } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { brand } from "@/src/config";
+import { ALTEZZA_BARRA } from "@/src/lib/spazioBarra";
 
 interface Props {
   onPress: () => void;
@@ -11,10 +13,14 @@ interface Props {
 }
 
 export function FabAggiungi({ onPress, posizione = "principale", icona = "+", colore }: Props) {
+  // Su telefono la barra delle schede galleggia in basso: il "+" sta sopra di essa.
+  const { width } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  const sopraBarra = width < 700 ? ALTEZZA_BARRA + Math.max(insets.bottom, 10) : 0;
   return (
     <Pressable
       onPress={onPress}
-      style={[styles.fab, posizione === "secondaria" && styles.fabSecondaria, colore ? { backgroundColor: colore } : null]}
+      style={[styles.fab, posizione === "secondaria" && styles.fabSecondaria, { bottom: (posizione === "secondaria" ? 90 : 24) + sopraBarra }, colore ? { backgroundColor: colore } : null]}
     >
       <Text style={styles.fabTesto}>{icona}</Text>
     </Pressable>

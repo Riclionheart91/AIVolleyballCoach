@@ -3,6 +3,7 @@ import { useAuth } from "@/src/context/AuthContext";
 import { PianiIndividuali } from "@/src/components/PianiIndividuali";
 import { TitoloGrande } from "@/src/components/TitoloGrande";
 import { brand } from "@/src/config";
+import { SPAZIO_BARRA } from "@/src/lib/spazioBarra";
 
 /**
  * Scheda personale di chi gioca: è la prima cosa che vede aprendo
@@ -38,7 +39,7 @@ export default function SchedaPersonale() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: brand.colors.surface },
-  contenuto: { padding: 16, paddingBottom: 90 },
+  contenuto: { padding: 16, paddingBottom: SPAZIO_BARRA },
   colonna: { width: "100%", maxWidth: 900, alignSelf: "center", gap: 14 },
   schedaNota: { backgroundColor: brand.colors.surfaceSecondary, borderRadius: 18, padding: 16 },
   nota: { color: brand.colors.onSurfaceSecondary, fontSize: 14, lineHeight: 20 },

@@ -15,6 +15,7 @@ import { TitoloGrande } from "@/src/components/TitoloGrande";
 import { CondividiGenitori } from "@/src/components/CondividiGenitori";
 import { commentoPartita, inviaLinkScout } from "@/src/lib/messaggiWhatsApp";
 import { Ionicons } from "@expo/vector-icons";
+import { SPAZIO_BARRA } from "@/src/lib/spazioBarra";
 
 /** "OGGI · 21:00" oppure "GIO 5 NOV · 21:00" per la scheda in evidenza. */
 function etichettaQuando(iso: string): string {
@@ -706,7 +707,7 @@ const styles = StyleSheet.create({
   evidenzaTitolo: { color: brand.colors.onSurface, fontSize: 20, fontWeight: "700", letterSpacing: -0.3 },
   evidenzaSotto: { color: brand.colors.onSurfaceSecondary, fontSize: 14 },
   container: { flex: 1, backgroundColor: brand.colors.surface, paddingHorizontal: 16, paddingTop: 8 },
-  contenuto: { paddingBottom: 60, width: "100%", maxWidth: 900, alignSelf: "center" },
+  contenuto: { paddingBottom: SPAZIO_BARRA, width: "100%", maxWidth: 900, alignSelf: "center" },
   sezionePiccola: { color: brand.colors.muted, fontSize: 13, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.6, paddingLeft: 4, marginBottom: -8 },
   form: { gap: 10, backgroundColor: brand.colors.surfaceSecondary, padding: 16, borderRadius: 18 },
   input: { backgroundColor: brand.colors.surfaceTertiary, color: brand.colors.onSurface, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10, minHeight: 44, fontSize: 16 },
