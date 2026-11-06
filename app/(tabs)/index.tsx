@@ -16,6 +16,9 @@ import { BarraRicerca } from "@/src/components/BarraRicerca";
 import { ALTEZZA_TITOLO_COMPATTO, TitoloCompatto, stileFisso, useScorrimentoIOS } from "@/src/lib/scorrimentoIOS";
 import { apriWhatsApp } from "@/src/lib/apriWhatsApp";
 import { RigaScorrevole, type AzioneRiga } from "@/src/components/RigaScorrevole";
+import { InvitaDaRiga } from "@/src/components/InvitaDaRiga";
+import { elencaMembri } from "@/src/services/membri";
+import { elencaInvitiPendenti } from "@/src/services/teamInvites";
 import { useGestoRiga } from "@/src/lib/preferenzeGesti";
 
 /** Testo dentro l'avatar: il numero di maglia, o le iniziali se manca. */
@@ -110,11 +113,20 @@ export default function Atlete() {
   const [posizioneLettere, setPosizioneLettere] = useState(0);
   const [letteraBolla, setLetteraBolla] = useState<string | null>(null);
 
+  // Chi ha gia' un account collegato o un invito in sospeso: per le altre la riga mostra "Invita".
+  const [conAccesso, setConAccesso] = useState<Set<string>>(new Set());
+  const [invitate, setInvitate] = useState<Set<string>>(new Set());
+
   const carica = useCallback(async () => {
     if (!team) return;
     setCaricamento(true);
     try {
       setAtlete(await elencaAtlete(team.id));
+      if (puoScrivere) {
+        const [membri, inviti] = await Promise.all([elencaMembri(team.id).catch(() => []), elencaInvitiPendenti(team.id).catch(() => [])]);
+        setConAccesso(new Set(membri.map((m) => m.atleta_id).filter((x): x is string => !!x)));
+        setInvitate(new Set(inviti.map((i) => i.atleta_id).filter((x): x is string => !!x)));
+      }
       if (mostraArchiviate) setArchiviate(await elencaAtleteArchiviate(team.id));
     } finally {
       setCaricamento(false);
@@ -276,6 +288,11 @@ export default function Atlete() {
               accessibilityLabel={statoCert === "scaduto" ? "Certificato medico scaduto" : "Certificato medico in scadenza"}
               style={[styles.puntoCertificato, { backgroundColor: statoCert === "scaduto" ? brand.colors.error : brand.colors.warning }]}
             />
+          )}
+          {puoScrivere && team && item.status === "attiva" && !conAccesso.has(item.id) && (
+            invitate.has(item.id)
+              ? <Text style={styles.tagInvitata}>Invitata</Text>
+              : <InvitaDaRiga teamId={team.id} nomeSquadra={team.nome} atleta={item} onCambiato={carica} />
           )}
           <Text style={styles.chevron}>›</Text>
         </Pressable>
@@ -532,6 +549,7 @@ const styles = StyleSheet.create({
   avatarTesto: { color: brand.colors.brand, fontSize: 17, fontWeight: "700" },
   rigaNome: { color: brand.colors.onSurface, fontSize: 16, fontWeight: "600" },
   rigaSotto: { color: brand.colors.muted, fontSize: 13 },
+  tagInvitata: { color: brand.colors.muted, fontSize: 12, fontWeight: "600" },
   chevron: { color: brand.colors.muted, fontSize: 24, fontWeight: "600" },
   vuoto: { color: brand.colors.muted, textAlign: "center", marginTop: 32 },
   bottoneReminder: { flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: brand.colors.surfaceSecondary, borderWidth: 1, borderColor: brand.colors.border, borderRadius: 16, paddingVertical: 12, paddingHorizontal: 14, marginBottom: 8, minHeight: 60 },
