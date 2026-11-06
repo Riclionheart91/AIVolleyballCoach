@@ -299,6 +299,7 @@ function FoglioValutazione({ teamId, atleta, onChiudi, onSalvato, onAggiorna }: 
                 <View style={styles.rigaFondamentale}>
                   <Text style={styles.nomeFondamentale}>{f}</Text>
                   {ultimi[f] != null && <Text style={styles.ultimoVoto}>ultimo: {ultimi[f]}</Text>}
+                  {voti[f] != null && !Number.isInteger(voti[f]) && <Text style={styles.votoMezzo}>→ {voti[f]}</Text>}
                   <View style={{ flex: 1 }} />
                   <Pressable onPress={() => suggerisci(f)} disabled={generando !== null} hitSlop={8} style={[styles.tastoAI, generando !== null && { opacity: 0.5 }]} accessibilityLabel={`Suggerimento AI per ${f}`}>
                     <Text style={styles.tastoAITesto}>{generando === f ? "…" : "✨ AI"}</Text>
@@ -477,6 +478,7 @@ const styles = StyleSheet.create({
   chiudiFoglio: { color: brand.colors.muted, fontSize: 18, fontWeight: "700", padding: 4 },
   rigaFondamentale: { flexDirection: "row", alignItems: "center", gap: 10 },
   nomeFondamentale: { color: brand.colors.onSurface, fontSize: 16, fontWeight: "600" },
+  votoMezzo: { color: brand.colors.brand, fontSize: 14, fontWeight: "800" },
   ultimoVoto: { color: brand.colors.muted, fontSize: 13 },
   tastoAI: { minHeight: 32, paddingHorizontal: 12, borderRadius: 999, backgroundColor: brand.colors.surfaceTertiary, alignItems: "center", justifyContent: "center" },
   tastoAITesto: { color: brand.colors.brand, fontSize: 13, fontWeight: "700" },
