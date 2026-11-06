@@ -1,6 +1,6 @@
 import { supabaseClient } from "@/src/lib/supabase";
 import { messaggioErroreRouter } from "@/src/services/aiProviders";
-import { supabase as cfg } from "@/src/config";
+import { supabase as cfg, fondamentali } from "@/src/config";
 import { istruzioniAggiuntive } from "@/src/services/pianoAnnuale";
 import { ATLETA_ANONIMA } from "@/src/lib/anonimizza";
 import type { Evaluation, EvaluationProposal, Fondamentale } from "@/src/types/database";
@@ -195,4 +195,164 @@ export async function chiediParerePartitaAI(teamId: string, riassunto: string, d
   if (error) return { errore: true, messaggio: await messaggioErroreRouter(error) };
   if (data.errore) return { errore: true, messaggio: [data.messaggio, data.dettagli].filter(Boolean).join("\n\n") };
   return { errore: false, testo: data.testo };
+}
+
+
+// ---------------------------------------------------------------------------
+// Controllo a tappeto: l'AI rilegge lo storico di tutta la rosa e propone aggiornamenti
+// ---------------------------------------------------------------------------
+
+const ATLETE_PER_CHIAMATA = 5;
+const CONFIDENZE = ["bassa", "media", "alta"] as const;
+
+export interface GruppoControllo {
+  prompt: string;
+  /** Codice anonimo usato nel prompt (A1, A2…) -> atleta vera e ultimo voto per fondamentale. */
+  atlete: Record<string, { athleteId: string; ultimi: Partial<Record<Fondamentale, number>> }>;
+}
+
+export interface PreparazioneControllo {
+  gruppi: GruppoControllo[];
+  atleteControllate: number;
+  atleteSenzaStorico: number;
+}
+
+/**
+ * Prepara il controllo: legge tutte le valutazioni della squadra, tiene le atlete con almeno un fondamentale già
+ * valutato (senza storico l'AI inventerebbe) e salta le coppie atleta/fondamentale che hanno già una proposta in attesa.
+ * I nomi non escono mai: nel prompt le atlete sono A1, A2… con il solo ruolo.
+ */
+export async function preparaControlloATappeto(
+  teamId: string,
+  atlete: { id: string; ruolo_campo?: string | null }[],
+  pendenti: { athlete_id: string; fondamentale: string }[],
+): Promise<PreparazioneControllo> {
+  const { data, error } = await supabaseClient
+    .from("evaluations")
+    .select("athlete_id, fondamentale, punteggio, data_valutazione")
+    .eq("team_id", teamId)
+    .order("data_valutazione", { ascending: false })
+    .limit(5000);
+  if (error) throw error;
+
+  const storico = new Map<string, Map<Fondamentale, { punteggio: number; data: string }[]>>();
+  for (const r of data ?? []) {
+    const f = r.fondamentale as Fondamentale;
+    const perAtleta = storico.get(r.athlete_id) ?? new Map();
+    const lista = perAtleta.get(f) ?? [];
+    if (lista.length < 5) lista.push({ punteggio: Number(r.punteggio), data: String(r.data_valutazione) });
+    perAtleta.set(f, lista);
+    storico.set(r.athlete_id, perAtleta);
+  }
+  const inAttesa = new Set(pendenti.map((p) => `${p.athlete_id}|${p.fondamentale}`));
+
+  const candidate = atlete
+    .map((a) => {
+      const perAtleta = storico.get(a.id);
+      const fondamentaliValidi = fondamentali.filter((f) => (perAtleta?.get(f)?.length ?? 0) > 0 && !inAttesa.has(`${a.id}|${f}`));
+      return { a, perAtleta, fondamentaliValidi };
+    });
+  const conStorico = candidate.filter((c) => c.fondamentaliValidi.length > 0);
+
+  const gruppi: GruppoControllo[] = [];
+  for (let i = 0; i < conStorico.length; i += ATLETE_PER_CHIAMATA) {
+    const parte = conStorico.slice(i, i + ATLETE_PER_CHIAMATA);
+    const atleteGruppo: GruppoControllo["atlete"] = {};
+    const righe: string[] = [];
+    parte.forEach((c, j) => {
+      const codice = `A${j + 1}`;
+      const ultimi: Partial<Record<Fondamentale, number>> = {};
+      const pezzi = c.fondamentaliValidi.map((f) => {
+        const lista = c.perAtleta!.get(f)!;
+        ultimi[f] = lista[0].punteggio;
+        return `${f} [${lista.map((v) => `${v.data.slice(0, 10)}: ${v.punteggio}`).join(", ")}]`;
+      });
+      atleteGruppo[codice] = { athleteId: c.a.id, ultimi };
+      righe.push(`${codice} (${c.a.ruolo_campo || "ruolo non indicato"}): ${pezzi.join("; ")}`);
+    });
+    const prompt =
+      `Controllo periodico dei voti di un gruppo di atlete. Per ognuna sono indicati i fondamentali con lo storico recente (dal più recente, data: punteggio).\n\n` +
+      `${righe.join("\n")}\n\n` +
+      `Per ogni coppia atleta/fondamentale proponi un aggiornamento SOLO se lo storico lo giustifica (tendenza chiara in salita o in discesa, voto fermo da molto tempo, ` +
+      `dato anomalo). Se il voto attuale resta adeguato NON includerla. Il voto proposto è da 1 a 10, a passi di 0,5. ` +
+      `Rispondi SOLO con un array JSON, senza altro testo: ` +
+      `[{"atleta":"A1","fondamentale":"Servizio","valore":7.5,"confidenza":"bassa"|"media"|"alta","motivazione":"una frase breve che cita il dato"}]. ` +
+      `Se nessun aggiornamento è necessario rispondi [].`;
+    gruppi.push({ prompt, atlete: atleteGruppo });
+  }
+
+  return { gruppi, atleteControllate: conStorico.length, atleteSenzaStorico: atlete.length - conStorico.length };
+}
+
+export interface EsitoControllo {
+  errore: boolean;
+  messaggio?: string;
+  proposteCreate: number;
+  gruppiFatti: number;
+  chiamateResidue?: number;
+  limite?: number;
+}
+
+function leggiArrayProposte(testo: string): unknown[] {
+  const pulito = testo.trim().replace(/^```(?:json)?\s*|```$/g, "");
+  const inizio = pulito.indexOf("[");
+  const fine = pulito.lastIndexOf("]");
+  if (inizio === -1 || fine <= inizio) return [];
+  try {
+    const arr = JSON.parse(pulito.slice(inizio, fine + 1));
+    return Array.isArray(arr) ? arr : [];
+  } catch { return []; }
+}
+
+/** Esegue il controllo: una chiamata AI per gruppo; crea le proposte in attesa (mai valutazioni vere). Si ferma al primo errore tenendo quanto già fatto. */
+export async function eseguiControlloATappeto(
+  teamId: string,
+  gruppi: GruppoControllo[],
+  onAvanzamento?: (fatti: number, totale: number) => void,
+): Promise<EsitoControllo> {
+  const { data: sessione } = await supabaseClient.auth.getSession();
+  if (!sessione.session) return { errore: true, messaggio: "Sessione scaduta, effettua di nuovo l'accesso.", proposteCreate: 0, gruppiFatti: 0 };
+
+  let create = 0;
+  let fatti = 0;
+  let residue: number | undefined;
+  let limite: number | undefined;
+  onAvanzamento?.(0, gruppi.length);
+
+  for (const g of gruppi) {
+    const { data, error } = await supabaseClient.functions.invoke(cfg.aiRouterFunction, { body: { team_id: teamId, prompt: g.prompt, funzione: "voti" } });
+    if (error) return { errore: true, messaggio: await messaggioErroreRouter(error), proposteCreate: create, gruppiFatti: fatti, chiamateResidue: residue, limite };
+    if (data.errore) return { errore: true, messaggio: [data.messaggio, data.dettagli].filter(Boolean).join("\n\n"), proposteCreate: create, gruppiFatti: fatti, chiamateResidue: residue, limite };
+    residue = data.chiamateResidue; limite = data.limite;
+
+    const righe: Record<string, unknown>[] = [];
+    for (const voce of leggiArrayProposte(String(data.testo ?? ""))) {
+      const v = voce as { atleta?: string; fondamentale?: string; valore?: unknown; confidenza?: string; motivazione?: unknown };
+      const atleta = v.atleta ? g.atlete[v.atleta] : undefined;
+      const f = fondamentali.find((x) => x === v.fondamentale);
+      const numero = Number(v.valore);
+      if (!atleta || !f || Number.isNaN(numero)) continue;
+      const valore = Math.round(Math.min(10, Math.max(1, numero)) * 2) / 2;
+      const attuale = atleta.ultimi[f] ?? null;
+      if (attuale !== null && Math.abs(valore - attuale) < 0.5) continue; // nessun aggiornamento reale
+      righe.push({
+        team_id: teamId,
+        athlete_id: atleta.athleteId,
+        fondamentale: f,
+        valore_attuale: attuale,
+        valore_proposto: valore,
+        confidenza: (CONFIDENZE as readonly string[]).includes(v.confidenza ?? "") ? v.confidenza : "media",
+        motivazione: String(v.motivazione ?? "").slice(0, 300),
+        provider_usato: data.providerUsato,
+      });
+    }
+    if (righe.length > 0) {
+      const { error: erroreInsert } = await supabaseClient.from("evaluation_proposals").insert(righe);
+      if (erroreInsert) return { errore: true, messaggio: erroreInsert.message, proposteCreate: create, gruppiFatti: fatti, chiamateResidue: residue, limite };
+      create += righe.length;
+    }
+    fatti++;
+    onAvanzamento?.(fatti, gruppi.length);
+  }
+  return { errore: false, proposteCreate: create, gruppiFatti: fatti, chiamateResidue: residue, limite };
 }

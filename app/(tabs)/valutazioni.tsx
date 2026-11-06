@@ -13,12 +13,14 @@ import {
   impostaCadenzaValutazione,
   registraValutazione,
   rigettaProposta,
+  preparaControlloATappeto,
+  eseguiControlloATappeto,
   type AtletaDaValutare,
 } from "@/src/services/evaluations";
 import { SchedaRendimento } from "@/src/components/SchedaRendimento";
 import { brand, fondamentali, uiStrings } from "@/src/config";
 import type { Athlete, Evaluation, EvaluationProposal, Fondamentale } from "@/src/types/database";
-import { avvisa } from "@/src/lib/confermaAzione";
+import { avvisa, confermaAzione } from "@/src/lib/confermaAzione";
 import { TitoloGrande } from "@/src/components/TitoloGrande";
 import { MenuAzioni } from "@/src/components/MenuAzioni";
 import { SPAZIO_BARRA } from "@/src/lib/spazioBarra";
@@ -69,6 +71,8 @@ function ElencoValutazioni({ teamId, registraAggiorna }: { teamId: string; regis
   const [atletaAperta, setAtletaAperta] = useState<Athlete | null>(null);
   const [cadenzaInModifica, setCadenzaInModifica] = useState(false);
   const [cadenza, setCadenza] = useState("30");
+  const [controllo, setControllo] = useState<{ fatti: number; totale: number } | null>(null);
+  const [esitoControllo, setEsitoControllo] = useState<{ tipo: "ok" | "errore"; testo: string } | null>(null);
 
   const carica = useCallback(async () => {
     const [lista, dv, pr] = await Promise.all([
@@ -90,6 +94,50 @@ function ElencoValutazioni({ teamId, registraAggiorna }: { teamId: string; regis
       setCadenzaInModifica(false);
       carica();
     } catch (e) { avvisa("Errore", (e as Error).message); }
+  }
+
+  /** Controllo a tappeto: prepara, chiede conferma (consuma chiamate AI del giorno) ed esegue. */
+  async function avviaControllo() {
+    if (controllo) return;
+    setEsitoControllo(null);
+    try {
+      const prep = await preparaControlloATappeto(teamId, atlete, proposte);
+      if (prep.gruppi.length === 0) {
+        setEsitoControllo({ tipo: "ok", testo: "Niente da controllare: nessuna atleta ha uno storico di valutazioni (o le sue proposte sono già in attesa). Registra prima qualche valutazione." });
+        return;
+      }
+      const n = prep.gruppi.length;
+      confermaAzione(
+        "Controllo AI su tutta la rosa",
+        `L'AI rilegge lo storico di ${prep.atleteControllate} atlete (senza nomi) e propone un aggiornamento solo dove serve. Usa ${n} ${n === 1 ? "chiamata" : "chiamate"} AI del limite giornaliero. Le proposte non cambiano nulla: le approvi o le rigetti tu.`,
+        "Avvia il controllo",
+        async () => {
+          setControllo({ fatti: 0, totale: n });
+          try {
+            const esito = await eseguiControlloATappeto(teamId, prep.gruppi, (fatti, totale) => setControllo({ fatti, totale }));
+            const resto = esito.chiamateResidue != null ? ` (chiamate AI residue oggi: ${esito.chiamateResidue}/${esito.limite})` : "";
+            if (esito.errore) {
+              setEsitoControllo({ tipo: "errore", testo: `${esito.messaggio ?? "Errore"}${esito.proposteCreate ? ` — nel frattempo sono state create ${esito.proposteCreate} proposte.` : ""}` });
+            } else {
+              setEsitoControllo({
+                tipo: "ok",
+                testo: esito.proposteCreate === 0
+                  ? `Controllate ${prep.atleteControllate} atlete: nessun aggiornamento necessario${resto}.`
+                  : `Controllate ${prep.atleteControllate} atlete: ${esito.proposteCreate} ${esito.proposteCreate === 1 ? "proposta" : "proposte"} di aggiornamento${resto}.`,
+              });
+              if (esito.proposteCreate > 0) setScheda("proposte");
+            }
+          } catch (e) {
+            setEsitoControllo({ tipo: "errore", testo: (e as Error).message });
+          } finally {
+            setControllo(null);
+            carica();
+          }
+        },
+      );
+    } catch (e) {
+      setEsitoControllo({ tipo: "errore", testo: (e as Error).message });
+    }
   }
 
   async function onDecidi(p: EvaluationProposal) {
@@ -122,7 +170,7 @@ function ElencoValutazioni({ teamId, registraAggiorna }: { teamId: string; regis
           </View>
           <MenuAzioni
             titolo="Valutazioni"
-            voci={[{ etichetta: "Cadenza delle valutazioni", icona: "timer-outline", sotto: "Ogni quanti giorni un'atleta torna \"da valutare\"", onPress: () => setCadenzaInModifica(true) }]}
+            voci={[{ etichetta: "Controllo AI su tutta la rosa", icona: "sparkles-outline", sotto: "L'AI rilegge lo storico e propone aggiornamenti", onPress: avviaControllo }, { etichetta: "Cadenza delle valutazioni", icona: "timer-outline", sotto: "Ogni quanti giorni un'atleta torna \"da valutare\"", onPress: () => setCadenzaInModifica(true) }]}
           />
         </View>
         <View style={styles.segmenti} accessibilityRole="tablist">
@@ -135,6 +183,19 @@ function ElencoValutazioni({ teamId, registraAggiorna }: { teamId: string; regis
       </View>
 
       <View style={{ gap: 12 }}>
+      <Pressable
+        onPress={avviaControllo}
+        disabled={!!controllo}
+        style={[styles.bottoneControllo, !!controllo && { opacity: 0.6 }]}
+        accessibilityRole="button"
+        accessibilityLabel="Controllo AI su tutta la rosa"
+      >
+        <Text style={styles.bottoneControlloTesto}>{controllo ? `Controllo in corso… ${controllo.fatti}/${controllo.totale}` : "✨ Controllo AI su tutta la rosa"}</Text>
+        {!controllo && <Text style={styles.bottoneControlloSotto}>Suggerisce gli aggiornamenti dove servono</Text>}
+      </Pressable>
+      {esitoControllo && (
+        <Text style={[styles.messaggio, esitoControllo.tipo === "errore" && styles.messaggioErrore, esitoControllo.tipo === "ok" && styles.messaggioOk]}>{esitoControllo.testo}</Text>
+      )}
       {cadenzaInModifica && (
         <View style={[styles.scheda, styles.rigaCadenza]}>
           <TextInput style={styles.inputCadenza} keyboardType="numeric" value={cadenza} onChangeText={setCadenza} />
@@ -460,6 +521,9 @@ const styles = StyleSheet.create({
   rigaCadenza: { flexDirection: "row", alignItems: "center", gap: 10, padding: 12 },
   inputCadenza: { backgroundColor: brand.colors.surfaceTertiary, color: brand.colors.onSurface, borderRadius: 10, padding: 8, minHeight: 44, width: 60, textAlign: "center", fontSize: 16, fontWeight: "700" },
   selettoreRiga: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  bottoneControllo: { backgroundColor: brand.colors.surfaceSecondary, borderWidth: 1, borderColor: brand.colors.brand, borderRadius: 16, minHeight: 56, paddingVertical: 10, paddingHorizontal: 16, alignItems: "center", justifyContent: "center", gap: 2 },
+  bottoneControlloTesto: { color: brand.colors.brand, fontSize: 16, fontWeight: "700" },
+  bottoneControlloSotto: { color: brand.colors.muted, fontSize: 12 },
   bloccoFisso: { marginHorizontal: -16, paddingHorizontal: 16, paddingTop: 6, paddingBottom: 10, gap: 10, marginBottom: 14 },
   rigaRicerca: { flexDirection: "row", alignItems: "center", gap: 10 },
   segmenti: { flexDirection: "row", backgroundColor: "rgba(118,118,128,0.24)", borderRadius: 10, padding: 2 },
