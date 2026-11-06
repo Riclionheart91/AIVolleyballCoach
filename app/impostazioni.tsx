@@ -3,7 +3,7 @@ import { View, Text, TextInput, Pressable, StyleSheet, ScrollView, Switch, Platf
 import { router, useFocusEffect } from "expo-router";
 import { useAuth } from "@/src/context/AuthContext";
 import { impostaLinkSporteasy, leggiIntegrazione } from "@/src/services/sporteasy";
-import { elencaProvider, riepilogoChiamateAI, salvaProvider, type AiProviderConfig, type RigaRiepilogoAI } from "@/src/services/aiProviders";
+import { chiamateAiResidueOggi, elencaProvider, LIMITE_CHIAMATE_AI_GIORNALIERO, riepilogoChiamateAI, salvaProvider, type AiProviderConfig, type RigaRiepilogoAI } from "@/src/services/aiProviders";
 import { brand } from "@/src/config";
 import { TitoloGrande } from "@/src/components/TitoloGrande";
 import { etichetteDimensioneTesto, leggiScelta, salvaScelta, type ScelteDimensioneTesto } from "@/src/lib/dimensioneTesto";
@@ -40,6 +40,7 @@ export default function Impostazioni() {
   const [caricandoPush, setCaricandoPush] = useState(false);
   const [prefEventi, setPrefEventi] = useState<PreferenzeNotificheEventi>({ disponibile: false, partita_live: false, convocazioni: false });
   const [caricandoEventi, setCaricandoEventi] = useState(false);
+  const [residueAI, setResidueAI] = useState<number | null>(null);
 
   const carica = useCallback(async () => {
     if (!team) return;
@@ -49,7 +50,10 @@ export default function Impostazioni() {
       setProviderSquadra(await elencaProvider(team.id).catch(() => []));
       setRiepilogoAI(await riepilogoChiamateAI(team.id).catch(() => []));
     }
-    if (isSuperuser) setProviderGlobali(await elencaProvider(null).catch(() => []));
+    if (isSuperuser) {
+      setProviderGlobali(await elencaProvider(null).catch(() => []));
+      setResidueAI(await chiamateAiResidueOggi(team.id).catch(() => null));
+    }
     const imp = await leggiImpostazioniNotifiche();
     setNotificheEsercizio(imp);
     setIntervalloTesto(String(imp.intervalloMinuti));
@@ -250,6 +254,21 @@ export default function Impostazioni() {
               </Text>
             ))
           )}
+        </View>
+      )}
+
+      {isSuperuser && (
+        <View style={styles.card}>
+          <Text style={styles.sezioneTitolo}>Limite chiamate AI (superuser)</Text>
+          <Text style={styles.nota}>
+            Ogni squadra può fare al massimo {LIMITE_CHIAMATE_AI_GIORNALIERO} chiamate AI al giorno. Il tetto è per squadra e condiviso da tutte le funzioni (valutazioni, esercizi, piani, commenti e pareri sulle partite). Contano solo le chiamate riuscite e il conteggio riparte a mezzanotte UTC (l'1:00 in Italia con l'ora solare, le 2:00 con l'ora legale).
+          </Text>
+          <Text style={styles.rigaRiepilogo}>
+            {residueAI === null
+              ? "Oggi per questa squadra: dato non disponibile."
+              : `Oggi per questa squadra: ${Math.max(0, LIMITE_CHIAMATE_AI_GIORNALIERO - residueAI)} usate, ${residueAI} ancora disponibili.`}
+          </Text>
+          <Text style={styles.nota}>Il valore è scritto nel database e nella funzione ai-router: per cambiarlo vanno modificati entrambi.</Text>
         </View>
       )}
 

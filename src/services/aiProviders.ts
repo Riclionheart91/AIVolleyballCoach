@@ -65,3 +65,16 @@ export async function messaggioErroreRouter(error: { message: string; context?: 
   }
   return error.message;
 }
+
+/**
+ * Tetto di chiamate AI al giorno PER SQUADRA (condiviso da tutte le funzioni: voti, esercizi, piani, commenti...).
+ * E' scritto nel database (ai_chiamate_residue_oggi) e nella funzione ai-router: se lo cambi, cambia in entrambi.
+ */
+export const LIMITE_CHIAMATE_AI_GIORNALIERO = 20;
+
+/** Chiamate AI ancora disponibili oggi per la squadra (il conteggio riparte a mezzanotte UTC). */
+export async function chiamateAiResidueOggi(teamId: string): Promise<number> {
+  const { data, error } = await supabaseClient.rpc("ai_chiamate_residue_oggi", { p_team_id: teamId });
+  if (error) throw error;
+  return Number(data ?? 0);
+}
