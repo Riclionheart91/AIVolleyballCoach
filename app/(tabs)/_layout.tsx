@@ -1,3 +1,4 @@
+import type React from "react";
 import { useEffect, useState } from "react";
 import { Tabs, router } from "expo-router";
 import { Pressable, Text, View, ActivityIndicator, StyleSheet, useWindowDimensions } from "react-native";
@@ -6,6 +7,7 @@ import { useAuth } from "@/src/context/AuthContext";
 import { calcolaNotifiche } from "@/src/services/notifiche";
 import { elencaPartiteLive } from "@/src/services/live";
 import { brand } from "@/src/config";
+import BarraTabScorrevole from "@/src/components/BarraTabScorrevole";
 
 /** Banner stagione: sempre visibile in header, tocco -> tab Stagioni (dove si vede l'elenco di quelle passate e si può cambiare/attivare). */
 function BannerStagione() {
@@ -117,8 +119,14 @@ export default function TabsLayout() {
     );
   }
 
+  // Voci mostrate nella barra in basso (telefono), nell'ordine: stesse regole degli href delle Tabs.Screen sotto.
+  const vociBarra = ruolo === "atleta" ? ["scheda", "partite", "valutazioni"] : ["index", "esercizi", "allenamenti", "partite", "valutazioni"];
+
   return (
     <Tabs
+      // Telefono: barra propria che permette di scorrere il dito da una voce all'altra (come l'indice A–Z della Rosa).
+      // Barra laterale (schermi larghi): resta quella standard.
+      tabBar={largo ? undefined : (props) => <BarraTabScorrevole {...(props as unknown as React.ComponentProps<typeof BarraTabScorrevole>)} nomi={vociBarra} />}
       screenOptions={{
         headerStyle: { backgroundColor: brand.colors.surface },
         headerTintColor: brand.colors.onSurface,
