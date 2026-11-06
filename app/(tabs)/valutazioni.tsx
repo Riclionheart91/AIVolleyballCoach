@@ -1,6 +1,6 @@
 import { RinvioPromemoria } from "@/src/components/RinvioPromemoria";
-import { useCallback, useEffect, useState } from "react";
-import { View, Text, TextInput, Pressable, StyleSheet, FlatList, ScrollView, ActivityIndicator } from "react-native";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { View, Text, TextInput, Pressable, StyleSheet, ScrollView, Modal, Animated } from "react-native";
 import { useFocusEffect } from "expo-router";
 import { useAuth } from "@/src/context/AuthContext";
 import { elencaAtlete } from "@/src/services/athletes";
@@ -22,7 +22,9 @@ import { avvisa } from "@/src/lib/confermaAzione";
 import { TitoloGrande } from "@/src/components/TitoloGrande";
 import { MenuAzioni } from "@/src/components/MenuAzioni";
 import { SPAZIO_BARRA } from "@/src/lib/spazioBarra";
-import { TitoloCompatto, useScorrimentoIOS } from "@/src/lib/scorrimentoIOS";
+import { TitoloCompatto, stileFisso, useScorrimentoIOS } from "@/src/lib/scorrimentoIOS";
+import { BarraRicerca } from "@/src/components/BarraRicerca";
+import { useTrascinaPerChiudere } from "@/src/lib/trascinaPerChiudere";
 
 /** Testo dentro l'avatar: il numero di maglia, o le iniziali se manca. */
 function testoAvatar(numero: number | string | null | undefined, nome?: string | null, cognome?: string | null): string {
@@ -32,16 +34,19 @@ function testoAvatar(numero: number | string | null | undefined, nome?: string |
 
 export default function Valutazioni() {
   const { team, puoScrivere, ruolo, atletaId } = useAuth();
-  const { scrollY, propsLista } = useScorrimentoIOS();
+  // Il "tira per aggiornare" richiama il caricamento dell'elenco, registrato da ElencoValutazioni.
+  const aggiornaRef = useRef<(() => Promise<void>) | null>(null);
+  const registraAggiorna = useCallback((f: () => Promise<void>) => { aggiornaRef.current = f; }, []);
+  const { scrollY, propsLista, indicatore } = useScorrimentoIOS(() => aggiornaRef.current?.());
 
   return (
     <View style={styles.container}>
     <TitoloCompatto titolo={uiStrings.valutazioni.title} scrollY={scrollY} />
-    <ScrollView style={styles.container} contentContainerStyle={styles.contenuto} {...propsLista}>
+    {indicatore}
+    <ScrollView style={styles.container} contentContainerStyle={[styles.contenuto, puoScrivere && { gap: 0 }]} keyboardShouldPersistTaps="handled" {...propsLista}>
       <TitoloGrande titolo={uiStrings.valutazioni.title} />
 
-      {puoScrivere && team && <SezioneCicloValutazione teamId={team.id} />}
-      {puoScrivere && <SezioneValutazioneCoach teamId={team!.id} />}
+      {puoScrivere && team && <ElencoValutazioni teamId={team.id} registraAggiorna={registraAggiorna} />}
       {ruolo === "atleta" && atletaId && <SezioneValutazionePersonale athleteId={atletaId} teamId={team!.id} />}
       {ruolo === "presidente" && team && <SezioneValutazionePresidente teamId={team.id} />}
     </ScrollView>
@@ -49,22 +54,33 @@ export default function Valutazioni() {
   );
 }
 
+type Scheda = "da_valutare" | "tutte" | "proposte";
+
 /**
- * Ciclo di valutazione a cadenza configurabile: mostra sempre CHI è
- * oltre la scadenza, invece di lasciare all'allenatore il compito di
- * ricordarselo. Il promemoria compare anche nel centro notifiche.
+ * Valutazioni per allenatore/vice: un elenco di atlete (da valutare / tutte / proposte AI) con ricerca fissa.
+ * Si tocca un'atleta e si valuta in un foglio dal basso, con tutti i fondamentali insieme.
  */
-function SezioneCicloValutazione({ teamId }: { teamId: string }) {
+function ElencoValutazioni({ teamId, registraAggiorna }: { teamId: string; registraAggiorna: (f: () => Promise<void>) => void }) {
+  const [atlete, setAtlete] = useState<Athlete[]>([]);
   const [daValutare, setDaValutare] = useState<AtletaDaValutare[]>([]);
-  const [mostraTutte, setMostraTutte] = useState(false);
+  const [proposte, setProposte] = useState<EvaluationProposal[]>([]);
+  const [scheda, setScheda] = useState<Scheda>("da_valutare");
+  const [ricerca, setRicerca] = useState("");
+  const [atletaAperta, setAtletaAperta] = useState<Athlete | null>(null);
   const [cadenzaInModifica, setCadenzaInModifica] = useState(false);
   const [cadenza, setCadenza] = useState("30");
 
   const carica = useCallback(async () => {
-    try { setDaValutare(await atleteDaValutare(teamId)); } catch { setDaValutare([]); }
+    const [lista, dv, pr] = await Promise.all([
+      elencaAtlete(teamId),
+      atleteDaValutare(teamId).catch(() => [] as AtletaDaValutare[]),
+      elencaPropostePendenti(teamId).catch(() => [] as EvaluationProposal[]),
+    ]);
+    setAtlete(lista); setDaValutare(dv); setProposte(pr);
   }, [teamId]);
 
-  useFocusEffect(useCallback(() => { carica(); }, [carica]));
+  useFocusEffect(useCallback(() => { carica().catch(() => { /* l'elenco resta quello precedente */ }); }, [carica]));
+  useEffect(() => { registraAggiorna(carica); }, [carica, registraAggiorna]);
 
   async function salvaCadenza() {
     const giorni = Number(cadenza);
@@ -76,219 +92,258 @@ function SezioneCicloValutazione({ teamId }: { teamId: string }) {
     } catch (e) { avvisa("Errore", (e as Error).message); }
   }
 
-  const daMostrare = mostraTutte ? daValutare : daValutare.slice(0, 5);
+  async function onDecidi(p: EvaluationProposal) {
+    try { await decidiProposta(p.id, p.valore_proposto); carica(); } catch (e) { avvisa("Errore", (e as Error).message); }
+  }
+  async function onRigetta(p: EvaluationProposal) {
+    try { await rigettaProposta(p.id); carica(); } catch (e) { avvisa("Errore", (e as Error).message); }
+  }
+
+  const giorniPer = new Map(daValutare.map((d) => [d.athlete_id, d.giorni_dall_ultima] as const));
+  const q = ricerca.trim().toLowerCase();
+  const corrisponde = (a: { nome: string; cognome: string; numero_maglia?: number | string | null }) =>
+    !q || `${a.nome} ${a.cognome} ${a.numero_maglia ?? ""}`.toLowerCase().includes(q);
+  const righe = (scheda === "da_valutare" ? atlete.filter((a) => giorniPer.has(a.id)) : atlete)
+    .filter(corrisponde)
+    .sort((a, b) => {
+      // Le più "scoperte" per prime: mai valutate, poi dalla valutazione più vecchia.
+      const ga = giorniPer.has(a.id) ? (giorniPer.get(a.id) ?? 9999) : -1;
+      const gb = giorniPer.has(b.id) ? (giorniPer.get(b.id) ?? 9999) : -1;
+      return gb - ga;
+    });
+  const proposteFiltrate = proposte.filter((p) => { const a = atlete.find((x) => x.id === p.athlete_id); return !a || corrisponde(a); });
 
   return (
-    <View style={{ gap: 10 }}>
-      <View style={styles.rigaIntestazione}>
-        <Text style={styles.titoloSezione}>Da valutare ({daValutare.length})</Text>
-        <Pressable onPress={() => setCadenzaInModifica(!cadenzaInModifica)} style={styles.bottoneSecondarioPill}>
-          <Text style={styles.bottoneSecondarioPillTesto}>Cadenza</Text>
-        </Pressable>
+    <>
+      <View style={[stileFisso, styles.bloccoFisso]}>
+        <View style={styles.rigaRicerca}>
+          <View style={{ flex: 1 }}>
+            <BarraRicerca value={ricerca} onChangeText={setRicerca} placeholder="Cerca atleta" accessibilityLabel="Cerca un'atleta" />
+          </View>
+          <MenuAzioni
+            titolo="Valutazioni"
+            voci={[{ etichetta: "Cadenza delle valutazioni", icona: "timer-outline", sotto: "Ogni quanti giorni un'atleta torna \"da valutare\"", onPress: () => setCadenzaInModifica(true) }]}
+          />
+        </View>
+        <View style={styles.segmenti} accessibilityRole="tablist">
+          {([["da_valutare", "Da valutare", daValutare.length], ["tutte", "Tutte", atlete.length], ["proposte", "Proposte AI", proposte.length]] as const).map(([k, etichetta, n]) => (
+            <Pressable key={k} onPress={() => setScheda(k)} style={[styles.segmento, scheda === k && styles.segmentoAttivo]} accessibilityRole="tab" accessibilityState={{ selected: scheda === k }}>
+              <Text style={[styles.segmentoTesto, scheda === k && styles.segmentoTestoAttivo]} numberOfLines={1}>{etichetta} {n}</Text>
+            </Pressable>
+          ))}
+        </View>
       </View>
 
-      {daValutare.length > 0 && <RinvioPromemoria teamId={teamId} tipo="valutazioni" />}
-
+      <View style={{ gap: 12 }}>
       {cadenzaInModifica && (
         <View style={[styles.scheda, styles.rigaCadenza]}>
           <TextInput style={styles.inputCadenza} keyboardType="numeric" value={cadenza} onChangeText={setCadenza} />
           <Text style={[styles.vuoto, { flex: 1 }]}>giorni tra una valutazione e l'altra</Text>
           <Pressable onPress={salvaCadenza} style={styles.bottoneSecondarioPill}><Text style={styles.bottoneSecondarioPillTesto}>Salva</Text></Pressable>
+          <Pressable onPress={() => setCadenzaInModifica(false)} hitSlop={8}><Text style={styles.linkCadenza}>Chiudi</Text></Pressable>
         </View>
       )}
 
-      {daValutare.length === 0 ? (
-        <View style={[styles.scheda, { padding: 16 }]}><Text style={styles.vuoto}>Sono tutti valutati di recente.</Text></View>
-      ) : (
-        <>
-          <View style={styles.scheda}>
-            {daMostrare.map((a, i) => (
-              <View key={a.athlete_id}>
-                {i > 0 && <View style={[styles.separatore, { marginLeft: 66 }]} />}
-                <View style={styles.rigaAtleta}>
-                  <View style={styles.avatar}><Text style={styles.avatarTesto}>{testoAvatar(a.numero_maglia, a.nome, a.cognome)}</Text></View>
-                  <Text style={styles.nomeAtleta} numberOfLines={1}>{a.nome} {a.cognome}</Text>
-                  <Text style={[styles.rigaAndamentoValore, a.giorni_dall_ultima === null && styles.valoreMaiValutata]}>
-                    {a.giorni_dall_ultima === null ? "mai valutata" : `${a.giorni_dall_ultima} gg fa`}
-                  </Text>
-                </View>
-              </View>
-            ))}
+      {scheda === "da_valutare" && daValutare.length > 0 && !q && <RinvioPromemoria teamId={teamId} tipo="valutazioni" />}
+
+      {scheda !== "proposte" && (
+        righe.length === 0 ? (
+          <View style={[styles.scheda, { padding: 16 }]}>
+            <Text style={styles.vuoto}>{q ? "Nessuna atleta trovata." : scheda === "da_valutare" ? "Sono tutte valutate di recente." : "Nessuna atleta in rosa."}</Text>
           </View>
-          {daValutare.length > 5 && (
-            <Pressable onPress={() => setMostraTutte(!mostraTutte)} style={styles.linkRiga}>
-              <Text style={styles.linkCadenza}>{mostraTutte ? "Mostra meno" : `Mostra tutte (${daValutare.length})`}</Text>
-            </Pressable>
-          )}
-        </>
-      )}
-    </View>
-  );
-}
-
-/** Vista completa per allenatore/vice: identica al flusso manual-first già validato in GAS. */
-function SezioneValutazioneCoach({ teamId }: { teamId: string }) {
-  const [atlete, setAtlete] = useState<Athlete[]>([]);
-  const [atletaSelId, setAtletaSelId] = useState<string | null>(null);
-  const [fondamentale, setFondamentale] = useState<Fondamentale>("Attacco");
-  const [punteggio, setPunteggio] = useState("");
-  const [propostaPendente, setPropostaPendente] = useState<{ proposta: EvaluationProposal; modificatoAMano: boolean } | null>(null);
-  const [generandoAI, setGenerandoAI] = useState(false);
-  const [istruzioniExtra, setIstruzioniExtra] = useState("");
-  const [messaggioAI, setMessaggioAI] = useState<{ tipo: "ok" | "errore" | "avviso"; testo: string } | null>(null);
-  const [proposteInAttesa, setProposteInAttesa] = useState<EvaluationProposal[]>([]);
-  const [mostraProposteInAttesa, setMostraProposteInAttesa] = useState(false);
-
-  const carica = useCallback(async () => {
-    const lista = await elencaAtlete(teamId);
-    setAtlete(lista);
-    if (!atletaSelId && lista.length) setAtletaSelId(lista[0].id);
-    setProposteInAttesa(await elencaPropostePendenti(teamId));
-  }, [teamId, atletaSelId]);
-
-  useFocusEffect(useCallback(() => { carica(); }, [carica]));
-  useEffect(() => { setPropostaPendente(null); setMessaggioAI(null); }, [atletaSelId, fondamentale]);
-
-  function onPunteggioModificato(testo: string) {
-    setPunteggio(testo);
-    if (propostaPendente && Number(testo) !== propostaPendente.proposta.valore_proposto) setPropostaPendente({ ...propostaPendente, modificatoAMano: true });
-  }
-
-  async function onRegistra() {
-    if (!atletaSelId || !punteggio) return;
-    const valore = Number(punteggio);
-    if (Number.isNaN(valore) || valore < 1 || valore > 10) { avvisa("Punteggio non valido", "Inserisci un valore tra 1 e 10."); return; }
-    try {
-      if (!propostaPendente) {
-        await registraValutazione(teamId, atletaSelId, fondamentale, valore);
-      } else {
-        await decidiProposta(propostaPendente.proposta.id, valore);
-      }
-      setPunteggio(""); setPropostaPendente(null);
-      setMessaggioAI({ tipo: "ok", testo: "Valutazione registrata." });
-      carica();
-    } catch (e) {
-      setMessaggioAI({ tipo: "errore", testo: (e as Error).message });
-    }
-  }
-
-  async function onSuggerisciAI() {
-    if (!atletaSelId) return;
-    const atleta = atlete.find((a) => a.id === atletaSelId);
-    if (!atleta) return;
-    setGenerandoAI(true);
-    setMessaggioAI({ tipo: "avviso", testo: uiStrings.valutazioni.aiGenerating });
-    try {
-      const storico = (await elencaValutazioni(atletaSelId, fondamentale)).slice(0, 5).map((v) => ({ punteggio: v.punteggio, data: v.data_valutazione }));
-      const risultato = await generaPropostaValutazioneAI(teamId, atletaSelId, `${atleta.nome} ${atleta.cognome}`, fondamentale, storico, istruzioniExtra);
-      if (risultato.errore || !risultato.proposta) {
-        setMessaggioAI({ tipo: "errore", testo: `${risultato.messaggio} — ${uiStrings.valutazioni.aiFallback}.` });
-        return;
-      }
-      setPropostaPendente({ proposta: risultato.proposta, modificatoAMano: false });
-      setPunteggio(String(risultato.proposta.valore_proposto));
-      setMessaggioAI({ tipo: "ok", testo: `Suggerimento AI: ${risultato.proposta.valore_proposto} (confidenza ${risultato.proposta.confidenza}, ${risultato.chiamateResidue}/${risultato.limite} chiamate residue oggi). ${risultato.proposta.motivazione} — modifica pure il punteggio prima di registrare, se non sei d'accordo.` });
-      carica();
-    } catch (e) {
-      setMessaggioAI({ tipo: "errore", testo: `${(e as Error).message} — ${uiStrings.valutazioni.aiFallback}.` });
-    } finally {
-      setGenerandoAI(false);
-    }
-  }
-
-  async function onDecidiDallaLista(p: EvaluationProposal) {
-    try { await decidiProposta(p.id, p.valore_proposto); carica(); } catch (e) { avvisa("Errore", (e as Error).message); }
-  }
-  async function onRigettaDallaLista(p: EvaluationProposal) {
-    try { await rigettaProposta(p.id); carica(); } catch (e) { avvisa("Errore", (e as Error).message); }
-  }
-
-  return (
-    <View style={{ gap: 16 }}>
-      <View style={[styles.scheda, { padding: 16, gap: 12 }]}>
-        <FlatList
-          horizontal
-          data={atlete}
-          keyExtractor={(a) => a.id}
-          showsHorizontalScrollIndicator={false}
-          renderItem={({ item }) => (
-            <Pressable onPress={() => setAtletaSelId(item.id)} hitSlop={4} style={[styles.chip, atletaSelId === item.id && styles.chipAttivo]}>
-              <Text style={[styles.chipTesto, atletaSelId === item.id && styles.chipTestoAttivo]}>{item.nome} {item.cognome}</Text>
-            </Pressable>
-          )}
-        />
-
-        <View style={styles.selettoreRiga}>
-          {fondamentali.map((f) => (
-            <Pressable key={f} onPress={() => setFondamentale(f)} hitSlop={4} style={[styles.chip, fondamentale === f && styles.chipAttivo]}>
-              <Text style={[styles.chipTesto, fondamentale === f && styles.chipTestoAttivo]}>{f}</Text>
-            </Pressable>
-          ))}
-        </View>
-
-        <TextInput style={styles.inputPunteggio} placeholder="Punteggio (1-10)" placeholderTextColor={brand.colors.muted} keyboardType="numeric" value={punteggio} onChangeText={onPunteggioModificato} />
-
-        <TextInput
-          style={[styles.input, { minHeight: 52, textAlignVertical: "top" }]}
-          multiline
-          placeholder="Contesto per l'AI (facoltativo): es. rientra da infortunio, ha cambiato ruolo, ultime settimane con poche presenze"
-          placeholderTextColor={brand.colors.muted}
-          maxLength={500} value={istruzioniExtra}
-          onChangeText={setIstruzioniExtra}
-        />
-
-        <View style={styles.azioni}>
-          <MenuAzioni
-            titolo="Cosa vuoi fare?"
-            testoPulsante="Valuta"
-            occupato={generandoAI}
-            stile={{ flexGrow: 1 }}
-            voci={[
-              { etichetta: "Registra il punteggio", icona: "checkmark-circle-outline", sotto: punteggio ? `${fondamentale}: ${punteggio}` : "Scrivi prima il punteggio (1-10)", disattiva: !punteggio, onPress: onRegistra },
-              { etichetta: "Chiedi un suggerimento all'AI", icona: "sparkles-outline", sotto: atletaSelId ? "L'AI propone un voto: lo approvi o lo rigetti dopo" : "Scegli prima un'atleta", disattiva: !atletaSelId, onPress: onSuggerisciAI },
-            ]}
-          />
-        </View>
-
-        {messaggioAI && (
-          <Text style={[styles.messaggio, messaggioAI.tipo === "errore" && styles.messaggioErrore, messaggioAI.tipo === "ok" && styles.messaggioOk]}>{messaggioAI.testo}</Text>
-        )}
-      </View>
-
-      <View style={{ gap: 10 }}>
-        <Pressable style={styles.rigaEspandi} onPress={() => setMostraProposteInAttesa(!mostraProposteInAttesa)}>
-          <Text style={styles.titoloSezione}>{mostraProposteInAttesa ? "▾" : "▸"} {uiStrings.valutazioni.pendingSection}</Text>
-          <View style={styles.badge}><Text style={styles.badgeTesto}>{proposteInAttesa.length}</Text></View>
-        </Pressable>
-
-        {mostraProposteInAttesa && (
+        ) : (
           <View style={styles.scheda}>
-            {proposteInAttesa.length === 0 && <Text style={[styles.vuoto, { padding: 16 }]}>Nessuna proposta in attesa.</Text>}
-            {proposteInAttesa.map((item, i) => {
-              const atleta = atlete.find((a) => a.id === item.athlete_id);
+            {righe.map((a, i) => {
+              const giorni = giorniPer.get(a.id);
+              const dovuta = giorniPer.has(a.id);
               return (
-                <View key={item.id}>
+                <View key={a.id}>
                   {i > 0 && <View style={[styles.separatore, { marginLeft: 66 }]} />}
-                  <View style={styles.cardProposta}>
-                    <View style={styles.rigaAtletaSenzaPadding}>
-                      <View style={styles.avatar}><Text style={styles.avatarTesto}>{atleta ? testoAvatar(atleta.numero_maglia, atleta.nome, atleta.cognome) : "?"}</Text></View>
-                      <View style={{ flex: 1, gap: 1 }}>
-                        <Text style={styles.cardPropostaTitolo}>{atleta ? `${atleta.nome} ${atleta.cognome}` : "Atleta"} — {item.fondamentale}: {item.valore_proposto}</Text>
-                        {!!item.motivazione && <Text style={styles.cardPropostaMotivazione}>{item.motivazione}</Text>}
-                      </View>
+                  <Pressable style={styles.rigaAtleta} onPress={() => setAtletaAperta(a)} accessibilityRole="button" accessibilityLabel={`Valuta ${a.nome} ${a.cognome}`}>
+                    <View style={styles.avatar}><Text style={styles.avatarTesto}>{testoAvatar(a.numero_maglia, a.nome, a.cognome)}</Text></View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.nomeAtleta} numberOfLines={1}>{a.nome} {a.cognome}</Text>
+                      {!!a.ruolo_campo && <Text style={styles.sottoAtleta} numberOfLines={1}>{a.ruolo_campo}</Text>}
                     </View>
-                    <View style={styles.azioniProposta}>
-                      <Pressable style={styles.bottoneSecondario} onPress={() => onDecidiDallaLista(item)}><Text style={styles.bottoneSecondarioTesto}>Approva</Text></Pressable>
-                      <Pressable style={styles.bottoneSecondarioRigetta} onPress={() => onRigettaDallaLista(item)}><Text style={styles.bottoneSecondarioRigettaTesto}>Rigetta</Text></Pressable>
-                    </View>
-                  </View>
+                    <Text style={[styles.rigaAndamentoValore, dovuta && giorni === null && styles.valoreMaiValutata, !dovuta && styles.valoreRecente]}>
+                      {!dovuta ? "di recente" : giorni === null ? "mai valutata" : `${giorni} gg fa`}
+                    </Text>
+                    <Text style={styles.chevron}>›</Text>
+                  </Pressable>
                 </View>
               );
             })}
           </View>
-        )}
+        )
+      )}
+
+      {scheda === "proposte" && (
+        <View style={styles.scheda}>
+          {proposteFiltrate.length === 0 && <Text style={[styles.vuoto, { padding: 16 }]}>Nessuna proposta in attesa. Le trovi qui quando chiedi un suggerimento all'AI e non lo registri subito.</Text>}
+          {proposteFiltrate.map((item, i) => {
+            const atleta = atlete.find((a) => a.id === item.athlete_id);
+            return (
+              <View key={item.id}>
+                {i > 0 && <View style={[styles.separatore, { marginLeft: 66 }]} />}
+                <View style={styles.cardProposta}>
+                  <View style={styles.rigaAtletaSenzaPadding}>
+                    <View style={styles.avatar}><Text style={styles.avatarTesto}>{atleta ? testoAvatar(atleta.numero_maglia, atleta.nome, atleta.cognome) : "?"}</Text></View>
+                    <View style={{ flex: 1, gap: 1 }}>
+                      <Text style={styles.cardPropostaTitolo}>{atleta ? `${atleta.nome} ${atleta.cognome}` : "Atleta"} — {item.fondamentale}: {item.valore_proposto}</Text>
+                      {!!item.motivazione && <Text style={styles.cardPropostaMotivazione}>{item.motivazione}</Text>}
+                    </View>
+                  </View>
+                  <View style={styles.azioniProposta}>
+                    <Pressable style={styles.bottoneSecondario} onPress={() => onDecidi(item)}><Text style={styles.bottoneSecondarioTesto}>Approva</Text></Pressable>
+                    <Pressable style={styles.bottoneSecondarioRigetta} onPress={() => onRigetta(item)}><Text style={styles.bottoneSecondarioRigettaTesto}>Rigetta</Text></Pressable>
+                  </View>
+                </View>
+              </View>
+            );
+          })}
+        </View>
+      )}
       </View>
-    </View>
+
+      <FoglioValutazione teamId={teamId} atleta={atletaAperta} onChiudi={() => setAtletaAperta(null)} onSalvato={() => { setAtletaAperta(null); carica(); }} onAggiorna={carica} />
+    </>
+  );
+}
+
+/** Foglio dal basso per valutare un'atleta: tutti i fondamentali con punteggio da 1 a 10 e suggerimento AI per ciascuno. */
+function FoglioValutazione({ teamId, atleta, onChiudi, onSalvato, onAggiorna }: {
+  teamId: string; atleta: Athlete | null; onChiudi: () => void; onSalvato: () => void; onAggiorna: () => void;
+}) {
+  const [voti, setVoti] = useState<Partial<Record<Fondamentale, number>>>({});
+  const [ultimi, setUltimi] = useState<Partial<Record<Fondamentale, number>>>({});
+  const [proposte, setProposte] = useState<Partial<Record<Fondamentale, EvaluationProposal>>>({});
+  const [generando, setGenerando] = useState<Fondamentale | null>(null);
+  const [contesto, setContesto] = useState("");
+  const [mostraContesto, setMostraContesto] = useState(false);
+  const [messaggio, setMessaggio] = useState<{ tipo: "ok" | "errore" | "avviso"; testo: string } | null>(null);
+  const [salvando, setSalvando] = useState(false);
+  const trascina = useTrascinaPerChiudere(onChiudi);
+
+  useEffect(() => {
+    setVoti({}); setUltimi({}); setProposte({}); setContesto(""); setMostraContesto(false); setMessaggio(null); setGenerando(null);
+    if (!atleta) return;
+    let attivo = true;
+    Promise.all(fondamentali.map((f) => elencaValutazioni(atleta.id, f).then((l) => [f, l[0]?.punteggio] as const).catch(() => [f, undefined] as const)))
+      .then((coppie) => { if (!attivo) return; const m: Partial<Record<Fondamentale, number>> = {}; for (const [f, v] of coppie) if (v != null) m[f] = v; setUltimi(m); });
+    return () => { attivo = false; };
+  }, [atleta]);
+
+  async function suggerisci(f: Fondamentale) {
+    if (!atleta) return;
+    setGenerando(f);
+    setMessaggio({ tipo: "avviso", testo: uiStrings.valutazioni.aiGenerating });
+    try {
+      const storico = (await elencaValutazioni(atleta.id, f)).slice(0, 5).map((v) => ({ punteggio: v.punteggio, data: v.data_valutazione }));
+      const r = await generaPropostaValutazioneAI(teamId, atleta.id, `${atleta.nome} ${atleta.cognome}`, f, storico, contesto);
+      if (r.errore || !r.proposta) { setMessaggio({ tipo: "errore", testo: `${r.messaggio} — puoi scegliere il punteggio a mano.` }); return; }
+      const p = r.proposta;
+      setProposte((prec) => ({ ...prec, [f]: p }));
+      setVoti((prec) => ({ ...prec, [f]: p.valore_proposto }));
+      setMessaggio({ tipo: "ok", testo: `${f}: suggerito ${p.valore_proposto} (confidenza ${p.confidenza}, ${r.chiamateResidue}/${r.limite} chiamate residue oggi). ${p.motivazione} — cambialo pure se non sei d'accordo.` });
+      onAggiorna();
+    } catch (e) {
+      setMessaggio({ tipo: "errore", testo: `${(e as Error).message} — puoi scegliere il punteggio a mano.` });
+    } finally {
+      setGenerando(null);
+    }
+  }
+
+  async function salva() {
+    if (!atleta) return;
+    const scelti = fondamentali.filter((f) => voti[f] != null);
+    if (scelti.length === 0) return;
+    setSalvando(true);
+    try {
+      for (const f of scelti) {
+        const valore = voti[f] as number;
+        const p = proposte[f];
+        if (p) await decidiProposta(p.id, valore);
+        else await registraValutazione(teamId, atleta.id, f, valore);
+      }
+      onSalvato();
+    } catch (e) {
+      setMessaggio({ tipo: "errore", testo: (e as Error).message });
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  const quanti = fondamentali.filter((f) => voti[f] != null).length;
+
+  return (
+    <Modal visible={!!atleta} animationType="fade" transparent onRequestClose={onChiudi}>
+      <Pressable style={styles.sfondoFoglio} onPress={onChiudi}>
+        <Animated.View style={[styles.cartaFoglio, trascina.stile]} onStartShouldSetResponder={() => true}>
+          <View {...trascina.panHandlers} style={styles.testaFoglio}>
+            <View style={styles.manigliaFoglio} />
+            {!!atleta && (
+              <View style={styles.rigaAtletaSenzaPadding}>
+                <View style={styles.avatar}><Text style={styles.avatarTesto}>{testoAvatar(atleta.numero_maglia, atleta.nome, atleta.cognome)}</Text></View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.titoloFoglio} numberOfLines={1}>{atleta.nome} {atleta.cognome}</Text>
+                  {!!atleta.ruolo_campo && <Text style={styles.sottoAtleta}>{atleta.ruolo_campo}</Text>}
+                </View>
+                <Pressable onPress={onChiudi} hitSlop={10} accessibilityLabel="Chiudi"><Text style={styles.chiudiFoglio}>✕</Text></Pressable>
+              </View>
+            )}
+          </View>
+
+          <ScrollView style={{ flexGrow: 0 }} contentContainerStyle={{ gap: 14, paddingBottom: 8 }} keyboardShouldPersistTaps="handled">
+            {fondamentali.map((f) => (
+              <View key={f} style={{ gap: 6 }}>
+                <View style={styles.rigaFondamentale}>
+                  <Text style={styles.nomeFondamentale}>{f}</Text>
+                  {ultimi[f] != null && <Text style={styles.ultimoVoto}>ultimo: {ultimi[f]}</Text>}
+                  <View style={{ flex: 1 }} />
+                  <Pressable onPress={() => suggerisci(f)} disabled={generando !== null} hitSlop={8} style={[styles.tastoAI, generando !== null && { opacity: 0.5 }]} accessibilityLabel={`Suggerimento AI per ${f}`}>
+                    <Text style={styles.tastoAITesto}>{generando === f ? "…" : "✨ AI"}</Text>
+                  </Pressable>
+                </View>
+                <View style={styles.rigaVoti}>
+                  {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => (
+                    <Pressable
+                      key={n}
+                      onPress={() => setVoti((prec) => { const nuovo = { ...prec }; if (prec[f] === n) delete nuovo[f]; else nuovo[f] = n; return nuovo; })}
+                      style={[styles.voto, voti[f] === n && styles.votoAttivo]}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: voti[f] === n }}
+                      accessibilityLabel={`${f} ${n}`}
+                    >
+                      <Text style={[styles.votoTesto, voti[f] === n && styles.votoTestoAttivo]}>{n}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </View>
+            ))}
+
+            {mostraContesto ? (
+              <TextInput
+                style={[styles.input, { minHeight: 52, textAlignVertical: "top" }]}
+                multiline
+                placeholder="Contesto per l'AI: es. rientra da infortunio, ha cambiato ruolo, poche presenze"
+                placeholderTextColor={brand.colors.muted}
+                maxLength={500}
+                value={contesto}
+                onChangeText={setContesto}
+              />
+            ) : (
+              <Pressable onPress={() => setMostraContesto(true)} style={styles.linkRiga}><Text style={styles.linkCadenza}>+ Aggiungi contesto per l'AI</Text></Pressable>
+            )}
+
+            {messaggio && <Text style={[styles.messaggio, messaggio.tipo === "errore" && styles.messaggioErrore, messaggio.tipo === "ok" && styles.messaggioOk]}>{messaggio.testo}</Text>}
+          </ScrollView>
+
+          <Pressable onPress={salva} disabled={quanti === 0 || salvando} style={[styles.bottonePrimarioFoglio, (quanti === 0 || salvando) && { opacity: 0.4 }]} accessibilityRole="button">
+            <Text style={styles.bottonePrimarioTesto}>{salvando ? "Salvo…" : quanti === 0 ? "Scegli almeno un punteggio" : quanti === 1 ? "Salva 1 valutazione" : `Salva ${quanti} valutazioni`}</Text>
+          </Pressable>
+        </Animated.View>
+      </Pressable>
+    </Modal>
   );
 }
 
@@ -404,6 +459,33 @@ const styles = StyleSheet.create({
   rigaCadenza: { flexDirection: "row", alignItems: "center", gap: 10, padding: 12 },
   inputCadenza: { backgroundColor: brand.colors.surfaceTertiary, color: brand.colors.onSurface, borderRadius: 10, padding: 8, minHeight: 44, width: 60, textAlign: "center", fontSize: 16, fontWeight: "700" },
   selettoreRiga: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  bloccoFisso: { marginHorizontal: -16, paddingHorizontal: 16, paddingTop: 6, paddingBottom: 10, gap: 10, marginBottom: 14 },
+  rigaRicerca: { flexDirection: "row", alignItems: "center", gap: 10 },
+  segmenti: { flexDirection: "row", backgroundColor: "rgba(118,118,128,0.24)", borderRadius: 10, padding: 2 },
+  segmento: { flex: 1, minHeight: 32, borderRadius: 8, alignItems: "center", justifyContent: "center", paddingHorizontal: 4 },
+  segmentoAttivo: { backgroundColor: brand.colors.surfaceTertiary },
+  segmentoTesto: { color: brand.colors.muted, fontSize: 13, fontWeight: "600" },
+  segmentoTestoAttivo: { color: brand.colors.onSurface },
+  sottoAtleta: { color: brand.colors.muted, fontSize: 13 },
+  valoreRecente: { color: brand.colors.muted, fontWeight: "500" },
+  chevron: { color: brand.colors.muted, fontSize: 22, marginLeft: 2 },
+  sfondoFoglio: { flex: 1, backgroundColor: "rgba(0,0,0,0.55)", justifyContent: "flex-end", padding: 8 },
+  cartaFoglio: { backgroundColor: brand.colors.surfaceSecondary, borderRadius: 20, padding: 16, gap: 12, maxHeight: "92%", maxWidth: 560, width: "100%", alignSelf: "center" },
+  testaFoglio: { gap: 10 },
+  manigliaFoglio: { alignSelf: "center", width: 36, height: 5, borderRadius: 3, backgroundColor: "rgba(255,255,255,0.22)" },
+  titoloFoglio: { color: brand.colors.onSurface, fontSize: 19, fontWeight: "700" },
+  chiudiFoglio: { color: brand.colors.muted, fontSize: 18, fontWeight: "700", padding: 4 },
+  rigaFondamentale: { flexDirection: "row", alignItems: "center", gap: 10 },
+  nomeFondamentale: { color: brand.colors.onSurface, fontSize: 16, fontWeight: "600" },
+  ultimoVoto: { color: brand.colors.muted, fontSize: 13 },
+  tastoAI: { minHeight: 32, paddingHorizontal: 12, borderRadius: 999, backgroundColor: brand.colors.surfaceTertiary, alignItems: "center", justifyContent: "center" },
+  tastoAITesto: { color: brand.colors.brand, fontSize: 13, fontWeight: "700" },
+  rigaVoti: { flexDirection: "row", gap: 4 },
+  voto: { flex: 1, height: 36, borderRadius: 10, backgroundColor: brand.colors.surfaceTertiary, alignItems: "center", justifyContent: "center" },
+  votoAttivo: { backgroundColor: brand.colors.brand },
+  votoTesto: { color: brand.colors.onSurfaceSecondary, fontSize: 14, fontWeight: "600" },
+  votoTestoAttivo: { color: "#000", fontWeight: "800" },
+  bottonePrimarioFoglio: { backgroundColor: brand.colors.brand, minHeight: 48, borderRadius: 999, alignItems: "center", justifyContent: "center", paddingHorizontal: 20 },
   chip: { paddingVertical: 6, paddingHorizontal: 14, minHeight: 36, borderRadius: 999, backgroundColor: brand.colors.surfaceTertiary, marginRight: 6, alignItems: "center", justifyContent: "center" },
   chipAttivo: { backgroundColor: brand.colors.brand },
   chipTesto: { color: brand.colors.onSurfaceSecondary, fontSize: 14, fontWeight: "600" },
