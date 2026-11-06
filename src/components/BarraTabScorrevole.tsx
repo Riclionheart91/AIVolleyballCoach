@@ -72,11 +72,8 @@ export default function BarraTabScorrevole({ state, descriptors, navigation, nom
   const evidenziata = sotto ?? attiva;
 
   return (
-    <View
-      style={[styles.barra, { paddingBottom: Math.max(insets.bottom, 6) }, WEB_BARRA as object]}
-      accessibilityRole="tablist"
-    >
-      <View ref={contenitore} style={[styles.riga, { touchAction: "none", userSelect: "none" } as object]} {...gesto.panHandlers}>
+    <View style={[styles.ombra, { paddingBottom: Math.max(insets.bottom, 10) }]} pointerEvents="box-none" accessibilityRole="tablist">
+      <View ref={contenitore} style={[styles.barra, WEB_BARRA as object, { touchAction: "none", userSelect: "none" } as object]} {...gesto.panHandlers}>
         {rotte.map((r) => {
           const opzioni = descriptors[r.key]?.options ?? {};
           const acceso = r.name === evidenziata;
@@ -104,20 +101,23 @@ export default function BarraTabScorrevole({ state, descriptors, navigation, nom
   );
 }
 
-// Barra translucida sfocata (stile Apple Music); sul web vale il filtro, altrove resta il fondo scuro.
+// Vetro sfocato; sul web vale il filtro, altrove resta il fondo scuro semitrasparente.
 const WEB_BARRA = { backdropFilter: "blur(28px) saturate(170%)", WebkitBackdropFilter: "blur(28px) saturate(170%)" };
 
 const styles = StyleSheet.create({
+  // Contenitore trasparente: la barra "fluttua" staccata dai bordi come in iOS, senza coprire il contenuto.
+  ombra: { paddingTop: 6, paddingHorizontal: 16, backgroundColor: "transparent" },
   barra: {
-    backgroundColor: "rgba(11,18,32,0.78)",
-    borderTopColor: "rgba(255,255,255,0.08)",
-    borderTopWidth: 1,
-    paddingTop: 6,
-    paddingHorizontal: 4,
+    flexDirection: "row",
+    backgroundColor: "rgba(30,41,59,0.82)",
+    borderColor: "rgba(255,255,255,0.12)",
+    borderWidth: 1,
+    borderRadius: 32,
+    padding: 5,
+    boxShadow: "0 8px 24px rgba(0,0,0,0.45)",
   },
-  riga: { flexDirection: "row" },
-  voce: { flex: 1, alignItems: "center" },
-  pillola: { alignItems: "center", justifyContent: "center", paddingVertical: 4, paddingHorizontal: 6, borderRadius: 14, minWidth: 58, gap: 1 },
+  voce: { flex: 1, alignItems: "stretch" },
+  pillola: { alignItems: "center", justifyContent: "center", paddingVertical: 6, paddingHorizontal: 2, borderRadius: 26, alignSelf: "stretch", minWidth: 0, gap: 1 },
   pillolaAccesa: { backgroundColor: "rgba(255,122,0,0.16)" },
   pillolaTrascinata: { backgroundColor: "rgba(255,122,0,0.30)", transform: [{ scale: 1.06 }] },
   etichetta: { fontSize: 10, fontWeight: "500" },
