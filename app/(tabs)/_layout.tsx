@@ -118,7 +118,7 @@ export default function TabsLayout() {
         // Schermi larghi: tutto ciò che stava in alto vive nella barra laterale.
         headerShown: !largo,
         // Senza intestazione, un po' di respiro sopra il contenuto.
-        sceneStyle: largo ? { paddingTop: 20 } : undefined,
+        sceneStyle: largo ? { paddingTop: 20, backgroundColor: brand.colors.surface } : undefined,
         headerStyle: { backgroundColor: brand.colors.surface },
         headerTintColor: brand.colors.onSurface,
         headerTitle: () => <BannerStagione />,
