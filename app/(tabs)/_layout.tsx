@@ -1,13 +1,13 @@
 import type React from "react";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { Tabs, router } from "expo-router";
 import { Pressable, Text, View, ActivityIndicator, StyleSheet, useWindowDimensions } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "@/src/context/AuthContext";
-import { calcolaNotifiche } from "@/src/services/notifiche";
-import { elencaPartiteLive } from "@/src/services/live";
 import { brand } from "@/src/config";
 import BarraTabScorrevole from "@/src/components/BarraTabScorrevole";
+import BarraLaterale from "@/src/components/BarraLaterale";
+import { useConteggioNotifiche, usePartiteLiveInCorso } from "@/src/lib/comandiTesta";
 
 /** Banner stagione: sempre visibile in header, tocco -> tab Stagioni (dove si vede l'elenco di quelle passate e si può cambiare/attivare). */
 function BannerStagione() {
@@ -22,15 +22,7 @@ function BannerStagione() {
 }
 
 function BottoneLive() {
-  const [inCorso, setInCorso] = useState(0);
-
-  useEffect(() => {
-    let attivo = true;
-    const aggiorna = () => { elencaPartiteLive().then((l) => { if (attivo) setInCorso(l.length); }).catch(() => { /* in caso di errore resta lo stato precedente: al prossimo giro si riprova */ }); };
-    aggiorna();
-    const t = setInterval(aggiorna, 20000);
-    return () => { attivo = false; clearInterval(t); };
-  }, []);
+  const inCorso = usePartiteLiveInCorso();
 
   const acceso = inCorso > 0;
   return (
@@ -42,14 +34,7 @@ function BottoneLive() {
 }
 
 function BottoneNotifiche() {
-  const { team, puoScrivere } = useAuth();
-  const [conteggio, setConteggio] = useState(0);
-
-  useEffect(() => {
-    // Anche chi non puo' scrivere (presidente, superuser) puo' avere richieste di reset da gestire.
-    if (!team) return;
-    calcolaNotifiche(team.id, puoScrivere).then((n) => setConteggio(n.length)).catch(() => setConteggio(0));
-  }, [team, puoScrivere]);
+  const conteggio = useConteggioNotifiche();
 
   return (
     <Pressable onPress={() => router.push("/notifiche")} style={{ marginRight: 12 }}>
@@ -125,9 +110,15 @@ export default function TabsLayout() {
   return (
     <Tabs
       // Telefono: barra propria che permette di scorrere il dito da una voce all'altra (come l'indice A–Z della Rosa).
-      // Barra laterale (schermi larghi): resta quella standard.
-      tabBar={largo ? undefined : (props) => <BarraTabScorrevole {...(props as unknown as React.ComponentProps<typeof BarraTabScorrevole>)} nomi={vociBarra} />}
+      // Schermi larghi: barra laterale con avatar del profilo, squadra, stagione, LIVE e notifiche (al posto dell'intestazione in alto).
+      tabBar={largo
+        ? (props) => <BarraLaterale {...(props as unknown as React.ComponentProps<typeof BarraLaterale>)} nomi={vociBarra} />
+        : (props) => <BarraTabScorrevole {...(props as unknown as React.ComponentProps<typeof BarraTabScorrevole>)} nomi={vociBarra} />}
       screenOptions={{
+        // Schermi larghi: tutto ciò che stava in alto vive nella barra laterale.
+        headerShown: !largo,
+        // Senza intestazione, un po' di respiro sopra il contenuto.
+        sceneStyle: largo ? { paddingTop: 20 } : undefined,
         headerStyle: { backgroundColor: brand.colors.surface },
         headerTintColor: brand.colors.onSurface,
         headerTitle: () => <BannerStagione />,
