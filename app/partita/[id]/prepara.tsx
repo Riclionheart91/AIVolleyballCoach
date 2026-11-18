@@ -22,7 +22,6 @@ import { supabaseClient } from "@/src/lib/supabase";
 import type { Athlete, Match } from "@/src/types/database";
 
 /** Distinta di gara: al massimo 12 atlete (Libero escluso) più 2 Liberi, cioe' 14 a referto. */
-const MAX_CONVOCATE = 12;
 const MAX_LIBERI = 2;
 
 export default function PreparaPartita() {
@@ -120,18 +119,12 @@ export default function PreparaPartita() {
       setLiberoIds((l) => { const n = new Set(l); n.delete(athleteId); return n; });
       return;
     }
-    if (nConvocateGioco >= MAX_CONVOCATE) {
-      avvisa(`Massimo ${MAX_CONVOCATE} convocate`, `La distinta ha al massimo ${MAX_CONVOCATE} atlete più ${MAX_LIBERI} Liberi (14 a referto). Togline una prima di aggiungerne un'altra.`);
-      return;
-    }
     setConvocateIds((prev) => new Set(prev).add(athleteId));
   }
 
   function toggleLibero(athleteId: string) {
     if (!convocateIds.has(athleteId)) return;
     if (liberoIds.has(athleteId)) {
-      // Torna atleta di gioco: serve posto tra le 12.
-      if (nConvocateGioco >= MAX_CONVOCATE) { avvisa(`Massimo ${MAX_CONVOCATE} convocate`, `Ci sono già ${MAX_CONVOCATE} atlete oltre ai Liberi: togline una prima.`); return; }
       setLiberoIds((prev) => { const n = new Set(prev); n.delete(athleteId); return n; });
       return;
     }
@@ -144,8 +137,8 @@ export default function PreparaPartita() {
 
   async function salvaConvocati() {
     if (!id) return;
-    if (nConvocateGioco > MAX_CONVOCATE || nLiberiConvocati > MAX_LIBERI) {
-      avvisa("Distinta troppo lunga", `Al massimo ${MAX_CONVOCATE} atlete più ${MAX_LIBERI} Liberi.`);
+    if (nLiberiConvocati > MAX_LIBERI) {
+      avvisa("Troppi Liberi", `Al massimo ${MAX_LIBERI} Liberi.`);
       return;
     }
     setSalvandoConvocati(true);
@@ -230,7 +223,7 @@ export default function PreparaPartita() {
         {numeroSet === 1 ? (
           <View style={styles.card}>
             <Text style={styles.sottotitolo}>1. Convocati per questa gara</Text>
-            <Text style={styles.nota}>Seleziona chi è convocato (al massimo 12 atlete più 2 Liberi, può essere meno dell'intera rosa). Segna anche chi gioca da Libero. Si chiede una sola volta: valida per tutta la partita.</Text>
+            <Text style={styles.nota}>Seleziona chi è convocato (può essere meno dell'intera rosa; al massimo 2 Liberi). Segna anche chi gioca da Libero. Si chiede una sola volta: valida per tutta la partita.</Text>
             {atlete.map((a) => (
               <View key={a.id} style={styles.rigaConvocata}>
                 <Pressable style={styles.rigaConvocataInfo} onPress={() => toggleConvocata(a.id)}>
@@ -250,13 +243,8 @@ export default function PreparaPartita() {
               </View>
             ))}
             <Text style={styles.nota}>
-              Convocate: {nConvocateGioco} su {MAX_CONVOCATE} · Liberi: {nLiberiConvocati} su {MAX_LIBERI}
+              Convocate: {nConvocateGioco} · Liberi: {nLiberiConvocati} su {MAX_LIBERI}
             </Text>
-            {nConvocateGioco === MAX_CONVOCATE && nLiberiConvocati === 1 && (
-              <Text style={styles.avvisoRegolamento}>
-                ⚠ 12 atlete più 1 solo Libero (13 a referto) non è una composizione ammessa dal regolamento 2026/2027 (PGS e norme dei campionati di categoria): indica anche il secondo Libero oppure togli una convocata.
-              </Text>
-            )}
             <Pressable style={styles.bottoneSecondario} onPress={salvaConvocati} disabled={salvandoConvocati || convocateIds.size === 0}>
               {salvandoConvocati ? <ActivityIndicator color={brand.colors.brand} /> : <Text style={styles.bottoneSecondarioTesto}>Salva convocati ({convocateIds.size})</Text>}
             </Pressable>
