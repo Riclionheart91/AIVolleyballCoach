@@ -80,6 +80,7 @@ export async function impostaRegolaLibero(matchId: string, liberoId: string | nu
 }
 
 export async function cambiaGiocatore(setId: string, atletaUscente: string, atletaEntrante: string): Promise<void> {
+  await dopoCoda();
   const { error } = await supabaseClient.rpc("cambia_giocatore", { p_set_id: setId, p_atleta_uscente: atletaUscente, p_atleta_entrante: atletaEntrante });
   if (error) throw error;
 }
@@ -90,7 +91,17 @@ export async function elencaSet(matchId: string): Promise<MatchSet[]> {
   return data ?? [];
 }
 
+/**
+ * Barriera per le operazioni che cambiano la struttura della partita (nuovo set, cambi, Libero, time-out, chiusura...):
+ * se ci sono azioni dello scouting in coda per mancanza di rete, prima si inviano quelle; se non ci si riesce, l'operazione si ferma con un messaggio chiaro.
+ * La coda (src/lib/codaOffline.ts) registra qui la sua funzione, per non creare un import circolare.
+ */
+let barrieraCoda: (() => Promise<void>) | null = null;
+export function impostaBarrieraCoda(f: () => Promise<void>): void { barrieraCoda = f; }
+async function dopoCoda(): Promise<void> { if (barrieraCoda) await barrieraCoda(); }
+
 export async function nuovoSet(matchId: string): Promise<string> {
+  await dopoCoda();
   const { data, error } = await supabaseClient.rpc("nuovo_set", { p_match_id: matchId });
   if (error) throw error;
   return data as string;
@@ -98,6 +109,7 @@ export async function nuovoSet(matchId: string): Promise<string> {
 
 /** Annulla un nuovo set aperto per errore: se è ancora vuoto lo elimina e riapre il precedente. Restituisce l'id del set riaperto. */
 export async function tornaAlSetPrecedente(matchId: string): Promise<string> {
+  await dopoCoda();
   const { data, error } = await supabaseClient.rpc("torna_al_set_precedente", { p_match_id: matchId });
   if (error) throw error;
   return data as string;
@@ -108,6 +120,7 @@ export async function tornaAlSetPrecedente(matchId: string): Promise<string> {
  * posizioni: { "1": athleteId, ..., "6": athleteId }. Possibile per tutta la partita.
  */
 export async function correggiFormazione(setId: string, posizioni: Record<string, string>, chiServe: "noi" | "avversario" | null): Promise<void> {
+  await dopoCoda();
   const { error } = await supabaseClient.rpc("correggi_formazione", { p_set_id: setId, p_posizioni: posizioni, p_chi_serve: chiServe });
   if (error) throw error;
 }
@@ -126,6 +139,7 @@ export async function ricominciaPartita(matchId: string): Promise<void> {
 
 /** Ruota a mano la formazione del set di una posizione (in avanti come a ogni cambio palla, o indietro per correggere un giro di troppo). */
 export async function ruotaFormazioneManuale(setId: string, indietro = false): Promise<void> {
+  await dopoCoda();
   const { error } = await supabaseClient.rpc("ruota_formazione_manuale", { p_set_id: setId, p_indietro: indietro });
   if (error) throw error;
 }
@@ -144,6 +158,7 @@ export async function annullaUltimoEvento(matchId: string): Promise<void> {
 }
 
 export async function chiudiMatch(matchId: string): Promise<void> {
+  await dopoCoda();
   const { error } = await supabaseClient.rpc("chiudi_match", { p_match_id: matchId });
   if (error) throw error;
 }
@@ -341,11 +356,13 @@ export async function liberoInCampo(setId: string): Promise<LiberoInCampo | null
 
 /** Il Libero entra al posto di chi è in seconda linea: non consuma sostituzioni ed è ripetibile. */
 export async function rimpiazzaConLibero(setId: string, liberoId: string, titolareId: string): Promise<void> {
+  await dopoCoda();
   const { error } = await supabaseClient.rpc("rimpiazza_con_libero", { p_set_id: setId, p_libero_id: liberoId, p_titolare_id: titolareId });
   if (error) throw error;
 }
 
 export async function faiUscireLibero(setId: string): Promise<void> {
+  await dopoCoda();
   const { error } = await supabaseClient.rpc("fai_uscire_libero", { p_set_id: setId });
   if (error) throw error;
 }
@@ -465,6 +482,7 @@ export async function elencaTimeout(matchId: string): Promise<MatchTimeout[]> {
 }
 
 export async function registraTimeout(setId: string, squadra: "noi" | "avversario"): Promise<void> {
+  await dopoCoda();
   const { error } = await supabaseClient.rpc("registra_timeout", { p_set_id: setId, p_squadra: squadra });
   if (error) throw error;
 }

@@ -47,6 +47,7 @@ import { TESTO_CAUSA } from "@/src/lib/rivivi";
 import type { Athlete, CausaPunto, Esito, Match, MatchEvent, MatchSet, MatchSetLineup, QualitaRicezione, Skill } from "@/src/types/database";
 import { supabaseClient } from "@/src/lib/supabase";
 import { confermaAzione, avvisa } from "@/src/lib/confermaAzione";
+import { accoda, caricaCodaDaDisco, erroreDiRete, idCasuale, inCoda, inviaCoda, rimuoviEventoInCoda, useAzioniInCoda } from "@/src/lib/codaOffline";
 import { CampoPallini, type Pallino } from "@/src/components/CampoPallini";
 import { useSincronizzazioneLive } from "@/src/hooks/useSincronizzazioneLive";
 import { statoPartitaOspite } from "@/src/services/scoutOspiti";
@@ -184,6 +185,43 @@ export default function PartitaLive() {
     catch (e) { avvisa("Rotazione non riuscita", (e as Error).message); }
   }
 
+  // Coda offline: azioni in attesa di invio per mancanza di rete (vedi src/lib/codaOffline.ts).
+  const inAttesa = useAzioniInCoda(id);
+  async function inviaAzioniInCoda() {
+    if (!id || inCoda(id) === 0) return;
+    const r = await inviaCoda(id);
+    if (r.inviate > 0 || r.scartate.length > 0) {
+      if (r.rimaste === 0) { try { await carica(); } catch { /* si riprova al prossimo giro */ } }
+    }
+    if (r.scartate.length > 0) {
+      avvisa(
+        r.scartate.length === 1 ? "Un'azione non è stata accettata" : `${r.scartate.length} azioni non sono state accettate`,
+        `Il server le ha rifiutate (${r.scartate[0].messaggio}). Controlla il punteggio e, se serve, segnale di nuovo.`,
+      );
+    }
+  }
+  // Sempre l'ultima versione (i listener e i timer non devono usare una copia vecchia di carica).
+  const inviaRef = useRef(inviaAzioniInCoda);
+  inviaRef.current = inviaAzioniInCoda;
+  function avviaInvioCoda() { inviaRef.current().catch(() => { /* resta in coda */ }); }
+  useEffect(() => {
+    // All'apertura: recupera dal telefono eventuali azioni rimaste in coda e prova a inviarle.
+    caricaCodaDaDisco().then(() => avviaInvioCoda()).catch(() => undefined);
+    // Quando torna la rete (browser) riprova subito.
+    const g = globalThis as { addEventListener?: (n: string, f: () => void) => void; removeEventListener?: (n: string, f: () => void) => void };
+    const alRitorno = () => avviaInvioCoda();
+    g.addEventListener?.("online", alRitorno);
+    return () => g.removeEventListener?.("online", alRitorno);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
+  useEffect(() => {
+    // Finché ci sono azioni in coda, riprova ogni pochi secondi.
+    if (inAttesa === 0) return;
+    const timer = setInterval(() => avviaInvioCoda(), 5000);
+    return () => clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [inAttesa, id]);
+
   /** Il set in corso non ha ancora né punti né azioni (appena aperto). */
   function setCorrenteVuoto(): boolean {
     return !!setCorrente && setCorrente.punti_noi === 0 && setCorrente.punti_avversario === 0 && eventi.length === 0 && azioniCronaca.length === 0;
@@ -303,6 +341,8 @@ export default function PartitaLive() {
 
   const carica = useCallback(async () => {
     if (!id) return;
+    // Azioni in coda per mancanza di rete: a schermo c'è lo stato più recente, il server è indietro. Si rilegge dopo l'invio.
+    if (inCoda(id) > 0) return;
     if (modoLive) {
       try {
         const st = await statoPartitaLive(id);
@@ -580,6 +620,16 @@ export default function PartitaLive() {
     setAtletaSelId(null);
     setMostraTuttiFondamentali(false);
 
+    const partenza = skill === "Attacco" ? (formazione.find((f) => f.athlete_id === athleteId)?.posizione ?? null) : null;
+    const opCoda = {
+      id: idCasuale(), tipo: "evento" as const, matchId: match.id, tempId: provvisorio.id, setId: setCorrente.id,
+      skill, esito, athleteId, qualita, causa,
+      zonaArrivo: zoneAttive && (skill === "Servizio" || skill === "Attacco") ? zonaArrivo : null,
+      zonaPartenza: zoneAttive && (skill === "Servizio" || skill === "Attacco") ? partenza : null,
+    };
+    // Se ci sono già azioni in coda, questa va in fila dietro di loro: l'ordine delle azioni non deve cambiare.
+    if (inCoda(match.id) > 0) { accoda(opCoda); avviaInvioCoda(); return; }
+
     try {
       const nuovoId = await registraEvento(match.id, setCorrente.id, skill, esito, athleteId, qualita);
       if (causa) {
@@ -587,15 +637,14 @@ export default function PartitaLive() {
         catch (errCausa) { console.warn("Motivo del punto non salvato:", (errCausa as Error).message); }
       }
       // Zone (solo con la modalita' attiva): l'arrivo e' quello toccato, la partenza dell'attacco e' la posizione di rotazione di chi attacca.
-      if (zoneAttive && (skill === "Servizio" || skill === "Attacco")) {
-        const partenza = skill === "Attacco" ? (formazione.find((f) => f.athlete_id === athleteId)?.posizione ?? null) : null;
-        if (zonaArrivo !== null || partenza !== null) {
-          try { await impostaZoneEvento(nuovoId, zonaArrivo, partenza); }
-          catch (errZone) { console.warn("Zone non salvate:", (errZone as Error).message); }
-        }
+      if (opCoda.zonaArrivo !== null || opCoda.zonaPartenza !== null) {
+        try { await impostaZoneEvento(nuovoId, opCoda.zonaArrivo, opCoda.zonaPartenza); }
+        catch (errZone) { console.warn("Zone non salvate:", (errZone as Error).message); }
       }
       carica();
     } catch (e) {
+      // Manca la rete: l'azione resta sul telefono e parte appena la connessione torna; a schermo il punteggio resta aggiornato.
+      if (erroreDiRete(e)) { accoda(opCoda); avviaInvioCoda(); return; }
       const msg = (e as Error).message;
       setEventi((prev) => prev.filter((ev) => ev.id !== provvisorio.id));
       applicaDelta(skill, esito, -1);
@@ -609,8 +658,15 @@ export default function PartitaLive() {
     const ultimo = eventi[0];
     setEventi((prev) => prev.slice(1));
     applicaDelta(ultimo.skill, ultimo.esito, -1);
+    // L'ultima azione non è ancora arrivata al server (è in coda): basta toglierla dalla coda.
+    if (ultimo.id.startsWith("temp-") && rimuoviEventoInCoda(ultimo.id)) { carica(); return; }
+    // Altrimenti, con azioni in coda, anche l'annullamento va in coda (colpirà l'ultima azione già inviata, nell'ordine giusto).
+    if (inCoda(match.id) > 0) { accoda({ id: idCasuale(), tipo: "annulla", matchId: match.id }); avviaInvioCoda(); return; }
     try { await annullaUltimoEvento(match.id); carica(); }
-    catch (e) { carica(); avvisa("Errore", (e as Error).message); }
+    catch (e) {
+      if (erroreDiRete(e)) { accoda({ id: idCasuale(), tipo: "annulla", matchId: match.id }); avviaInvioCoda(); return; }
+      carica(); avvisa("Errore", (e as Error).message);
+    }
   }
 
   async function apriSituazione() {
@@ -1284,6 +1340,14 @@ export default function PartitaLive() {
           </View>
         )}
 
+        {inAttesa > 0 && (
+          <Pressable style={styles.bannerCoda} onPress={avviaInvioCoda} accessibilityRole="button">
+            <Text style={styles.bannerCodaTesto}>
+              📡 Senza rete: {inAttesa} {inAttesa === 1 ? "azione in attesa" : "azioni in attesa"} di invio. Continua pure a segnare: partono da sole quando la connessione torna. Tocca per riprovare ora.
+            </Text>
+          </Pressable>
+        )}
+
         {erroreVisibile && (
           <Pressable style={styles.bannerErrore} onPress={() => setErroreVisibile(null)}>
             <Text style={styles.bannerErroreTesto}>⚠ {erroreVisibile}</Text>
@@ -1867,6 +1931,8 @@ const styles = StyleSheet.create({
   vuoto: { color: brand.colors.muted, textAlign: "center", marginTop: 32 },
 
   bannerErrore: { backgroundColor: "rgba(255,59,48,0.18)", borderRadius: 12, padding: 8 },
+  bannerCoda: { backgroundColor: brand.colors.warning, paddingVertical: 6, paddingHorizontal: 10, borderRadius: 8 },
+  bannerCodaTesto: { color: "#000", fontSize: 12, fontWeight: "700" },
   bannerErroreTesto: { color: brand.colors.onSurface, fontSize: 11 },
 
   bottoneSecondario: { borderColor: brand.colors.brand, borderWidth: 1, paddingVertical: 10, paddingHorizontal: 16, borderRadius: 12 },
