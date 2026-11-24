@@ -23,6 +23,7 @@ import {
   impostaCausaEvento,
   leggiRegolePunteggio,
   nuovoSet,
+  tornaAlSetPrecedente,
   ruotaFormazioneManuale,
   registraEvento,
   registraTimeout,
@@ -183,15 +184,47 @@ export default function PartitaLive() {
     catch (e) { avvisa("Rotazione non riuscita", (e as Error).message); }
   }
 
-  /** Il nuovo set chiude quello in corso e non si torna indietro: prima si chiede conferma. */
+  /** Il set in corso non ha ancora né punti né azioni (appena aperto). */
+  function setCorrenteVuoto(): boolean {
+    return !!setCorrente && setCorrente.punti_noi === 0 && setCorrente.punti_avversario === 0 && eventi.length === 0 && azioniCronaca.length === 0;
+  }
+
+  /** Il nuovo set chiude quello in corso: prima si chiede sempre conferma, e se il set aperto è ancora vuoto non se ne apre un altro. */
   function chiediNuovoSet(dopo: () => Promise<void>) {
     if (!setCorrente || !match) return;
+    if (setCorrenteVuoto()) {
+      // Il set è già aperto e vuoto (es. appena creato): non serve un altro, si prosegue con quello.
+      avvisa(`Il set ${setCorrente.numero_set} è già aperto`, "È ancora vuoto: non ne apro un altro. Se l'hai aperto per errore, usa \"Torna al set precedente\".");
+      dopo().catch((e) => avvisa("Errore", (e as Error).message));
+      return;
+    }
     confermaAzione(
-      "Aprire un nuovo set?",
-      `Il set ${setCorrente.numero_set} (${setCorrente.punti_noi}-${setCorrente.punti_avversario}) viene chiuso e se ne apre uno nuovo. Non si può tornare indietro.`,
-      "Nuovo set",
+      `Aprire il set ${setCorrente.numero_set + 1}?`,
+      `Il set ${setCorrente.numero_set} (${setCorrente.punti_noi}-${setCorrente.punti_avversario}) viene chiuso e si passa al set ${setCorrente.numero_set + 1}.${setConsolidato(setCorrente) ? " Il set è arrivato al punteggio: resta chiuso e non si riapre." : " Se è un errore, finché il nuovo set è vuoto puoi tornare al precedente."}`,
+      `Apri set ${setCorrente.numero_set + 1}`,
       async () => {
         try { await nuovoSet(match.id); await dopo(); }
+        catch (e) { avvisa("Errore", (e as Error).message); }
+      },
+    );
+  }
+
+  /** Il set è arrivato al punteggio (25, o 15 al decisivo, con 2 punti di scarto): è consolidato e non si riapre. */
+  function setConsolidato(s: MatchSet): boolean {
+    const soglia = s.numero_set === 5 ? regolePunteggio.puntiSetDecisivo : regolePunteggio.puntiPerSet;
+    return Math.max(s.punti_noi, s.punti_avversario) >= soglia && Math.abs(s.punti_noi - s.punti_avversario) >= 2;
+  }
+
+  /** Annulla un set aperto per errore (solo se vuoto): lo elimina e riapre il precedente. */
+  function chiediTornaAlSetPrecedente() {
+    if (!setCorrente || !match || setCorrente.numero_set < 2) return;
+    const prec = setConclusi.find((s) => s.numero_set === setCorrente.numero_set - 1);
+    confermaAzione(
+      `Tornare al set ${setCorrente.numero_set - 1}?`,
+      `Il set ${setCorrente.numero_set} è vuoto e viene eliminato; il set ${setCorrente.numero_set - 1}${prec ? ` (${prec.punti_noi}-${prec.punti_avversario})` : ""} torna aperto.`,
+      `Torna al set ${setCorrente.numero_set - 1}`,
+      async () => {
+        try { await tornaAlSetPrecedente(match.id); await carica(); }
         catch (e) { avvisa("Errore", (e as Error).message); }
       },
     );
@@ -1456,6 +1489,11 @@ export default function PartitaLive() {
                 >
                   <Text style={styles.tastoPiccoloTesto}>Nuovo set</Text>
                 </Pressable>
+                {setCorrente.numero_set > 1 && setCorrenteVuoto() && (() => { const p = setConclusi.find((x) => x.numero_set === setCorrente.numero_set - 1); return !!p && !setConsolidato(p); })() && (
+                  <Pressable style={styles.tastoPiccolo} onPress={chiediTornaAlSetPrecedente}>
+                    <Text style={styles.tastoPiccoloTesto}>↩ Torna al set {setCorrente.numero_set - 1}</Text>
+                  </Pressable>
+                )}
                 <Pressable onPress={onChiudiPartita} style={styles.tastoPiccoloDistruttivo}>
                   <Text style={styles.tastoPiccoloDistruttivoTesto}>Chiudi partita</Text>
                 </Pressable>

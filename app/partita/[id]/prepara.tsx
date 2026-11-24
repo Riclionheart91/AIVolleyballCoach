@@ -16,6 +16,7 @@ import {
   formazioneInizialeSet,
 } from "@/src/services/matches";
 import { confermaAzione, avvisa } from "@/src/lib/confermaAzione";
+import { tornaAlSetPrecedente } from "@/src/services/matches";
 import { CorreggiFormazione } from "@/src/components/CorreggiFormazione";
 import { brand } from "@/src/config";
 import { supabaseClient } from "@/src/lib/supabase";
@@ -213,12 +214,31 @@ export default function PreparaPartita() {
     }, true);
   }
 
+  /** Set aperto per errore: lo si annulla (se è ancora vuoto) e si riapre quello precedente. */
+  function chiediTornaIndietro() {
+    if (!id) return;
+    confermaAzione(
+      `Tornare al set ${numeroSet - 1}?`,
+      `Il set ${numeroSet} non è ancora iniziato e viene eliminato; il set ${numeroSet - 1} torna aperto.`,
+      `Torna al set ${numeroSet - 1}`,
+      async () => {
+        try { await tornaAlSetPrecedente(id); router.replace(`/partita/${id}`); }
+        catch (e) { avvisa("Non riuscito", (e as Error).message); }
+      },
+    );
+  }
+
   if (caricamento || !match) return <View style={styles.container}><ActivityIndicator color={brand.colors.brand} style={{ marginTop: 40 }} /></View>;
 
   return (
     <View style={styles.container}>
       <ScrollView contentContainerStyle={{ padding: 16, gap: 16, paddingBottom: 100 }}>
         <Text style={styles.titolo}>Prepara: vs {match.avversario} — Set {numeroSet}</Text>
+        {numeroSet > 1 && (
+          <Pressable onPress={chiediTornaIndietro} style={styles.bottoneSecondario} accessibilityRole="button">
+            <Text style={styles.bottoneSecondarioTesto}>↩ Aperto per errore? Torna al set {numeroSet - 1}</Text>
+          </Pressable>
+        )}
 
         {numeroSet === 1 ? (
           <View style={styles.card}>

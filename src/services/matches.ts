@@ -96,6 +96,13 @@ export async function nuovoSet(matchId: string): Promise<string> {
   return data as string;
 }
 
+/** Annulla un nuovo set aperto per errore: se è ancora vuoto lo elimina e riapre il precedente. Restituisce l'id del set riaperto. */
+export async function tornaAlSetPrecedente(matchId: string): Promise<string> {
+  const { data, error } = await supabaseClient.rpc("torna_al_set_precedente", { p_match_id: matchId });
+  if (error) throw error;
+  return data as string;
+}
+
 /**
  * Corregge chi sta in campo e dove (e, se indicato, chi sta battendo) senza toccare punti e azioni gia' registrati.
  * posizioni: { "1": athleteId, ..., "6": athleteId }. Possibile per tutta la partita.
