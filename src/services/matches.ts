@@ -3,6 +3,76 @@ import { messaggioErroreRouter } from "@/src/services/aiProviders";
 import { supabase as cfg } from "@/src/config";
 import { calcolaVoti } from "@/src/lib/votiPartita";
 import type { CausaPunto, Esito, Match, MatchConvocato, MatchEvent, MatchSet, MatchSetLineup, QualitaRicezione, Skill } from "@/src/types/database";
+import * as Motore from "@/src/lib/motorePartita";
+import { aggiornaDaServer, applica, applicaOmbra, attivaModoLocale, caricaDaDisco, idPartitaDelSet, inModoLocale, leggi } from "@/src/lib/partitaLocale";
+import { accoda } from "@/src/lib/codaOffline";
+import { erroreDiRete, idOperazione } from "@/src/lib/rete";
+
+/**
+ * Operazioni dello scouting. Normalmente vanno al server (funzione applica_operazione_scout, che applica ogni
+ * operazione una sola volta). Se manca la rete e la partita è stata aperta con la connessione, l'operazione si applica
+ * alla copia sul telefono con il motore locale (src/lib/motorePartita.ts) e finisce in coda (src/lib/codaOffline.ts):
+ * da quel momento la partita si legge e si scrive in locale finché la coda non è stata inviata del tutto.
+ */
+type Args = Record<string, unknown>;
+interface OpzioniOperazione<T> {
+  matchId?: string | null;
+  setId?: string | null;
+  tipo: string;
+  args: Args;
+  /** Come l'operazione cambia la copia locale (stesse regole del database). */
+  locale: (s: Motore.StatoPartita) => T;
+  /** Cosa restituire quando l'operazione è andata al server (id restituito dal database). */
+  daServer: (id: string | null) => T;
+  /** Argomenti da mettere in coda, se dipendono dal risultato locale (es. id del set creato offline). */
+  argsInCoda?: (risultato: T) => Args;
+  /** L'operazione crea righe con id propri: dopo il server si rilegge la partita invece di aggiornare la copia. */
+  ricaricaDopo?: boolean;
+  /** Senza copia locale (es. scout ospite): in mancanza di rete l'operazione va comunque in coda e si restituisce questo valore. */
+  senzaCopia?: { valore: T };
+}
+
+async function operaScout<T>(o: OpzioniOperazione<T>): Promise<T> {
+  const mid = o.matchId ?? (o.setId ? idPartitaDelSet(o.setId) : null);
+  if (mid) await caricaDaDisco(mid);
+  const opId = idOperazione();
+  const inCodaLocale = (id: string): T => {
+    const r = applica(id, o.locale);
+    accoda({ id: opId, matchId: id, tipo: o.tipo, args: o.argsInCoda ? o.argsInCoda(r) : o.args });
+    return r;
+  };
+  if (mid && inModoLocale(mid)) return inCodaLocale(mid);
+  try {
+    const { data, error } = await supabaseClient.rpc("applica_operazione_scout", { p_op_id: opId, p_tipo: o.tipo, p_args: o.args });
+    if (error) throw error;
+    if (mid && leggi(mid)) {
+      if (o.ricaricaDopo) aggiornaDaServer(mid, true).catch(() => undefined);
+      else applicaOmbra(mid, o.locale);
+    }
+    return o.daServer(((data ?? {}) as { id?: string | null }).id ?? null);
+  } catch (e) {
+    if (!erroreDiRete(e)) throw e;
+    // Manca la rete: si prosegue in locale con la stessa operazione (stesso id: il server la applica una volta sola).
+    if (mid && leggi(mid)) {
+      attivaModoLocale(mid);
+      const r = applica(mid, o.locale);
+      accoda({ id: opId, matchId: mid, tipo: o.tipo, args: o.argsInCoda ? o.argsInCoda(r) : o.args });
+      return r;
+    }
+    if (o.senzaCopia && o.matchId) {
+      accoda({ id: opId, matchId: o.matchId, tipo: o.tipo, args: o.args });
+      return o.senzaCopia.valore;
+    }
+    throw e;
+  }
+}
+
+/** Copia locale della partita, se in questo momento si lavora in locale (senza rete). */
+function locale(matchId: string): Motore.StatoPartita | null { return inModoLocale(matchId) ? leggi(matchId) : null; }
+function localeDelSet(setId: string): Motore.StatoPartita | null {
+  const m = idPartitaDelSet(setId);
+  return m ? locale(m) : null;
+}
 
 export async function elencaPartite(teamId: string): Promise<Match[]> {
   const { data, error } = await supabaseClient.from("matches").select("*").eq("team_id", teamId).order("data", { ascending: false });
@@ -36,6 +106,13 @@ export async function creaMatch(
 
 /** Crea il set 1 (se non esiste) senza avviare la partita — serve come ancora per convocati/formazione. Idempotente. */
 export async function avviaPreparazioneMatch(matchId: string): Promise<string> {
+  await caricaDaDisco(matchId);
+  const l = locale(matchId);
+  if (l) {
+    const aperto = l.sets.filter((q) => !q.concluso).sort((a, b) => b.numero_set - a.numero_set)[0];
+    if (!aperto) throw new Error("Nessun set aperto");
+    return aperto.id;
+  }
   const { data, error } = await supabaseClient.rpc("avvia_preparazione_match", { p_match_id: matchId });
   if (error) throw error;
   return data as string;
@@ -47,6 +124,8 @@ export async function impostaConvocati(matchId: string, athleteIds: string[], li
 }
 
 export async function elencaConvocati(matchId: string): Promise<MatchConvocato[]> {
+  const l = locale(matchId);
+  if (l) return l.convocati;
   const { data, error } = await supabaseClient.from("match_convocati").select("*").eq("match_id", matchId);
   if (error) throw error;
   return data ?? [];
@@ -54,20 +133,23 @@ export async function elencaConvocati(matchId: string): Promise<MatchConvocato[]
 
 /** posizioni: { "1": athleteId, "2": athleteId, ..., "6": athleteId }. chiServe: chi mette a segno il primo servizio del set. */
 export async function impostaFormazioneIniziale(setId: string, posizioni: Record<string, string>, chiServe: "noi" | "avversario"): Promise<void> {
-  const { error } = await supabaseClient.rpc("imposta_formazione_iniziale", { p_set_id: setId, p_posizioni: posizioni, p_chi_serve: chiServe });
-  if (error) throw error;
+  await operaScout<void>({
+    setId, tipo: "formazione_iniziale", args: { set_id: setId, posizioni, chi_serve: chiServe },
+    locale: (s) => Motore.formazioneIniziale(s, setId, posizioni, chiServe), daServer: () => undefined,
+  });
 }
 
 /** Il "pulsante grande": da qui in poi la partita è davvero operativa per lo scouting. */
 export async function avviaMatchConfermato(matchId: string): Promise<void> {
-  const { error } = await supabaseClient.rpc("avvia_match_confermato", { p_match_id: matchId });
-  if (error) throw error;
+  await operaScout<void>({ matchId, tipo: "avvia", args: { match_id: matchId }, locale: (s) => Motore.avviaMatch(s), daServer: () => undefined });
 }
 
 /** Libero scelto per la partita e i due centrali su cui entra. */
 export interface RegolaLibero { libero_id: string | null; titolare_1: string | null; titolare_2: string | null }
 
 export async function leggiRegolaLibero(matchId: string): Promise<RegolaLibero | null> {
+  const l = locale(matchId);
+  if (l) return l.regolaLibero;
   const { data, error } = await supabaseClient.rpc("leggi_regola_libero", { p_match_id: matchId });
   if (error) throw error;
   const r = (data ?? [])[0] as RegolaLibero | undefined;
@@ -75,44 +157,41 @@ export async function leggiRegolaLibero(matchId: string): Promise<RegolaLibero |
 }
 
 export async function impostaRegolaLibero(matchId: string, liberoId: string | null, titolare1: string | null, titolare2: string | null): Promise<void> {
-  const { error } = await supabaseClient.rpc("imposta_regola_libero", { p_match_id: matchId, p_libero_id: liberoId, p_titolare_1: titolare1, p_titolare_2: titolare2 });
-  if (error) throw error;
+  await operaScout<void>({
+    matchId, tipo: "regola_libero", args: { match_id: matchId, libero: liberoId, titolare_1: titolare1, titolare_2: titolare2 },
+    locale: (s) => Motore.impostaRegolaLibero(s, liberoId, titolare1, titolare2), daServer: () => undefined,
+  });
 }
 
 export async function cambiaGiocatore(setId: string, atletaUscente: string, atletaEntrante: string): Promise<void> {
-  await dopoCoda();
-  const { error } = await supabaseClient.rpc("cambia_giocatore", { p_set_id: setId, p_atleta_uscente: atletaUscente, p_atleta_entrante: atletaEntrante });
-  if (error) throw error;
+  await operaScout<void>({
+    setId, tipo: "cambio", args: { set_id: setId, uscente: atletaUscente, entrante: atletaEntrante },
+    locale: (s) => Motore.cambio(s, setId, atletaUscente, atletaEntrante), daServer: () => undefined,
+  });
 }
 
 export async function elencaSet(matchId: string): Promise<MatchSet[]> {
+  const l = locale(matchId);
+  if (l) return [...l.sets].sort((a, b) => a.numero_set - b.numero_set);
   const { data, error } = await supabaseClient.from("match_sets").select("*").eq("match_id", matchId).order("numero_set");
   if (error) throw error;
   return data ?? [];
 }
 
-/**
- * Barriera per le operazioni che cambiano la struttura della partita (nuovo set, cambi, Libero, time-out, chiusura...):
- * se ci sono azioni dello scouting in coda per mancanza di rete, prima si inviano quelle; se non ci si riesce, l'operazione si ferma con un messaggio chiaro.
- * La coda (src/lib/codaOffline.ts) registra qui la sua funzione, per non creare un import circolare.
- */
-let barrieraCoda: (() => Promise<void>) | null = null;
-export function impostaBarrieraCoda(f: () => Promise<void>): void { barrieraCoda = f; }
-async function dopoCoda(): Promise<void> { if (barrieraCoda) await barrieraCoda(); }
-
 export async function nuovoSet(matchId: string): Promise<string> {
-  await dopoCoda();
-  const { data, error } = await supabaseClient.rpc("nuovo_set", { p_match_id: matchId });
-  if (error) throw error;
-  return data as string;
+  return operaScout<string>({
+    matchId, tipo: "nuovo_set", args: { match_id: matchId },
+    locale: (s) => Motore.nuovoSet(s), argsInCoda: (id) => ({ match_id: matchId, set_locale_id: id }),
+    daServer: (id) => id ?? "", ricaricaDopo: true,
+  });
 }
 
 /** Annulla un nuovo set aperto per errore: se è ancora vuoto lo elimina e riapre il precedente. Restituisce l'id del set riaperto. */
 export async function tornaAlSetPrecedente(matchId: string): Promise<string> {
-  await dopoCoda();
-  const { data, error } = await supabaseClient.rpc("torna_al_set_precedente", { p_match_id: matchId });
-  if (error) throw error;
-  return data as string;
+  return operaScout<string>({
+    matchId, tipo: "torna_set", args: { match_id: matchId },
+    locale: (s) => Motore.tornaAlSetPrecedente(s), daServer: (id) => id ?? "", ricaricaDopo: true,
+  });
 }
 
 /**
@@ -120,15 +199,18 @@ export async function tornaAlSetPrecedente(matchId: string): Promise<string> {
  * posizioni: { "1": athleteId, ..., "6": athleteId }. Possibile per tutta la partita.
  */
 export async function correggiFormazione(setId: string, posizioni: Record<string, string>, chiServe: "noi" | "avversario" | null): Promise<void> {
-  await dopoCoda();
-  const { error } = await supabaseClient.rpc("correggi_formazione", { p_set_id: setId, p_posizioni: posizioni, p_chi_serve: chiServe });
-  if (error) throw error;
+  await operaScout<void>({
+    setId, tipo: "correggi", args: { set_id: setId, posizioni, chi_serve: chiServe },
+    locale: (s) => Motore.correggiFormazione(s, setId, posizioni, chiServe), daServer: () => undefined,
+  });
 }
 
 /** Aggiunge una persona alla distinta della partita in corso: come Libero per tutta la partita, come convocata solo nel primo set. */
 export async function aggiungiConvocato(matchId: string, athleteId: string, isLibero = false): Promise<void> {
-  const { error } = await supabaseClient.rpc("aggiungi_convocato", { p_match_id: matchId, p_athlete_id: athleteId, p_is_libero: isLibero });
-  if (error) throw error;
+  await operaScout<void>({
+    matchId, tipo: "convocato", args: { match_id: matchId, athlete_id: athleteId, is_libero: isLibero },
+    locale: (s) => Motore.aggiungiConvocato(s, athleteId, isLibero), daServer: () => undefined,
+  });
 }
 
 /** Riporta una partita in corso (solo durante il primo set) a "da preparare", come appena sincronizzata: cancella set, azioni, formazioni e convocati. */
@@ -139,9 +221,10 @@ export async function ricominciaPartita(matchId: string): Promise<void> {
 
 /** Ruota a mano la formazione del set di una posizione (in avanti come a ogni cambio palla, o indietro per correggere un giro di troppo). */
 export async function ruotaFormazioneManuale(setId: string, indietro = false): Promise<void> {
-  await dopoCoda();
-  const { error } = await supabaseClient.rpc("ruota_formazione_manuale", { p_set_id: setId, p_indietro: indietro });
-  if (error) throw error;
+  await operaScout<void>({
+    setId, tipo: "ruota", args: { set_id: setId, indietro },
+    locale: (s) => Motore.ruotaManuale(s, setId, indietro), daServer: () => undefined,
+  });
 }
 
 /** Un tap sul fondamentale + un tap sull'esito = una sola chiamata: il punteggio E la rotazione si aggiornano da soli lato database (trigger). */
@@ -151,16 +234,59 @@ export async function registraEvento(matchId: string, setId: string, skill: Skil
   return data as string;
 }
 
+/** Parametri di un'azione registrata durante la partita. */
+export interface AzioneScout {
+  matchId: string; setId: string; skill: Skill; esito: Esito | null; athleteId: string | null; qualita: QualitaRicezione | null;
+  causa?: CausaPunto | null; zonaArrivo?: number | null; zonaPartenza?: number | null;
+}
+
+/**
+ * Un tap sul fondamentale + un tap sull'esito = una sola operazione: punteggio, rotazione, servizio, motivo del punto
+ * e zone si aggiornano insieme (lato database con i trigger; senza rete con il motore locale).
+ */
+export async function registraAzione(a: AzioneScout): Promise<void> {
+  await operaScout<void>({
+    matchId: a.matchId, tipo: "evento",
+    args: {
+      match_id: a.matchId, set_id: a.setId, skill: a.skill, esito: a.esito, athlete_id: a.athleteId, qualita: a.qualita,
+      causa: a.causa ?? null, zona_arrivo: a.zonaArrivo ?? null, zona_partenza: a.zonaPartenza ?? null,
+    },
+    locale: (s) => { Motore.registraEvento(s, { setId: a.setId, skill: a.skill, esito: a.esito, athleteId: a.athleteId, qualita: a.qualita, causa: a.causa ?? null, zonaArrivo: a.zonaArrivo ?? null, zonaPartenza: a.zonaPartenza ?? null }); },
+    daServer: () => undefined, senzaCopia: { valore: undefined },
+  });
+}
+
+/** Partita e set letti dal telefono quando si lavora senza rete, altrimenti dal server. */
+export async function leggiPartita(matchId: string): Promise<Match | null> {
+  await caricaDaDisco(matchId);
+  const l = locale(matchId);
+  if (l) return l.match;
+  const { data } = await supabaseClient.from("matches").select("*").eq("id", matchId).single();
+  return (data as Match | null) ?? null;
+}
+export async function leggiNumeroSet(setId: string): Promise<number | null> {
+  const l = localeDelSet(setId);
+  if (l) return l.sets.find((q) => q.id === setId)?.numero_set ?? null;
+  const { data } = await supabaseClient.from("match_sets").select("numero_set").eq("id", setId).single();
+  return (data as { numero_set: number } | null)?.numero_set ?? null;
+}
+export async function leggiIdSetNumero(matchId: string, numero: number): Promise<string | null> {
+  const l = locale(matchId);
+  if (l) return l.sets.find((q) => q.numero_set === numero)?.id ?? null;
+  const { data } = await supabaseClient.from("match_sets").select("id").eq("match_id", matchId).eq("numero_set", numero).maybeSingle();
+  return (data as { id: string } | null)?.id ?? null;
+}
+
 /** Elimina l'ultimo evento registrato — punteggio E rotazione/servizio si correggono da soli (trigger). */
 export async function annullaUltimoEvento(matchId: string): Promise<void> {
-  const { error } = await supabaseClient.rpc("annulla_ultimo_evento", { p_match_id: matchId });
-  if (error) throw error;
+  await operaScout<void>({
+    matchId, tipo: "annulla", args: { match_id: matchId },
+    locale: (s) => Motore.annullaUltimoEvento(s), daServer: () => undefined, senzaCopia: { valore: undefined },
+  });
 }
 
 export async function chiudiMatch(matchId: string): Promise<void> {
-  await dopoCoda();
-  const { error } = await supabaseClient.rpc("chiudi_match", { p_match_id: matchId });
-  if (error) throw error;
+  await operaScout<void>({ matchId, tipo: "chiudi", args: { match_id: matchId }, locale: (s) => Motore.chiudiMatch(s), daServer: () => undefined });
 }
 
 /** Evento con la rotazione (chi era al servizio) in cui e' avvenuto: serve a dire dove siamo deboli in ogni rotazione. */
@@ -183,6 +309,8 @@ export async function elencaEventiPerRotazione(matchId: string): Promise<EventoP
 }
 
 export async function elencaEventiPartita(matchId: string, limite = 20): Promise<MatchEvent[]> {
+  const l = locale(matchId);
+  if (l) return [...l.eventi].reverse().slice(0, limite);
   const { data, error } = await supabaseClient.from("match_events").select("*").eq("match_id", matchId).order("creato_il", { ascending: false }).limit(limite);
   if (error) throw error;
   return data ?? [];
@@ -190,6 +318,8 @@ export async function elencaEventiPartita(matchId: string, limite = 20): Promise
 
 /** TUTTE le azioni della partita, dalla piu' vecchia alla piu' recente (per la cronaca di chi guarda). Legge a pagine da 1000. */
 export async function elencaTutteLeAzioniPartita(matchId: string): Promise<MatchEvent[]> {
+  const l = locale(matchId);
+  if (l) return [...l.eventi];
   const tutte: MatchEvent[] = [];
   const DIMENSIONE = 1000;
   for (let da = 0; da < 20000; da += DIMENSIONE) {
@@ -204,6 +334,8 @@ export async function elencaTutteLeAzioniPartita(matchId: string): Promise<Match
 
 /** Formazione attuale del set, CON posizione (1-6) — sostituisce la vecchia elencaFormazioneSet che dava solo la lista senza posizione. */
 export async function elencaFormazioneConPosizioni(setId: string): Promise<MatchSetLineup[]> {
+  const l = localeDelSet(setId);
+  if (l) return l.formazioni.filter((r) => r.set_id === setId && r.in_campo).sort((a, b) => (a.posizione ?? 0) - (b.posizione ?? 0));
   const { data, error } = await supabaseClient.from("match_set_lineups").select("*").eq("set_id", setId).eq("in_campo", true).order("posizione");
   if (error) throw error;
   return data ?? [];
@@ -211,6 +343,8 @@ export async function elencaFormazioneConPosizioni(setId: string): Promise<Match
 
 /** TUTTE le righe del set (anche chi è uscita) — serve per sapere chi è già stata sostituita e non può rientrare, non solo chi è in campo ora. */
 export async function elencaStoricoFormazioneSet(setId: string): Promise<MatchSetLineup[]> {
+  const l = localeDelSet(setId);
+  if (l) return l.formazioni.filter((r) => r.set_id === setId);
   const { data, error } = await supabaseClient.from("match_set_lineups").select("*").eq("set_id", setId);
   if (error) throw error;
   return data ?? [];
@@ -222,6 +356,12 @@ export async function elencaStoricoFormazioneSet(setId: string): Promise<MatchSe
  * venisse registrata, o colonna non ancora presente nel database).
  */
 export async function formazioneInizialeSet(setId: string): Promise<Record<number, string>> {
+  const l = localeDelSet(setId);
+  if (l) {
+    const out: Record<number, string> = {};
+    for (const r of l.formazioni) if (r.set_id === setId && r.posizione_iniziale) out[r.posizione_iniziale] = r.athlete_id;
+    return out;
+  }
   const { data, error } = await supabaseClient
     .from("match_set_lineups")
     .select("athlete_id, posizione_iniziale")
@@ -235,6 +375,8 @@ export async function formazioneInizialeSet(setId: string): Promise<Record<numbe
 
 /** Chi deve servire per prima nel prossimo set, secondo l'alternanza automatica — null se va richiesto (1° o 5° set). */
 export async function chiServeDefaultNuovoSet(matchId: string, numeroSet: number): Promise<"noi" | "avversario" | null> {
+  const l = locale(matchId);
+  if (l) return Motore.chiServeDefault(l, numeroSet);
   const { data, error } = await supabaseClient.rpc("chi_serve_default_nuovo_set", { p_match_id: matchId, p_numero_nuovo_set: numeroSet });
   if (error) throw error;
   return (data as "noi" | "avversario" | null) ?? null;
@@ -242,6 +384,8 @@ export async function chiServeDefaultNuovoSet(matchId: string, numeroSet: number
 
 /** Regole punteggio applicabili a questa partita: quelle del campionato collegato, o i default di regolamento (25 punti/set, 15 al 5°) se la partita non ha un campionato assegnato. */
 export async function leggiRegolePunteggio(matchId: string): Promise<{ puntiPerSet: number; puntiSetDecisivo: number }> {
+  const l = locale(matchId);
+  if (l) return { puntiPerSet: l.regole.puntiPerSet, puntiSetDecisivo: l.regole.puntiSetDecisivo };
   const { data: m } = await supabaseClient.from("matches").select("campionato_id").eq("id", matchId).single();
   if (!m?.campionato_id) return { puntiPerSet: 25, puntiSetDecisivo: 15 };
   const { data: c } = await supabaseClient.from("campionati").select("punti_per_set, punti_set_decisivo").eq("id", m.campionato_id).single();
@@ -340,6 +484,8 @@ export interface AvvisoFormazione { avviso: string; gravita: string }
 
 /** Controlli sulla formazione dichiarata (per ora: Libero fuori posto). Avvisa senza bloccare. */
 export async function verificaFormazione(setId: string): Promise<AvvisoFormazione[]> {
+  const l = localeDelSet(setId);
+  if (l) return Motore.verificaFormazioneDi(l, setId) as AvvisoFormazione[];
   const { data, error } = await supabaseClient.rpc("verifica_formazione", { p_set_id: setId });
   if (error) return [];
   return data ?? [];
@@ -349,6 +495,8 @@ export interface LiberoInCampo { libero_id: string; titolare_id: string; posizio
 
 /** Chi è il Libero attualmente in campo e chi ha rimpiazzato, se c'è. */
 export async function liberoInCampo(setId: string): Promise<LiberoInCampo | null> {
+  const l = localeDelSet(setId);
+  if (l) return Motore.liberoInCampoDi(l, setId);
   const { data, error } = await supabaseClient.rpc("libero_in_campo", { p_set_id: setId });
   if (error) return null;
   return (data && data.length > 0) ? data[0] : null;
@@ -356,15 +504,14 @@ export async function liberoInCampo(setId: string): Promise<LiberoInCampo | null
 
 /** Il Libero entra al posto di chi è in seconda linea: non consuma sostituzioni ed è ripetibile. */
 export async function rimpiazzaConLibero(setId: string, liberoId: string, titolareId: string): Promise<void> {
-  await dopoCoda();
-  const { error } = await supabaseClient.rpc("rimpiazza_con_libero", { p_set_id: setId, p_libero_id: liberoId, p_titolare_id: titolareId });
-  if (error) throw error;
+  await operaScout<void>({
+    setId, tipo: "libero_entra", args: { set_id: setId, libero: liberoId, titolare: titolareId },
+    locale: (s) => Motore.liberoEntra(s, setId, liberoId, titolareId), daServer: () => undefined,
+  });
 }
 
 export async function faiUscireLibero(setId: string): Promise<void> {
-  await dopoCoda();
-  const { error } = await supabaseClient.rpc("fai_uscire_libero", { p_set_id: setId });
-  if (error) throw error;
+  await operaScout<void>({ setId, tipo: "libero_esce", args: { set_id: setId }, locale: (s) => Motore.liberoEsce(s, setId), daServer: () => undefined });
 }
 
 export interface AnalisiFondamentale {
@@ -476,20 +623,22 @@ export interface MatchTimeout {
 }
 
 export async function elencaTimeout(matchId: string): Promise<MatchTimeout[]> {
+  const l = locale(matchId);
+  if (l) return [...l.timeouts];
   const { data, error } = await supabaseClient.from("match_timeouts").select("*").eq("match_id", matchId).order("creato_il");
   if (error) return [];
   return (data ?? []) as MatchTimeout[];
 }
 
 export async function registraTimeout(setId: string, squadra: "noi" | "avversario"): Promise<void> {
-  await dopoCoda();
-  const { error } = await supabaseClient.rpc("registra_timeout", { p_set_id: setId, p_squadra: squadra });
-  if (error) throw error;
+  await operaScout<void>({
+    setId, tipo: "timeout", args: { set_id: setId, squadra },
+    locale: (s) => Motore.timeoutRegistra(s, setId, squadra), daServer: () => undefined,
+  });
 }
 
 export async function annullaUltimoTimeout(setId: string): Promise<void> {
-  const { error } = await supabaseClient.rpc("annulla_ultimo_timeout", { p_set_id: setId });
-  if (error) throw error;
+  await operaScout<void>({ setId, tipo: "timeout_annulla", args: { set_id: setId }, locale: (s) => Motore.timeoutAnnulla(s, setId), daServer: () => undefined });
 }
 
 /** Una riga = un giocatore, in una partita, per un fondamentale. */

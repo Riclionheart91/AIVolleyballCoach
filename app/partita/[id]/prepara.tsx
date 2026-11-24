@@ -14,12 +14,16 @@ import {
   impostaConvocati,
   impostaFormazioneIniziale,
   formazioneInizialeSet,
+  leggiPartita,
+  leggiNumeroSet,
+  leggiIdSetNumero,
 } from "@/src/services/matches";
 import { confermaAzione, avvisa } from "@/src/lib/confermaAzione";
 import { tornaAlSetPrecedente } from "@/src/services/matches";
 import { CorreggiFormazione } from "@/src/components/CorreggiFormazione";
 import { brand } from "@/src/config";
 import { supabaseClient } from "@/src/lib/supabase";
+import { inModoLocale, leggi as leggiCopiaLocale } from "@/src/lib/partitaLocale";
 import type { Athlete, Match } from "@/src/types/database";
 
 /** Distinta di gara: al massimo 12 atlete (Libero escluso) più 2 Liberi, cioe' 14 a referto. */
@@ -51,17 +55,17 @@ export default function PreparaPartita() {
     if (!id || !team) return;
     setCaricamento(true);
     try {
-      const { data: m } = await supabaseClient.from("matches").select("*").eq("id", id).single();
+      const m = await leggiPartita(id);
       setMatch(m ?? null);
 
       const nuovoSetId = await avviaPreparazioneMatch(id);
       setSetId(nuovoSetId);
-      const { data: setRow } = await supabaseClient.from("match_sets").select("numero_set").eq("id", nuovoSetId).single();
-      const numero = setRow?.numero_set ?? 1;
+      const numero = (await leggiNumeroSet(nuovoSetId)) ?? 1;
       setNumeroSet(numero);
 
       const [listaAtlete, convocati, formazioneAttuale] = await Promise.all([
-        elencaAtlete(team.id),
+        // Senza rete le atlete si leggono dalla copia della partita sul telefono.
+        inModoLocale(id) && leggiCopiaLocale(id) ? Promise.resolve([...(leggiCopiaLocale(id)?.atlete ?? [])]) : elencaAtlete(team.id),
         elencaConvocati(id),
         elencaFormazioneConPosizioni(nuovoSetId),
       ]);
@@ -78,8 +82,8 @@ export default function PreparaPartita() {
       // Dal 2° set in poi: la formazione di partenza del set appena
       // concluso, da poter riproporre con un tocco.
       if (numero > 1) {
-        const { data: setPrecedente } = await supabaseClient.from("match_sets").select("id").eq("match_id", id).eq("numero_set", numero - 1).maybeSingle();
-        setFormazionePrecedente(setPrecedente ? await formazioneInizialeSet(setPrecedente.id) : {});
+        const idPrecedente = await leggiIdSetNumero(id, numero - 1);
+        setFormazionePrecedente(idPrecedente ? await formazioneInizialeSet(idPrecedente) : {});
       } else {
         setFormazionePrecedente({});
       }

@@ -1,6 +1,9 @@
+import { useEffect } from "react";
 import { Stack } from "expo-router";
 import { AuthProvider } from "@/src/context/AuthContext";
 import { applicaDimensioneTesto } from "@/src/lib/dimensioneTesto";
+import { BannerAggiornamento } from "@/src/components/BannerAggiornamento";
+import { avviaSincronizzazione } from "@/src/lib/codaOffline";
 
 // Dimensione del testo: segue il telefono (o la scelta fatta in Impostazioni). Va applicata prima del primo disegno.
 applicaDimensioneTesto();
@@ -30,8 +33,11 @@ const INTESTAZIONE_SCURA = {
 } as object;
 
 export default function RootLayout() {
+  // Invio delle azioni rimaste in coda (partita giocata senza rete): parte all'apertura dell'app, a prescindere dalla schermata.
+  useEffect(() => { avviaSincronizzazione(); }, []);
   return (
     <AuthProvider>
+      <BannerAggiornamento />
       <Stack screenOptions={{ headerShown: false, contentStyle: AREA_SICURA, ...INTESTAZIONE_SCURA }}>
         <Stack.Screen name="login" />
         <Stack.Screen name="crea-squadra" />
