@@ -289,11 +289,19 @@ async function fetchConTempoMassimo(url: string, init: RequestInit, timeoutMs: n
 }
 
 async function chiamaGemini(prompt: string, sistema: string, modello: string, apiKey: string, timeoutMs: number): Promise<string> {
-  const resp = await fetchConTempoMassimo(
+  const inizio = Date.now();
+  const chiama = () => fetchConTempoMassimo(
     `https://generativelanguage.googleapis.com/v1beta/models/${modello}:generateContent?key=${apiKey}`,
     { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ systemInstruction: { parts: [{ text: sistema }] }, contents: [{ parts: [{ text: prompt }] }] }) },
-    timeoutMs,
+    Math.max(1_000, timeoutMs - (Date.now() - inizio)),
   );
+  let resp = await chiama();
+  // 503 = modello sovraccarico: di solito dura pochi secondi, vale un secondo tentativo prima di passare ad altri provider.
+  if (resp.status === 503 && Date.now() - inizio < timeoutMs - 8_000) {
+    await resp.body?.cancel().catch(() => undefined);
+    await new Promise((r) => setTimeout(r, 2_000));
+    resp = await chiama();
+  }
   if (!resp.ok) throw new Error(await erroreDettagliato(resp));
   const data = await resp.json();
   const testo = data?.candidates?.[0]?.content?.parts?.[0]?.text;
@@ -301,30 +309,76 @@ async function chiamaGemini(prompt: string, sistema: string, modello: string, ap
   return testo;
 }
 
-async function chiamaGroq(prompt: string, sistema: string, modello: string, apiKey: string, timeoutMs: number): Promise<string> {
-  const resp = await fetchConTempoMassimo("https://api.groq.com/openai/v1/chat/completions", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-    body: JSON.stringify({ model: modello, messages: [{ role: "system", content: sistema }, { role: "user", content: prompt }] }),
-  }, timeoutMs);
-  if (!resp.ok) throw new Error(await erroreDettagliato(resp));
-  const data = await resp.json();
-  const testo = data?.choices?.[0]?.message?.content;
-  if (!testo) throw new Error("risposta vuota");
-  return testo;
+/** Modelli Groq in ordine di preferenza se quello configurato non risulta disponibile per la chiave (Groq cambia spesso i modelli e i permessi per organizzazione). */
+const MODELLI_GROQ_DI_RISERVA = ["llama-3.3-70b-versatile", "openai/gpt-oss-120b", "openai/gpt-oss-20b", "llama-3.1-8b-instant"];
+let cacheModelliGroq: { chiave: string; ids: string[]; fino: number } | null = null;
+
+/** Elenco dei modelli che la chiave puo' usare davvero (GET /models), tenuto in memoria per qualche minuto. Se non si riesce a leggerlo, restituisce null. */
+async function modelliGroqDisponibili(apiKey: string): Promise<string[] | null> {
+  if (cacheModelliGroq && cacheModelliGroq.chiave === apiKey.slice(-8) && cacheModelliGroq.fino > Date.now()) return cacheModelliGroq.ids;
+  try {
+    const resp = await fetchConTempoMassimo("https://api.groq.com/openai/v1/models", { headers: { Authorization: `Bearer ${apiKey}` } }, 6_000);
+    if (!resp.ok) return null;
+    const data = await resp.json();
+    const ids: string[] = (data?.data ?? []).map((m: { id?: string }) => m.id).filter((x: unknown): x is string => typeof x === "string");
+    if (ids.length === 0) return null;
+    cacheModelliGroq = { chiave: apiKey.slice(-8), ids, fino: Date.now() + 10 * 60_000 };
+    return ids;
+  } catch {
+    return null;
+  }
+}
+
+async function chiamaGroq(prompt: string, sistema: string, modelloConfigurato: string, apiKey: string, timeoutMs: number): Promise<string> {
+  const inizio = Date.now();
+  const disponibili = await modelliGroqDisponibili(apiKey);
+  // Prima il modello configurato, poi quelli di riserva (solo tra quelli che la chiave puo' usare, se l'elenco e' noto).
+  const candidati = [modelloConfigurato, ...MODELLI_GROQ_DI_RISERVA]
+    .filter((m, i, tutti) => tutti.indexOf(m) === i)
+    .filter((m) => !disponibili || disponibili.includes(m))
+    .slice(0, 3);
+  if (candidati.length === 0) throw new Error(`nessun modello utilizzabile con questa chiave (configurato: ${modelloConfigurato})`);
+  let ultimoErrore = "";
+  for (const modello of candidati) {
+    const residuo = timeoutMs - (Date.now() - inizio);
+    if (residuo < 3_000) break;
+    if (modello !== modelloConfigurato) console.error(`Groq: provo il modello di riserva ${modello}`);
+    const resp = await fetchConTempoMassimo("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify({ model: modello, messages: [{ role: "system", content: sistema }, { role: "user", content: prompt }] }),
+    }, residuo);
+    if (!resp.ok) {
+      ultimoErrore = await erroreDettagliato(resp);
+      // 404 = modello non esistente o non accessibile per questa chiave: si prova il successivo. Ogni altro errore (quota, 5xx) vale per tutti i modelli.
+      if (resp.status === 404) continue;
+      throw new Error(`${modello}: ${ultimoErrore}`);
+    }
+    const data = await resp.json();
+    const testo = data?.choices?.[0]?.message?.content;
+    if (!testo) { ultimoErrore = `${modello}: risposta vuota`; continue; }
+    return testo;
+  }
+  throw new Error(ultimoErrore || "nessuna risposta");
 }
 
 async function chiamaOpenRouter(prompt: string, sistema: string, modello: string, apiKey: string, timeoutMs: number): Promise<string> {
-  const resp = await fetchConTempoMassimo("https://openrouter.ai/api/v1/chat/completions", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-    body: JSON.stringify({ model: modello, messages: [{ role: "system", content: sistema }, { role: "user", content: prompt }] }),
-  }, timeoutMs);
-  if (!resp.ok) throw new Error(await erroreDettagliato(resp));
-  const data = await resp.json();
-  const testo = data?.choices?.[0]?.message?.content;
-  if (!testo) throw new Error("risposta vuota");
-  return testo;
+  const inizio = Date.now();
+  // "openrouter/free" sceglie ogni volta un modello gratuito diverso e a volte restituisce un testo vuoto: si riprova una volta.
+  for (let tentativo = 1; tentativo <= 2; tentativo++) {
+    const residuo = timeoutMs - (Date.now() - inizio);
+    if (residuo < 5_000) break;
+    const resp = await fetchConTempoMassimo("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify({ model: modello, messages: [{ role: "system", content: sistema }, { role: "user", content: prompt }] }),
+    }, residuo);
+    if (!resp.ok) throw new Error(await erroreDettagliato(resp));
+    const data = await resp.json();
+    const testo = data?.choices?.[0]?.message?.content;
+    if (testo && String(testo).trim()) return testo;
+  }
+  throw new Error("risposta vuota");
 }
 
 function jsonResponse(body: unknown, status = 200): Response {
