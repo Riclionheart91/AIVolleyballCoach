@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from "react";
-import { View, Text, FlatList, TextInput, Pressable, StyleSheet } from "react-native";
+import { View, Text, FlatList, TextInput, Pressable, StyleSheet, useWindowDimensions } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { useAuth } from "@/src/context/AuthContext";
 import { elencaAtlete } from "@/src/services/athletes";
@@ -178,22 +178,29 @@ export default function Allenamenti() {
     .sort((a, b) => new Date(a.data).getTime() - new Date(b.data).getTime())[0] ?? null;
   const elenco = prossimo ? allenamenti.filter((t) => t.id !== prossimo.id) : allenamenti;
 
+  // La riga Avvia / Piano / Modifica / ⋯ sta sempre su una riga sola, qualunque sia la larghezza del telefono:
+  // testi e margini si riducono con lo schermo e i pulsanti centrali cedono spazio prima del pulsante ⋯.
+  const { width: larghezzaSchermo } = useWindowDimensions();
+  const corpoPill = larghezzaSchermo < 350 ? 12 : larghezzaSchermo < 380 ? 13 : larghezzaSchermo < 430 ? 14 : 15;
+  const imbottituraPill = larghezzaSchermo < 380 ? 10 : larghezzaSchermo < 430 ? 12 : 16;
+
   /** Azioni della seduta (stesse funzioni di prima): pill Avvia/Piano/Modifica + link secondari. */
   function renderAzioni(item: Training) {
     if (!puoScrivere) return null;
     return (
       <View style={styles.azioniBlocco}>
         <View style={styles.rigaAzioniCard}>
-          <Pressable style={styles.pillPrimaria} onPress={() => router.push(`/sessione/${item.id}`)}>
-            <Text style={styles.pillPrimariaTesto}>▶ Avvia</Text>
+          <Pressable style={[styles.pillPrimaria, { paddingHorizontal: imbottituraPill + 2 }]} onPress={() => router.push(`/sessione/${item.id}`)}>
+            <Text style={[styles.pillPrimariaTesto, { fontSize: corpoPill + 1 }]} numberOfLines={1}>▶ Avvia</Text>
           </Pressable>
-          <Pressable style={styles.pillSecondaria} onPress={() => router.push(`/allenamento/${item.id}`)}>
-            <Text style={styles.pillSecondariaTesto}>Piano{item.durata_totale_minuti ? ` · ${item.durata_totale_minuti}′` : ""}</Text>
+          <Pressable style={[styles.pillSecondaria, { paddingHorizontal: imbottituraPill }]} onPress={() => router.push(`/allenamento/${item.id}`)}>
+            <Text style={[styles.pillSecondariaTesto, { fontSize: corpoPill }]} numberOfLines={1}>Piano{item.durata_totale_minuti ? ` · ${item.durata_totale_minuti}′` : ""}</Text>
           </Pressable>
-          <Pressable style={styles.pillSecondaria} onPress={() => apriModifica(item)}>
-            <Text style={styles.pillSecondariaTesto}>Modifica</Text>
+          <Pressable style={[styles.pillSecondaria, { paddingHorizontal: imbottituraPill }]} onPress={() => apriModifica(item)}>
+            <Text style={[styles.pillSecondariaTesto, { fontSize: corpoPill }]} numberOfLines={1}>Modifica</Text>
           </Pressable>
           <MenuAzioni
+            stile={styles.pulsanteAltreAzioni}
             titolo={item.titolo}
             voci={[
               { etichetta: "È una partita", icona: "tennisball-outline", onPress: () => chiediConversione(item) },
@@ -360,11 +367,12 @@ const styles = StyleSheet.create({
   // Azioni: pill con area di tocco adeguata
   azioniEspanse: { paddingHorizontal: 14, paddingBottom: 12 },
   azioniBlocco: { gap: 4 },
-  rigaAzioniCard: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  rigaAzioniCard: { flexDirection: "row", flexWrap: "nowrap", alignItems: "center", gap: 6 },
+  pulsanteAltreAzioni: { flexShrink: 0, marginLeft: "auto" },
   rigaLinkCard: { flexDirection: "row", flexWrap: "wrap", columnGap: 16 },
-  pillPrimaria: { backgroundColor: brand.colors.brand, paddingHorizontal: 16, borderRadius: 999, minHeight: 42, justifyContent: "center", alignItems: "center" },
+  pillPrimaria: { backgroundColor: brand.colors.brand, paddingHorizontal: 16, borderRadius: 999, minHeight: 42, justifyContent: "center", alignItems: "center", flexShrink: 0 },
   pillPrimariaTesto: { color: "#000", fontWeight: "700", fontSize: 16 },
-  pillSecondaria: { backgroundColor: brand.colors.surfaceTertiary, paddingHorizontal: 16, borderRadius: 999, minHeight: 36, justifyContent: "center", alignItems: "center" },
+  pillSecondaria: { backgroundColor: brand.colors.surfaceTertiary, paddingHorizontal: 16, borderRadius: 999, minHeight: 36, justifyContent: "center", alignItems: "center", flexShrink: 1, minWidth: 0 },
   pillSecondariaTesto: { color: brand.colors.onSurface, fontWeight: "600", fontSize: 15 },
   linkAzione: { minHeight: 44, justifyContent: "center" },
   linkAzioneTesto: { color: brand.colors.muted, fontSize: 13, fontWeight: "600" },
