@@ -5,7 +5,7 @@ import { useAuth } from "@/src/context/AuthContext";
 import { ManigliaRiordino } from "@/src/components/ManigliaRiordino";
 import { creaEsercizio, elencaEsercizi } from "@/src/services/exercises";
 import { elencaAtlete } from "@/src/services/athletes";
-import { pesiFasiPerData, type PesoFase, elencaPianoAllenamento, generaPianoAllenamentoAI, impostaPianoAllenamento, leggiBloccoPerData, type VoceRiepilogoPiano } from "@/src/services/trainingPlan";
+import { pesiFasiPerData, type PesoFase, type PianoPrecedente, elencaPianiPrecedenti, elencaPianoAllenamento, generaPianoAllenamentoAI, impostaPianoAllenamento, leggiBloccoPerData, leggiPianoComeVoci, type VoceRiepilogoPiano } from "@/src/services/trainingPlan";
 import { avvisa } from "@/src/lib/confermaAzione";
 import { CreaEsercizio } from "@/src/components/CreaEsercizio";
 import { TitoloGrande } from "@/src/components/TitoloGrande";
@@ -43,6 +43,12 @@ export default function PianoAllenamento() {
   // sarebbe quello vecchio.
   const eserciziRef = useRef<VoceRiepilogoPiano[]>([]);
   const [salvando, setSalvando] = useState(false);
+  // Copia da un piano precedente: elenco delle sedute che hanno già un piano e, se il piano attuale non è vuoto, la seduta scelta in attesa di sapere se aggiungere o sostituire.
+  const [mostraPianiPrecedenti, setMostraPianiPrecedenti] = useState(false);
+  const [pianiPrecedenti, setPianiPrecedenti] = useState<PianoPrecedente[]>([]);
+  const [caricandoPiani, setCaricandoPiani] = useState(false);
+  const [pianoDaCopiare, setPianoDaCopiare] = useState<PianoPrecedente | null>(null);
+  const [copiando, setCopiando] = useState(false);
 
   useEffect(() => { eserciziRef.current = esercizi; }, [esercizi]);
 
@@ -64,6 +70,9 @@ export default function PianoAllenamento() {
       nome: cat.find((c) => c.id === p.exercise_id)?.nome ?? "Esercizio",
       durataMinuti: p.durata_minuti ?? 10,
       note: p.note ?? "",
+      // Fase e ruolo salvati col piano: senza, dopo la riapertura ogni esercizio tornava alla fase predefinita del catalogo.
+      fase: p.fase ?? undefined,
+      ruoloTarget: p.ruolo_target ?? null,
     })));
   }, [id, team]);
 
@@ -277,6 +286,65 @@ export default function PianoAllenamento() {
     setEsercizi((prev) => prev.map((e, i) => (i === indice ? { ...e, durataMinuti: valore } : e)));
   }
 
+  async function apriPianiPrecedenti() {
+    if (!team || !id) return;
+    setMostraPianiPrecedenti(true);
+    setCaricandoPiani(true);
+    try {
+      setPianiPrecedenti(await elencaPianiPrecedenti(team.id, id));
+    } catch (e) {
+      setMostraPianiPrecedenti(false);
+      avvisa("Piani non disponibili", (e as Error).message);
+    } finally {
+      setCaricandoPiani(false);
+    }
+  }
+
+  function scegliPianoPrecedente(p: PianoPrecedente) {
+    // Con un piano già avviato si chiede se aggiungere o sostituire, come per la proposta dell'assistente.
+    if (esercizi.length > 0) setPianoDaCopiare(p);
+    else copiaDaPiano(p, "sostituisci");
+  }
+
+  async function copiaDaPiano(p: PianoPrecedente, modo: "sostituisci" | "aggiungi") {
+    setPianoDaCopiare(null);
+    setCopiando(true);
+    try {
+      const { voci, mancanti } = await leggiPianoComeVoci(p.id, catalogo);
+      if (voci.length === 0) {
+        avvisa("Niente da copiare", mancanti > 0 ? "Gli esercizi di quel piano non sono più nel catalogo." : "Quel piano non ha esercizi.");
+        return;
+      }
+      let copiati = voci.length;
+      if (modo === "aggiungi") {
+        const giaPresenti = new Set(esercizi.map((e) => e.exerciseId));
+        const nuovi = voci.filter((e) => !giaPresenti.has(e.exerciseId));
+        copiati = nuovi.length;
+        setEsercizi((prec) => [...prec, ...nuovi]);
+        if (!argomento.trim() && p.argomento) setArgomento(p.argomento);
+      } else {
+        setEsercizi(voci);
+        if (p.argomento) setArgomento(p.argomento);
+        setDurataObiettivo(String(voci.reduce((s2, e) => s2 + (e.durataMinuti || 0), 0) || 120));
+      }
+      setEsercizioEspanso(null);
+      setMostraPianiPrecedenti(false);
+      const note: string[] = [];
+      if (modo === "aggiungi" && copiati < voci.length) note.push(`${voci.length - copiati} erano già nel piano e non sono stati ripetuti.`);
+      if (mancanti > 0) note.push(`${mancanti} non sono più nel catalogo e non sono stati copiati.`);
+      avvisa("Piano copiato", `${copiati} esercizi copiati da «${p.titolo || "seduta"}». Modificali se serve e premi «Salva piano».${note.length ? "\n\n" + note.join("\n") : ""}`);
+    } catch (e) {
+      avvisa("Copia non riuscita", (e as Error).message);
+    } finally {
+      setCopiando(false);
+    }
+  }
+
+  function dataBreve(iso: string): string {
+    const d = new Date(iso);
+    return Number.isNaN(d.getTime()) ? iso.slice(0, 10) : d.toLocaleDateString("it-IT", { day: "numeric", month: "short", year: "numeric" });
+  }
+
   function onGeneraAI() {
     if (!team) return;
     // Con un piano già avviato la scelta non è ovvia: a volte si vuole
@@ -429,6 +497,9 @@ export default function PianoAllenamento() {
             <Text style={styles.etichetta}>Esercizi ({totaleMinuti} min totali)</Text>
             <Pressable style={styles.linkAggiungiArea} onPress={() => { setIndiceSostituzione(null); setMostraNuovoEsercizio(false); setMostraCatalogo(true); }}><Text style={styles.linkAggiungi}>+ Aggiungi</Text></Pressable>
           </View>
+          <Pressable style={styles.bottoneCopia} onPress={apriPianiPrecedenti} disabled={copiando} accessibilityRole="button">
+            {copiando ? <ActivityIndicator color={brand.colors.brandSecondary} /> : <Text style={styles.bottoneCopiaTesto}>📋 Copia da un piano precedente</Text>}
+          </Pressable>
 
           {esercizi.length === 0 ? (
             <Text style={styles.nota}>Nessun esercizio ancora in questo piano.</Text>
@@ -563,6 +634,59 @@ export default function PianoAllenamento() {
         </View>
       </Modal>
 
+      <Modal visible={mostraPianiPrecedenti} animationType="slide" transparent onRequestClose={() => setMostraPianiPrecedenti(false)}>
+        <View style={styles.sfondoPopup}>
+          <View style={styles.cartaPopup}>
+            <View style={styles.intestazionePopup}>
+              <Text style={styles.titoloPopup}>Copia da un piano</Text>
+              <Pressable style={styles.chiudiArea} onPress={() => setMostraPianiPrecedenti(false)}><Text style={styles.chiudiPopup}>✕</Text></Pressable>
+            </View>
+            <Text style={styles.nota}>Scegli una seduta: ne copi esercizi, fasi, durate e note. Poi puoi modificare tutto prima di salvare.</Text>
+            {caricandoPiani ? (
+              <ActivityIndicator color={brand.colors.brand} style={{ marginVertical: 24 }} />
+            ) : pianiPrecedenti.length === 0 ? (
+              <Text style={styles.nota}>Nessun'altra seduta ha ancora un piano.</Text>
+            ) : (
+              <FlatList
+                data={pianiPrecedenti}
+                keyExtractor={(p) => p.id}
+                renderItem={({ item: p }) => (
+                  <Pressable style={styles.rigaPianoPrecedente} onPress={() => scegliPianoPrecedente(p)} accessibilityRole="button">
+                    <Text style={styles.rigaCatalogoTesto}>{dataBreve(p.data)} · {p.titolo || "Allenamento"}{p.archiviato ? " (archiviato)" : ""}</Text>
+                    <Text style={styles.rigaCatalogoDescrizione} numberOfLines={2}>
+                      {p.argomento ? `${p.argomento} · ` : ""}{p.numeroEsercizi} esercizi{p.durataTotaleMinuti ? ` · ${p.durataTotaleMinuti} min` : ""}
+                    </Text>
+                  </Pressable>
+                )}
+              />
+            )}
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={pianoDaCopiare !== null} animationType="fade" transparent onRequestClose={() => setPianoDaCopiare(null)}>
+        <View style={styles.sfondoPopup}>
+          <View style={[styles.cartaPopup, { maxHeight: undefined }]}>
+            <Text style={styles.titoloPopup}>Il piano contiene già {esercizi.length} esercizi</Text>
+            <Text style={styles.nota}>Cosa vuoi fare con gli esercizi di «{pianoDaCopiare?.titolo || "seduta"}»?</Text>
+
+            <Pressable style={styles.bottoneSceltaPrimaria} onPress={() => pianoDaCopiare && copiaDaPiano(pianoDaCopiare, "aggiungi")}>
+              <Text style={styles.bottoneSceltaPrimariaTesto}>Aggiungi al piano</Text>
+              <Text style={styles.bottoneSceltaNota}>Gli esercizi già inseriti restano dove sono</Text>
+            </Pressable>
+
+            <Pressable style={styles.bottoneSceltaSecondaria} onPress={() => pianoDaCopiare && copiaDaPiano(pianoDaCopiare, "sostituisci")}>
+              <Text style={styles.bottoneSceltaSecondariaTesto}>Sostituisci tutto</Text>
+              <Text style={styles.bottoneSceltaNota}>Il piano attuale viene rimpiazzato dalla copia</Text>
+            </Pressable>
+
+            <Pressable style={{ minHeight: 44, justifyContent: "center" }} onPress={() => setPianoDaCopiare(null)}>
+              <Text style={styles.annullaScelta}>Annulla</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
+
       <Modal visible={mostraCatalogo} animationType="slide" transparent onRequestClose={chiudiCatalogo}>
         <View style={styles.sfondoPopup}>
           <View style={styles.cartaPopup}>
@@ -659,6 +783,9 @@ const styles = StyleSheet.create({
   bottoneSceltaSecondariaTesto: { color: brand.colors.onSurface, fontWeight: "800", fontSize: 15 },
   bottoneSceltaNota: { color: brand.colors.muted, fontSize: 11 },
   annullaScelta: { color: brand.colors.muted, fontSize: 13, textAlign: "center", paddingVertical: 8 },
+  bottoneCopia: { backgroundColor: brand.colors.surfaceTertiary, borderRadius: 999, paddingVertical: 8, minHeight: 44, justifyContent: "center", alignItems: "center" },
+  bottoneCopiaTesto: { color: brand.colors.brandSecondary, fontSize: 14, fontWeight: "700" },
+  rigaPianoPrecedente: { paddingVertical: 10, minHeight: 56, borderBottomWidth: 1, borderBottomColor: brand.colors.border, justifyContent: "center" },
   bloccoFase: { backgroundColor: brand.colors.surface, borderRadius: 16, padding: 12, marginTop: 6, gap: 4 },
   intestazioneFase: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   titoloFase: { color: brand.colors.onSurface, fontSize: 17, fontWeight: "700" },

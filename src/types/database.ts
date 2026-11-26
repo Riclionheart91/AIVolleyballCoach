@@ -85,6 +85,8 @@ export interface TrainingExercise {
   note: string;
   ordine: number;
   durata_minuti: number | null;
+  fase?: string | null;
+  ruolo_target?: string | null;
 }
 
 export interface Attendance {

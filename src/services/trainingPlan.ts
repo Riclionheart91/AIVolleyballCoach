@@ -39,6 +39,58 @@ export async function elencaPianoAllenamento(trainingId: string): Promise<Traini
   return data ?? [];
 }
 
+/** Seduta già svolta o pianificata che ha un piano, proposta come origine per copiarne gli esercizi. */
+export interface PianoPrecedente {
+  id: string;
+  data: string;
+  titolo: string;
+  argomento: string | null;
+  durataTotaleMinuti: number | null;
+  numeroEsercizi: number;
+  archiviato: boolean;
+}
+
+/** Sedute della squadra (anche archiviate) che hanno già un piano, dalla più recente; esclude quella che si sta modificando. */
+export async function elencaPianiPrecedenti(teamId: string, escludiTrainingId: string): Promise<PianoPrecedente[]> {
+  const { data, error } = await supabaseClient
+    .from("trainings")
+    .select("id, data, titolo, argomento, durata_totale_minuti, archiviato, training_exercises(count)")
+    .eq("team_id", teamId)
+    .neq("id", escludiTrainingId)
+    .order("data", { ascending: false })
+    .limit(150);
+  if (error) throw error;
+  return (data ?? [])
+    .map((t: Record<string, unknown>) => {
+      const conteggio = (t.training_exercises as { count: number }[] | null)?.[0]?.count ?? 0;
+      const piano: PianoPrecedente = {
+        id: t.id as string, data: t.data as string, titolo: (t.titolo as string) ?? "", argomento: (t.argomento as string | null) ?? null,
+        durataTotaleMinuti: (t.durata_totale_minuti as number | null) ?? null, numeroEsercizi: conteggio, archiviato: !!t.archiviato,
+      };
+      return piano;
+    })
+    .filter((p) => p.numeroEsercizi > 0);
+}
+
+/**
+ * Esercizi di un piano esistente nella forma usata dall'editor (stesse fasi, durate, note e ruoli, stesso ordine).
+ * Gli esercizi che nel frattempo sono stati tolti dal catalogo non si possono copiare: se ne restituisce il numero.
+ */
+export async function leggiPianoComeVoci(trainingId: string, catalogo: Exercise[]): Promise<{ voci: VoceRiepilogoPiano[]; mancanti: number }> {
+  const righe = await elencaPianoAllenamento(trainingId);
+  const voci: VoceRiepilogoPiano[] = [];
+  let mancanti = 0;
+  for (const r of righe) {
+    const ex = catalogo.find((c) => c.id === r.exercise_id);
+    if (!ex) { mancanti++; continue; }
+    voci.push({
+      exerciseId: ex.id, nome: ex.nome, durataMinuti: r.durata_minuti ?? 10, note: r.note ?? "",
+      categoria: ex.categoria ?? undefined, fase: faseDaRisposta(r.fase) ?? undefined, ruoloTarget: r.ruolo_target ?? null,
+    });
+  }
+  return { voci, mancanti };
+}
+
 /** Esercizio proposto dall'AI che non esiste ancora in catalogo: va creato prima di entrare nel piano. */
 export interface EsercizioNuovoProposto {
   nome: string;
