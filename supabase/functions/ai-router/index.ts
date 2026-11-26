@@ -76,6 +76,16 @@ interface TracciaChiamata {
 
 const PROMPT_VERSIONE = "2026-11-02.1";
 
+// ───────────── Tempi ─────────────
+//
+// Le funzioni Edge vengono interrotte dopo 150 secondi e il client riceve solo "non-2xx", senza motivo e senza traccia in ai_call_log.
+// Quando Gemini è sovraccarico (503) si passa ai provider successivi: OpenRouter gratuito può impiegare oltre 2 minuti.
+// Per questo ogni provider ha un tempo massimo e tutta la richiesta un budget complessivo sotto il limite: meglio un messaggio chiaro che un errore muto.
+const BUDGET_TOTALE_MS = 125_000;
+const TIMEOUT_PROVIDER_MS: Record<Provider, number> = { GEMINI: 35_000, GEMINI2: 35_000, GROQ: 35_000, OPENROUTER: 110_000 };
+/** Sotto questo margine residuo non ha senso provare un altro provider. */
+const MARGINE_MINIMO_MS = 8_000;
+
 const PROMPT_COMUNE =
   `Sei l'assistente di AIVolleyballCoach, un'app per allenatori di pallavolo di squadre giovanili e amatoriali italiane (FIPAV, PGS, CSI). ` +
   `Rispondi sempre in italiano, in modo concreto e sintetico, con il tono di un collega allenatore esperto. ` +
@@ -182,27 +192,32 @@ Deno.serve(async (req) => {
     const erroriPerProvider: string[] = [];
     let tentativi = 0;
     for (const cfg of configurazioni) {
+      const residuo = BUDGET_TOTALE_MS - (Date.now() - inizio);
+      if (residuo < MARGINE_MINIMO_MS) {
+        erroriPerProvider.push(`${cfg.provider_code}: non provato, tempo esaurito`);
+        break;
+      }
       tentativi++;
       try {
-        const testo = await chiamaProvider(cfg, prompt, sistema);
+        const testo = await chiamaProvider(cfg, prompt, sistema, Math.min(TIMEOUT_PROVIDER_MS[cfg.provider_code] ?? 35_000, residuo));
         await registraTraccia(admin, {
           team_id, prompt_versione: PROMPT_VERSIONE, provider_usato: cfg.provider_code, esito: "ok", durata_ms: Date.now() - inizio,
           funzione: etichetta, tentativi,
-          errore: erroriPerProvider.length ? erroriPerProvider.join(" | ").slice(0, 500) : null,
+          errore: erroriPerProvider.length ? erroriPerProvider.join(" | ").slice(0, 900) : null,
           prompt_caratteri: prompt.length,
         });
         return jsonResponse({ errore: false, testo, providerUsato: cfg.provider_code, chiamateResidue: (residue ?? 1) - 1, limite: 20 });
       } catch (e) {
         const dettaglio = `${cfg.provider_code} (modello ${cfg.modello ?? "default"}): ${(e as Error).message}`;
         console.error("Provider AI fallito:", dettaglio);
-        erroriPerProvider.push(dettaglio);
+        erroriPerProvider.push(dettaglio.slice(0, 160));
       }
     }
 
     await registraTraccia(admin, {
       team_id, prompt_versione: PROMPT_VERSIONE, provider_usato: null, esito: "errore", durata_ms: Date.now() - inizio,
       funzione: etichetta, tentativi,
-      errore: (erroriPerProvider.join(" | ") || "nessun provider abilitato").slice(0, 500),
+      errore: (erroriPerProvider.join(" | ") || "nessun provider abilitato").slice(0, 900),
       prompt_caratteri: prompt.length,
     });
 
@@ -235,7 +250,7 @@ async function registraTraccia(admin: ReturnType<typeof createClient>, traccia: 
   }
 }
 
-async function chiamaProvider(cfg: ProviderConfig, prompt: string, sistema: string): Promise<string> {
+async function chiamaProvider(cfg: ProviderConfig, prompt: string, sistema: string, timeoutMs: number): Promise<string> {
   const nomeSecret = SECRET_PER_PROVIDER[cfg.provider_code];
   const apiKey = nomeSecret ? Deno.env.get(nomeSecret) : undefined;
   if (!apiKey) throw new Error(`chiave ${nomeSecret} non configurata nei secret del progetto`);
@@ -243,11 +258,11 @@ async function chiamaProvider(cfg: ProviderConfig, prompt: string, sistema: stri
   switch (cfg.provider_code) {
     case "GEMINI":
     case "GEMINI2":
-      return chiamaGemini(prompt, sistema, cfg.modello ?? "gemini-3.6-flash", apiKey);
+      return chiamaGemini(prompt, sistema, cfg.modello ?? "gemini-3.6-flash", apiKey, timeoutMs);
     case "GROQ":
-      return chiamaGroq(prompt, sistema, cfg.modello ?? "llama-3.3-70b-versatile", apiKey);
+      return chiamaGroq(prompt, sistema, cfg.modello ?? "llama-3.3-70b-versatile", apiKey, timeoutMs);
     case "OPENROUTER":
-      return chiamaOpenRouter(prompt, sistema, cfg.modello ?? "openrouter/free", apiKey);
+      return chiamaOpenRouter(prompt, sistema, cfg.modello ?? "openrouter/free", apiKey, timeoutMs);
     default:
       throw new Error("provider non implementato");
   }
@@ -256,13 +271,28 @@ async function chiamaProvider(cfg: ProviderConfig, prompt: string, sistema: stri
 /** Include sempre un estratto del corpo della risposta: senza, un 400/404 non dice se il problema è il modello, la chiave o la quota. */
 async function erroreDettagliato(resp: Response): Promise<string> {
   const corpo = await resp.text().catch(() => "");
-  return `HTTP ${resp.status}${corpo ? ` — ${corpo.slice(0, 300)}` : ""}`;
+  // Dal JSON del provider si tiene solo il messaggio: la traccia ha spazio limitato e deve mostrare tutti i provider provati.
+  let messaggio = corpo;
+  try { const j = JSON.parse(corpo); messaggio = j?.error?.message ?? j?.message ?? corpo; } catch { /* testo semplice */ }
+  messaggio = String(messaggio).replace(/\s+/g, " ").trim();
+  return `HTTP ${resp.status}${messaggio ? ` — ${messaggio.slice(0, 100)}` : ""}`;
 }
 
-async function chiamaGemini(prompt: string, sistema: string, modello: string, apiKey: string): Promise<string> {
-  const resp = await fetch(
+/** fetch con tempo massimo: un provider lento non deve far scadere l'intera funzione. */
+async function fetchConTempoMassimo(url: string, init: RequestInit, timeoutMs: number): Promise<Response> {
+  try {
+    return await fetch(url, { ...init, signal: AbortSignal.timeout(timeoutMs) });
+  } catch (e) {
+    if ((e as Error).name === "TimeoutError" || (e as Error).name === "AbortError") throw new Error(`nessuna risposta entro ${Math.round(timeoutMs / 1000)} s`);
+    throw e;
+  }
+}
+
+async function chiamaGemini(prompt: string, sistema: string, modello: string, apiKey: string, timeoutMs: number): Promise<string> {
+  const resp = await fetchConTempoMassimo(
     `https://generativelanguage.googleapis.com/v1beta/models/${modello}:generateContent?key=${apiKey}`,
     { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ systemInstruction: { parts: [{ text: sistema }] }, contents: [{ parts: [{ text: prompt }] }] }) },
+    timeoutMs,
   );
   if (!resp.ok) throw new Error(await erroreDettagliato(resp));
   const data = await resp.json();
@@ -271,12 +301,12 @@ async function chiamaGemini(prompt: string, sistema: string, modello: string, ap
   return testo;
 }
 
-async function chiamaGroq(prompt: string, sistema: string, modello: string, apiKey: string): Promise<string> {
-  const resp = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+async function chiamaGroq(prompt: string, sistema: string, modello: string, apiKey: string, timeoutMs: number): Promise<string> {
+  const resp = await fetchConTempoMassimo("https://api.groq.com/openai/v1/chat/completions", {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
     body: JSON.stringify({ model: modello, messages: [{ role: "system", content: sistema }, { role: "user", content: prompt }] }),
-  });
+  }, timeoutMs);
   if (!resp.ok) throw new Error(await erroreDettagliato(resp));
   const data = await resp.json();
   const testo = data?.choices?.[0]?.message?.content;
@@ -284,12 +314,12 @@ async function chiamaGroq(prompt: string, sistema: string, modello: string, apiK
   return testo;
 }
 
-async function chiamaOpenRouter(prompt: string, sistema: string, modello: string, apiKey: string): Promise<string> {
-  const resp = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+async function chiamaOpenRouter(prompt: string, sistema: string, modello: string, apiKey: string, timeoutMs: number): Promise<string> {
+  const resp = await fetchConTempoMassimo("https://openrouter.ai/api/v1/chat/completions", {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
     body: JSON.stringify({ model: modello, messages: [{ role: "system", content: sistema }, { role: "user", content: prompt }] }),
-  });
+  }, timeoutMs);
   if (!resp.ok) throw new Error(await erroreDettagliato(resp));
   const data = await resp.json();
   const testo = data?.choices?.[0]?.message?.content;
