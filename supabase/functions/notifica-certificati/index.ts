@@ -90,7 +90,8 @@ async function invia(sub: SubscriptionRow, payload: unknown, admin: ReturnType<t
       message: {
         payload,
         adminContact: VAPID_ADMIN_CONTACT,
-        options: { ttl: 60 * 60 * 24 * 3, urgency: "normal" },
+        // TTL sotto le 24 ore: la libreria rifiuta valori maggiori.
+        options: { ttl: 60 * 60 * 23, urgency: "normal" },
       },
     });
     const risposta = await fetch(endpoint, { method: "POST", headers, body });

@@ -69,8 +69,8 @@ async function invia(sub: SubscriptionRow, payload: unknown, admin: Admin): Prom
       message: {
         payload,
         adminContact: VAPID_ADMIN_CONTACT,
-        // Una richiesta di reset è urgente: l'atleta aspetta. Scade dopo 3 giorni, come i certificati.
-        options: { ttl: 60 * 60 * 24 * 3, urgency: "high" },
+        // Una richiesta di reset è urgente: l'atleta aspetta. Scade dopo 23 ore (la libreria accetta TTL inferiori a 24 ore).
+        options: { ttl: 60 * 60 * 23, urgency: "high" },
       },
     });
     const risposta = await fetch(endpoint, { method: "POST", headers, body });

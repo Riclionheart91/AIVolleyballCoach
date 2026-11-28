@@ -15,6 +15,10 @@ jobs:
         with:
           node-version: 22
       - run: npm install
+      # Controllo dei tipi. Per ora NON blocca la pubblicazione (il codice non è mai stato controllato per intero):
+      # dopo aver sistemato gli eventuali errori segnalati, togliere continue-on-error per renderlo bloccante.
+      - run: npx tsc --noEmit
+        continue-on-error: true
       - run: npx expo export -p web
         env:
           EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}

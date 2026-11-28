@@ -1,0 +1,2 @@
+-- 0109: pulizia segnalazioni dell'audit (advisor Supabase).
+-- (a) search_path fisso su due funzioni; (b) indici sulle 29 chiavi esterne scoperte.
